@@ -1,0 +1,90 @@
+import { z } from 'zod';
+import { nonEmptyString, positiveInt, uploadDestinationSchema } from './primitives';
+
+// ─── Init: R2 ────────────────────────────────────────────────────────────────
+
+export const uploadR2InitRequestSchema = z.object({
+  filename: nonEmptyString,
+  size: positiveInt,
+  mime_type: nonEmptyString,
+});
+export type UploadR2InitRequest = z.infer<typeof uploadR2InitRequestSchema>;
+
+export const uploadR2InitResponseSchema = z.object({
+  upload_id: nonEmptyString,
+  destination: z.literal('r2'),
+  presigned_url: z.string().url(),
+  storage_key: nonEmptyString,
+  bucket: nonEmptyString,
+  expires_at: positiveInt,
+});
+export type UploadR2InitResponse = z.infer<typeof uploadR2InitResponseSchema>;
+
+// ─── Init: Appwrite ───────────────────────────────────────────────────────────
+
+export const uploadAppwriteInitRequestSchema = z.object({
+  filename: nonEmptyString,
+  size: positiveInt,
+  mime_type: nonEmptyString,
+});
+export type UploadAppwriteInitRequest = z.infer<typeof uploadAppwriteInitRequestSchema>;
+
+export const uploadAppwriteInitResponseSchema = z.object({
+  upload_id: nonEmptyString,
+  destination: z.literal('appwrite'),
+  appwrite_endpoint: z.string().url(),
+  appwrite_project_id: nonEmptyString,
+  appwrite_bucket_id: nonEmptyString,
+  file_id: nonEmptyString,
+  expires_at: positiveInt,
+});
+export type UploadAppwriteInitResponse = z.infer<typeof uploadAppwriteInitResponseSchema>;
+
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+
+export const uploadLifecycleRequestSchema = z.object({
+  upload_id: nonEmptyString,
+});
+export type UploadLifecycleRequest = z.infer<typeof uploadLifecycleRequestSchema>;
+
+export const uploadCompleteResponseSchema = z.object({
+  success: z.literal(true),
+  upload_id: nonEmptyString,
+  status: z.literal('completed'),
+});
+export type UploadCompleteResponse = z.infer<typeof uploadCompleteResponseSchema>;
+
+export const uploadFailResponseSchema = z.object({
+  success: z.literal(true),
+  upload_id: nonEmptyString,
+  status: z.literal('failed'),
+});
+export type UploadFailResponse = z.infer<typeof uploadFailResponseSchema>;
+
+// ─── Admin: list uploads ──────────────────────────────────────────────────────
+
+export const FILES_DEFAULT_LIMIT = 25;
+export const FILES_MAX_LIMIT = 100;
+
+/** Raw upload record — returned by admin `/files` endpoints. */
+export const uploadRecordSchema = z.object({
+  id: nonEmptyString,
+  service_id: nonEmptyString,
+  user_id: nonEmptyString.nullable(),
+  filename: nonEmptyString,
+  size: positiveInt,
+  mime_type: nonEmptyString,
+  destination: uploadDestinationSchema,
+  status: z.enum(['pending', 'completed', 'failed']),
+  expires_at: positiveInt,
+  created_at: positiveInt,
+  updated_at: positiveInt,
+});
+export type UploadRecord = z.infer<typeof uploadRecordSchema>;
+
+export const uploadsListResponseSchema = z.object({
+  items: z.array(uploadRecordSchema),
+  next_cursor: z.string().nullable(),
+  limit: positiveInt,
+});
+export type UploadsListResponse = z.infer<typeof uploadsListResponseSchema>;

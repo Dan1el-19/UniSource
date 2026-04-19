@@ -1,41 +1,84 @@
 import { z } from 'zod';
+import { nonEmptyString, positiveInt } from './primitives';
 
-const nonEmptyStringSchema = z.string().trim().min(1);
-const positiveIntegerSchema = z.number().int().positive();
+// ─── Folder record ────────────────────────────────────────────────────────────
 
-// --- Schemas ---
+export const folderSchema = z.object({
+  id: nonEmptyString,
+  service_id: nonEmptyString,
+  user_id: nonEmptyString,
+  parent_id: nonEmptyString.nullable(),
+  name: nonEmptyString,
+  color_tag: z.string().nullable(),
+  is_trashed: z.boolean(),
+  trashed_at: positiveInt.nullable(),
+  created_at: positiveInt,
+  updated_at: positiveInt,
+});
+export type Folder = z.infer<typeof folderSchema>;
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+export const folderListQuerySchema = z.object({
+  parent_id: nonEmptyString.nullable().optional(),
+  is_trashed: z.boolean().optional(),
+  cursor: nonEmptyString.optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+export type FolderListQuery = z.infer<typeof folderListQuerySchema>;
+
+export const folderListResponseSchema = z.object({
+  items: z.array(folderSchema),
+  next_cursor: z.string().nullable(),
+  limit: positiveInt,
+});
+export type FolderListResponse = z.infer<typeof folderListResponseSchema>;
+
+// ─── Create ───────────────────────────────────────────────────────────────────
 
 export const folderCreateRequestSchema = z.object({
-  name: nonEmptyStringSchema,
-  parent_id: nonEmptyStringSchema.optional(),
+  name: nonEmptyString,
+  parent_id: nonEmptyString.optional(),
   color_tag: z.string().optional(),
 });
 export type FolderCreateRequest = z.infer<typeof folderCreateRequestSchema>;
 
+export const folderCreateResponseSchema = z.object({
+  folder: folderSchema,
+});
+export type FolderCreateResponse = z.infer<typeof folderCreateResponseSchema>;
+
+// ─── Update ───────────────────────────────────────────────────────────────────
+
 export const folderUpdateRequestSchema = z
   .object({
-    name: nonEmptyStringSchema.optional(),
+    name: nonEmptyString.optional(),
     color_tag: z.string().nullable().optional(),
   })
-  .refine((v) => v.name !== undefined || 'color_tag' in v, {
+  .refine((v) => v.name !== undefined || v.color_tag !== undefined, {
     message: 'At least one of name or color_tag must be provided',
   });
 export type FolderUpdateRequest = z.infer<typeof folderUpdateRequestSchema>;
 
-export const folderResponseSchema = z.object({
-  id: nonEmptyStringSchema,
-  user_id: nonEmptyStringSchema,
-  parent_id: nonEmptyStringSchema.nullable(),
-  name: nonEmptyStringSchema,
-  color_tag: z.string().nullable(),
-  is_trashed: z.boolean(),
-  trashed_at: positiveIntegerSchema.nullable(),
-  created_at: positiveIntegerSchema,
-  updated_at: positiveIntegerSchema,
+export const folderUpdateResponseSchema = z.object({
+  folder: folderSchema,
 });
-export type FolderResponse = z.infer<typeof folderResponseSchema>;
+export type FolderUpdateResponse = z.infer<typeof folderUpdateResponseSchema>;
 
-export const folderListResponseSchema = z.object({
-  items: z.array(folderResponseSchema),
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+export const folderDeleteResponseSchema = z.object({
+  success: z.literal(true),
+  id: nonEmptyString,
+  permanent: z.boolean(),
+  folders_deleted: z.number().int().nonnegative().optional(),
 });
-export type FolderListResponse = z.infer<typeof folderListResponseSchema>;
+export type FolderDeleteResponse = z.infer<typeof folderDeleteResponseSchema>;
+
+// ─── Restore ──────────────────────────────────────────────────────────────────
+
+export const folderRestoreResponseSchema = z.object({
+  success: z.literal(true),
+  id: nonEmptyString,
+});
+export type FolderRestoreResponse = z.infer<typeof folderRestoreResponseSchema>;
