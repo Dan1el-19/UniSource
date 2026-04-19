@@ -19,7 +19,7 @@
     "astro": "^6.1.7",
     "svelte": "^5.55.4",
     "typescript": "^5.9.3",
-    "@unisource/sdk": "workspace:*"
+    "@unisource/sdk": "npm:@unisource/sdk@^0.1.2"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.8",
