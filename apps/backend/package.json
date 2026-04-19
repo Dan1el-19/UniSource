@@ -1,7 +1,7 @@
 {
   "name": "usrc-backend",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -17,7 +17,7 @@
     "@aws-sdk/client-s3": "^3.1030.0",
     "@aws-sdk/s3-request-presigner": "^3.1030.0",
     "@hono/zod-validator": "^0.7.6",
-    "@unisource/sdk": "workspace:*",
+    "@unisource/sdk": "^0.2.0",
     "hono": "^4.12.12",
     "node-appwrite": "^24.0.0",
     "zod": "^4.3.6"
