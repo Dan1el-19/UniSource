@@ -9,10 +9,7 @@
     "access": "public"
   },
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs"
-    },
+    ".": "./dist/index.mjs",
     "./package.json": "./package.json"
   },
   "types": "./src/index.ts",
@@ -23,7 +20,7 @@
   "scripts": {
     "build": "tsdown && node -e \"const fs=require('node:fs'); if (fs.existsSync('dist/index.d.mts')) fs.copyFileSync('dist/index.d.mts','dist/index.d.ts');\"",
     "dev": "tsdown --watch",
-    "test": "vitest",
+    "test": "pnpm run build && vitest",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"
   },
