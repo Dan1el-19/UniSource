@@ -1,5 +1,5 @@
 {
-  "name": "@default/sdk",
+  "name": "@unisource/sdk",
   "type": "module",
   "version": "0.1.1",
   "description": "Wspolne kontrakty danych dla backendu i frontendu UniSource.",
