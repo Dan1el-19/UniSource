@@ -1,5 +1,5 @@
 {
-  "name": "chmura-blokserwis",
+  "name": "usrc-nexus",
   "private": true,
   "type": "module",
   "version": "0.0.1",
@@ -19,7 +19,7 @@
     "astro": "^6.1.7",
     "svelte": "^5.55.4",
     "typescript": "^5.9.3",
-    "@unisource/sdk": "npm:@unisource/sdk@^0.1.2"
+    "@unisource/sdk": "^0.2.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.8",
