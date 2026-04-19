@@ -11,7 +11,7 @@ import {
   uploadAppwriteInitRequestSchema,
   uploadLifecycleRequestSchema,
   uploadR2InitRequestSchema,
-} from 'usrc-sdk';
+} from '@unisource/sdk';
 
 const DEFAULT_R2_BUCKET = 'unisource';
 const UPLOAD_TTL_SECONDS = 3600; // 1 hour

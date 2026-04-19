@@ -2,13 +2,13 @@
 
 ## 1) Zakres wykonanych prac
 Wdrozenie obejmuje 3 obszary monorepo:
-- packages/usrc-sdk: wspolne kontrakty danych (Zod + inferencja TypeScript).
+- packages/unisource-sdk: wspolne kontrakty danych (Zod + inferencja TypeScript).
 - apps/backend: walidacja endpointow przez @hono/zod-validator i typowane odpowiedzi.
 - apps/frontend: MVP UI (Astro + Svelte 5) z walidacja po stronie klienta, toastami i testami scenariuszy.
 
 ## 2) Zainstalowane biblioteki i uzasadnienie
 
-### packages/usrc-sdk
+### packages/unisource-sdk
 - zod
   - Powod: jedno zrodlo prawdy dla kontraktow API i walidacji runtime.
 
@@ -16,14 +16,14 @@ Wdrozenie obejmuje 3 obszary monorepo:
 - @hono/zod-validator
   - Powod: middleware walidacyjne dla Hono, zamiast recznej walidacji requestow.
 - zod
-  - Powod: lokalna obsluga schematow i zgodnosc z kontraktami z usrc-sdk.
-- usrc-sdk (workspace:*)
+  - Powod: lokalna obsluga schematow i zgodnosc z kontraktami z @unisource/sdk.
+- @unisource/sdk (workspace:*)
   - Powod: wspoldzielenie schematow i typow pomiedzy backend i frontend.
 
 ### apps/frontend
 - appwrite
   - Powod: integracja uploadu Appwrite po stronie UI.
-- usrc-sdk (workspace:*)
+- @unisource/sdk (workspace:*)
   - Powod: safeParse i typowanie request/response na froncie.
 - @tailwindcss/vite
   - Powod: nowoczesna integracja Tailwind 4 z Astro/Vite.
@@ -37,9 +37,9 @@ Wdrozenie obejmuje 3 obszary monorepo:
 ## 3) Struktura plikow utworzonych lub zmodyfikowanych
 
 ### SDK
-- packages/usrc-sdk/package.json
-- packages/usrc-sdk/src/index.ts
-- packages/usrc-sdk/tests/index.test.ts
+- packages/unisource-sdk/package.json
+- packages/unisource-sdk/src/index.ts
+- packages/unisource-sdk/tests/index.test.ts
 
 ### Backend
 - apps/backend/package.json
@@ -64,7 +64,7 @@ Uruchomione komendy:
 Wynik:
 - Wszystkie 3 pakiety przeszly typecheck bez bledow.
 - Wszystkie 3 pakiety zbudowaly sie poprawnie.
-- W packages/usrc-sdk/dist obecne sa:
+- W packages/unisource-sdk/dist obecne sa:
   - index.mjs
   - index.d.mts
   - index.d.ts
@@ -132,7 +132,7 @@ Wynik: ZALICZONY
 
 ## 6) Napotkane problemy i rozwiazania
 - Problem: workspace dependency nie podpinala sie poprawnie, bo SDK mialo stara nazwe.
-  - Rozwiazanie: zmiana nazwy pakietu na usrc-sdk i ponowne podpiecie workspace:*
+  - Rozwiazanie: ujednolicenie nazwy katalogu do unisource-sdk i importow do @unisource/sdk oraz ponowne podpiecie workspace:*
 - Problem: frontend build nie mogl znalezc tailwindcss.
   - Rozwiazanie: instalacja tailwindcss + @tailwindcss/vite i konfiguracja w astro.config.mjs.
 - Problem: typy issue.path przy zValidator hook w backendzie.
@@ -150,5 +150,5 @@ Wynik: ZALICZONY
 - Uruchomione testy backend:
   - pnpm --filter usrc-backend test -> 3/3 testy zaliczone.
 - Uruchomione testy SDK:
-  - pnpm --filter usrc-sdk test -> 4/4 testy zaliczone.
+  - pnpm --filter @unisource/sdk test -> 4/4 testy zaliczone.
 

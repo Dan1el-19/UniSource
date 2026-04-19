@@ -5,7 +5,7 @@ import {
   uploadR2InitRequestSchema,
 } from '../src';
 
-describe('usrc-sdk schemas', () => {
+describe('unisource-sdk schemas', () => {
   it('accepts valid R2 init request payload', () => {
     const parsed = uploadR2InitRequestSchema.safeParse({
       filename: 'raport.pdf',

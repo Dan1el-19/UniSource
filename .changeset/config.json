@@ -1,0 +1,9 @@
+{
+  "changelog": ["@changesets/cli/changelog", {"repo": "unisource"}],
+  "commit": false,
+  "linked": [],
+  "ignore": ["usrc-backend", "chmura-blokserwis"],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch"
+}
