@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { createUpload, getUpload, completeUpload, failUpload } from '../db/files';
+import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload } from '../db/files';
 import { createFileRecord } from '../db/fileRecords';
+import { reserveQuota, decrementServiceUsage, logServiceEvent } from '../db/services';
+import { rateLimitMiddleware } from '../middleware/ratelimit';
 import { generatePresignedPutUrl } from '../services/r2';
 import { getAppwriteUploadConfig } from '../services/appwrite';
+import { getServiceConfig, buildStorageKey } from '../config/services';
 import {
   type UploadAppwriteInitResponse,
   type UploadCompleteResponse,
@@ -14,7 +17,6 @@ import {
   uploadR2InitRequestSchema,
 } from '@unisource/sdk';
 
-const DEFAULT_R2_BUCKET = 'unisource';
 const UPLOAD_TTL_SECONDS = 3600; // 1 hour
 
 const upload = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
@@ -48,27 +50,58 @@ function validationErrorHook(
   );
 }
 
-/**
- * R2 Implementation
- */
-upload.post('/r2/init', zValidator('json', uploadR2InitRequestSchema, validationErrorHook), async (c) => {
-  const body = c.req.valid('json');
-
-  const { filename, size, mime_type, bucket } = body;
-  const uploadId = crypto.randomUUID();
+function getDatePath(): string {
   const date = new Date();
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const day = String(date.getUTCDate()).padStart(2, '0');
-  const datePath = `${year}/${month}/${day}`;
-  
+  return `${year}/${month}/${day}`;
+}
+
+/**
+ * R2 Upload — Presigned PUT URL
+ */
+upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequestSchema, validationErrorHook), async (c) => {
+  const body = c.req.valid('json');
+  const serviceId = c.get('serviceId');
+  const userId = c.get('userId');
+
+  const { filename, size, mime_type } = body;
+
+  // Quota check and reserve before creating presigned URL (atomic)
+  const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size);
+  if (!quotaReserved) {
+    if (userId !== 'system') {
+      c.executionCtx.waitUntil(
+        logServiceEvent(c.env.usrc_d1, {
+          serviceId,
+          userId,
+          action: 'quota_exceeded',
+          resourceType: 'service',
+          resourceId: serviceId,
+          metadata: { requested_bytes: size },
+          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+        })
+      );
+    }
+    return c.json({ error: 'Conflict', message: 'Storage quota exceeded for this service' }, 409);
+  }
+
+  const svcConfig = getServiceConfig(serviceId)!;
+  if (size > svcConfig.maxFileSizeBytes) {
+    return c.json(
+      { error: 'Payload Too Large', message: `File exceeds maximum size of ${svcConfig.maxFileSizeBytes} bytes` },
+      413
+    );
+  }
+
+  const uploadId = crypto.randomUUID();
   const ext = filename.includes('.') ? filename.split('.').pop() : '';
-  const storageKey = `uploads/${datePath}/${uploadId}${ext ? '.' + ext : ''}`;
-  const targetBucket = (typeof bucket === 'string' && bucket.trim()) ? bucket.trim() : DEFAULT_R2_BUCKET;
+  const storageKey = buildStorageKey(serviceId, getDatePath(), uploadId, ext ?? '');
 
   const { presigned_url, expires_at } = await generatePresignedPutUrl(
     c.env,
-    targetBucket,
+    svcConfig.bucketName,    // from config — clients cannot override bucket
     storageKey,
     mime_type,
     UPLOAD_TTL_SECONDS
@@ -76,12 +109,14 @@ upload.post('/r2/init', zValidator('json', uploadR2InitRequestSchema, validation
 
   await createUpload(c.env.usrc_d1, {
     id: uploadId,
+    service_id: serviceId,
+    user_id: userId === 'system' ? null : userId,
     filename,
     size,
     mime_type,
     destination: 'r2',
     storage_key: storageKey,
-    bucket: targetBucket,
+    bucket: svcConfig.bucketName,
     presigned_url,
     expires_at,
   });
@@ -91,36 +126,55 @@ upload.post('/r2/init', zValidator('json', uploadR2InitRequestSchema, validation
     destination: 'r2',
     presigned_url,
     storage_key: storageKey,
-    bucket: targetBucket,
+    bucket: svcConfig.bucketName,
     expires_at,
   }, 201);
 });
 
 /**
- * Appwrite Implementation
+ * Appwrite Upload — Returns credentials for direct Appwrite SDK upload
  */
-upload.post('/appwrite/init', zValidator('json', uploadAppwriteInitRequestSchema, validationErrorHook), async (c) => {
+upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppwriteInitRequestSchema, validationErrorHook), async (c) => {
   const body = c.req.valid('json');
+  const serviceId = c.get('serviceId');
+  const userId = c.get('userId');
 
   const { filename, size, mime_type } = body;
+
+  // Quota check and reserve (atomic)
+  const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size);
+  if (!quotaReserved) {
+    if (userId !== 'system') {
+      c.executionCtx.waitUntil(
+        logServiceEvent(c.env.usrc_d1, {
+          serviceId,
+          userId,
+          action: 'quota_exceeded',
+          resourceType: 'service',
+          resourceId: serviceId,
+          metadata: { requested_bytes: size },
+          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+        })
+      );
+    }
+    return c.json({ error: 'Conflict', message: 'Storage quota exceeded for this service' }, 409);
+  }
+
   const uploadId = crypto.randomUUID();
   const fileId = crypto.randomUUID().replace(/-/g, '').slice(0, 20);
-  
-  const date = new Date();
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const datePath = `${year}/${month}/${day}`;
+  const storageKey = `${serviceId}/uploads/${getDatePath()}/${fileId}`;
 
   const config = getAppwriteUploadConfig(c.env, fileId, UPLOAD_TTL_SECONDS);
 
   await createUpload(c.env.usrc_d1, {
     id: uploadId,
+    service_id: serviceId,
+    user_id: userId === 'system' ? null : userId,
     filename,
     size,
     mime_type,
     destination: 'appwrite',
-    storage_key: `uploads/${datePath}/${fileId}`,
+    storage_key: storageKey,
     bucket: config.bucket_id,
     presigned_url: null,
     expires_at: config.expires_at,
@@ -138,12 +192,20 @@ upload.post('/appwrite/init', zValidator('json', uploadAppwriteInitRequestSchema
 });
 
 /**
- * Lifecycle Management (Shared)
+ * Mark upload complete — creates confirmed file record in `files` table
+ * Bug #15 fix: verifies the upload belongs to this user + service
  */
 upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
   const { upload_id } = c.req.valid('json');
+  const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
 
-  const record = await getUpload(c.env.usrc_d1, upload_id);
+  // Bug #15: use getUploadForUser to prevent cross-user upload hijacking
+  // API key path (userId='system') uses getUpload without owner restriction
+  const record = userId === 'system'
+    ? await getUpload(c.env.usrc_d1, upload_id)
+    : await getUploadForUser(c.env.usrc_d1, upload_id, userId, serviceId);
+
   if (!record) {
     return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
   }
@@ -154,7 +216,11 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
 
   const now = Math.floor(Date.now() / 1000);
   if (record.expires_at < now) {
-    await failUpload(c.env.usrc_d1, upload_id);
+    const updated = await failUpload(c.env.usrc_d1, upload_id);
+    if (updated) {
+      // Release quota since upload expired
+      await decrementServiceUsage(c.env.usrc_d1, record.service_id, record.size);
+    }
     return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
   }
 
@@ -163,11 +229,12 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
     return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
   }
 
-  // Promote to confirmed file record (linked to authenticated user)
-  const userId = c.get('userId') as string | undefined;
-  if (userId) {
+  // Promote to confirmed file record and increment service storage usage
+  if (userId !== 'system') {
+    const newFileId = crypto.randomUUID();
     await createFileRecord(c.env.usrc_d1, {
-      id: crypto.randomUUID(),
+      id: newFileId,
+      service_id: serviceId,
       user_id: userId,
       upload_id,
       filename: record.filename,
@@ -177,6 +244,20 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
       storage_key: record.storage_key,
       bucket: record.bucket,
     });
+    // Quota was already reserved atomically in /init, no need to increment here.
+    
+    // Audit log
+    c.executionCtx.waitUntil(
+      logServiceEvent(c.env.usrc_d1, {
+        serviceId,
+        userId,
+        action: 'upload_completed',
+        resourceType: 'file',
+        resourceId: newFileId,
+        metadata: { filename: record.filename, size: record.size },
+        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+      })
+    );
   }
 
   return c.json<UploadCompleteResponse>({ success: true, upload_id, status: 'completed' });
@@ -194,7 +275,11 @@ upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validation
     return c.json({ error: 'Conflict', message: `Upload is already in state: ${record.status}` }, 409);
   }
 
-  await failUpload(c.env.usrc_d1, upload_id);
+  const updated = await failUpload(c.env.usrc_d1, upload_id);
+  // Release reserved quota
+  if (updated) {
+    await decrementServiceUsage(c.env.usrc_d1, record.service_id, record.size);
+  }
   return c.json<UploadFailResponse>({ success: true, upload_id, status: 'failed' });
 });
 
