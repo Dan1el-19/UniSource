@@ -10,6 +10,8 @@ import {
   trashFileRecord,
   type FileRecord,
 } from '../db/fileRecords';
+import { getFolderForUser } from '../db/folders';
+import { decrementServiceUsage, logServiceEvent } from '../db/services';
 import { deleteObject, generatePresignedGetUrl } from '../services/r2';
 import {
   buildAppwriteFileDownloadUrl,
@@ -17,11 +19,12 @@ import {
   deleteAppwriteFile,
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
+import { getServiceConfig } from '../config/services';
 import {
   FILES_DEFAULT_LIMIT,
   FILES_MAX_LIMIT,
   fileMoveRequestSchema,
-  type FileRecordFullResponse,
+  type FileRecordDetailResponse,
   type FileRecordsListResponse,
   type FileDownloadUrlResponse,
 } from '@unisource/sdk';
@@ -69,9 +72,11 @@ const listQuerySchema = z
     }
   });
 
-function mapFileRecord(record: FileRecord): FileRecordFullResponse {
+// Maps internal FileRecord to public response — intentionally excludes storage_key and bucket
+function mapFileRecord(record: FileRecord): import('@unisource/sdk').FileRecord {
   return {
     id: record.id,
+    service_id: record.service_id,
     user_id: record.user_id,
     folder_id: record.folder_id,
     upload_id: record.upload_id,
@@ -79,8 +84,7 @@ function mapFileRecord(record: FileRecord): FileRecordFullResponse {
     size: record.size,
     mime_type: record.mime_type,
     storage_destination: record.storage_destination,
-    storage_key: record.storage_key,
-    bucket: record.bucket,
+    // storage_key and bucket intentionally omitted from public response
     is_trashed: record.is_trashed === 1,
     trashed_at: record.trashed_at,
     created_at: record.created_at,
@@ -93,12 +97,14 @@ const myFiles = new Hono<HonoEnv>();
 // List user's files — optionally filtered by folder
 myFiles.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const query = c.req.valid('query');
 
   try {
     const result = await listFileRecords(c.env.APP_DB, {
       user_id: userId,
-      folder_id: query.folder_id,
+      service_id: serviceId,
+      folder_id: query.folder_id ?? null,
       trashed_only: false,
       limit: query.limit,
       cursor: query.cursor,
@@ -120,11 +126,13 @@ myFiles.get('/', zValidator('query', listQuerySchema, validationErrorHook), asyn
 // List user's trash
 myFiles.get('/trash', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const query = c.req.valid('query');
 
   try {
     const result = await listFileRecords(c.env.APP_DB, {
       user_id: userId,
+      service_id: serviceId,
       trashed_only: true,
       limit: query.limit,
       cursor: query.cursor,
@@ -146,22 +154,24 @@ myFiles.get('/trash', zValidator('query', listQuerySchema, validationErrorHook),
 // Get single file
 myFiles.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const record = await getFileRecordForUser(c.env.APP_DB, id, userId);
+  const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) {
     return c.json({ error: 'Not Found', message: 'File not found' }, 404);
   }
 
-  return c.json<FileRecordFullResponse>(mapFileRecord(record));
+  return c.json<FileRecordDetailResponse>({ file: mapFileRecord(record) });
 });
 
-// Generate download URL
+// Generate download URL — internal storage_key used here but never exposed to client
 myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const record = await getFileRecordForUser(c.env.APP_DB, id, userId);
+  const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) {
     return c.json({ error: 'Not Found', message: 'File not found' }, 404);
   }
@@ -171,12 +181,17 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validati
 
   if (record.storage_destination === 'r2') {
     try {
+      const svcConfig = getServiceConfig(serviceId)!;
       const { presigned_url, expires_at } = await generatePresignedGetUrl(
         c.env,
-        record.bucket,
+        svcConfig.bucketName,  // use config, not stored bucket name from DB
         record.storage_key,
         DOWNLOAD_URL_TTL_SECONDS
       );
+      c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      c.header('Pragma', 'no-cache');
+      c.header('Expires', '0');
+      
       return c.json<FileDownloadUrlResponse>({
         upload_id: record.id,
         destination: record.storage_destination,
@@ -196,6 +211,11 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validati
   try {
     const token = await createAppwriteFileToken(c.env, record.bucket, appwriteFileId, DOWNLOAD_URL_TTL_SECONDS);
     const downloadUrl = buildAppwriteFileDownloadUrl(c.env, record.bucket, appwriteFileId, token.secret);
+
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    c.header('Pragma', 'no-cache');
+    c.header('Expires', '0');
+
     return c.json<FileDownloadUrlResponse>({
       upload_id: record.id,
       destination: record.storage_destination,
@@ -210,10 +230,11 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validati
 // Soft-delete (trash) or permanent delete
 myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
   const permanent = c.req.query('permanent') === 'true';
 
-  const record = await getFileRecordForUser(c.env.APP_DB, id, userId);
+  const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) {
     return c.json({ error: 'Not Found', message: 'File not found' }, 404);
   }
@@ -221,7 +242,8 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
   if (permanent) {
     try {
       if (record.storage_destination === 'r2') {
-        await deleteObject(c.env, record.bucket, record.storage_key);
+        const svcConfig = getServiceConfig(serviceId)!;
+        await deleteObject(c.env, svcConfig.bucketName, record.storage_key);
       } else {
         const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
         if (!appwriteFileId) {
@@ -233,11 +255,27 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
       return c.json({ error: 'Bad Gateway', message: 'Unable to delete file from storage' }, 502);
     }
 
-    await deleteFileRecordPermanently(c.env.APP_DB, id, userId);
+    await deleteFileRecordPermanently(c.env.APP_DB, id, userId, serviceId);
+
+    // Decrement service quota usage after physical deletion
+    await decrementServiceUsage(c.env.APP_DB, serviceId, record.size);
+
+    c.executionCtx.waitUntil(
+      logServiceEvent(c.env.APP_DB, {
+        serviceId,
+        userId,
+        action: 'file_deleted',
+        resourceType: 'file',
+        resourceId: id,
+        metadata: { filename: record.filename, size: record.size },
+        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+      })
+    );
+
     return c.json({ success: true, id, permanent: true });
   }
 
-  const trashed = await trashFileRecord(c.env.APP_DB, id, userId);
+  const trashed = await trashFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!trashed) {
     return c.json({ error: 'Conflict', message: 'File already in trash' }, 409);
   }
@@ -248,9 +286,10 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
 // Restore file from trash
 myFiles.post('/:id/restore', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const restored = await restoreFileRecord(c.env.APP_DB, id, userId);
+  const restored = await restoreFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!restored) {
     return c.json({ error: 'Not Found', message: 'File not found or not in trash' }, 404);
   }
@@ -258,17 +297,29 @@ myFiles.post('/:id/restore', zValidator('param', fileIdParamSchema, validationEr
   return c.json({ success: true, id });
 });
 
-// Move file to a different folder
+// Move file to target folder — verifies target folder ownership (fixes bug #4)
 myFiles.patch(
   '/:id/move',
   zValidator('param', fileIdParamSchema, validationErrorHook),
   zValidator('json', fileMoveRequestSchema, validationErrorHook),
   async (c) => {
     const userId = c.get('userId');
+    const serviceId = c.get('serviceId');
     const { id } = c.req.valid('param');
     const { folder_id } = c.req.valid('json');
 
-    const moved = await moveFileRecord(c.env.APP_DB, id, userId, folder_id ?? null);
+    // Bug #4 fix: verify the target folder belongs to this user+service before moving
+    if (folder_id != null) {
+      const targetFolder = await getFolderForUser(c.env.APP_DB, folder_id, userId, serviceId);
+      if (!targetFolder) {
+        return c.json({ error: 'Not Found', message: 'Target folder not found' }, 404);
+      }
+      if (targetFolder.is_trashed) {
+        return c.json({ error: 'Conflict', message: 'Cannot move file into a trashed folder' }, 409);
+      }
+    }
+
+    const moved = await moveFileRecord(c.env.APP_DB, id, userId, serviceId, folder_id ?? null);
     if (!moved) {
       return c.json({ error: 'Not Found', message: 'File not found or in trash' }, 404);
     }
