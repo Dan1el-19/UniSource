@@ -66,7 +66,13 @@ Tagi zawsze w formacie `<pakiet>@<wersja>`:
 
 ## Konwencja commitów (Conventional Commits)
 
-**Zawsze używaj scope'u** żeby było jasne co zmieniasz:
+Conventional Commits ze scope'em są rekomendowane dla czytelności historii git,
+ale nie są wymagane przez narzędzia release ani pipeline.
+
+Pipeline CI/CD na GitHub Actions uruchamia się na podstawie zmienionych ścieżek (`paths:`),
+nie na podstawie treści commit message.
+
+W praktyce scope pomaga zrozumieć, co zmieniasz:
 
 ```
 <type>(<scope>): <opis>
@@ -201,13 +207,12 @@ pnpm automatycznie linkuje lokalną wersję podczas developmentu.
 - ❌ Nie używaj `npm` ani `yarn` — tylko `pnpm`
 - ❌ Nie pushuj tagów bez zbuildowania i przetestowania paczki
 - ❌ Nie publikuj na npm bez dry-run najpierw
-- ❌ Nie commituj bez scope'u w wiadomości commita
 - ❌ Nie modyfikuj `version` w `package.json` ręcznie — używaj `pnpm changeset version`
 
 ## Co agent POWINIEN robić
 
 - ✅ Zawsze pytaj który pakiet jest zmieniany gdy jest niejednoznaczność
-- ✅ Używaj odpowiedniego scope'u w commitach (`feat(sdk):`, `fix(backend):` itp.)
+- ✅ Jeśli używasz Conventional Commits, stosuj czytelny scope (`feat(sdk):`, `fix(backend):` itp.)
 - ✅ Przy zmianach w `@unisource/sdk` sprawdź czy `apps/frontend` i `apps/backend` nie wymagają aktualizacji
 - ✅ Przy breaking change w SDK zaproponuj bump major version i zaktualizuj konsumentów
 - ✅ Przypominaj o aktualizacji CHANGELOG przed publishem SDK
