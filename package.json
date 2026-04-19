@@ -2,19 +2,14 @@
   "name": "unisource",
   "private": true,
   "scripts": {
-    "prepare": "husky install",
     "changeset": "changeset",
     "changeset:version": "changeset version",
     "changeset:publish": "changeset publish",
     "changeset:status": "changeset status --verbose",
-    "release:sdk": "pnpm run changeset:version && pnpm --filter @unisource/sdk build && pnpm run changeset:publish",
-    "commitlint": "commitlint --edit $1"
+    "release:sdk": "pnpm run changeset:version && pnpm --filter @unisource/sdk build && pnpm run changeset:publish"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",
-    "@commitlint/cli": "^17.6.0",
-    "@commitlint/config-conventional": "^17.6.0",
-    "husky": "^8.0.0",
     "commitizen": "^4.3.0",
     "cz-conventional-changelog": "^3.3.0"
   },
