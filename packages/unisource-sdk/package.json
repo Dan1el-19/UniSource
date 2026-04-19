@@ -1,0 +1,35 @@
+{
+  "name": "default-sdk",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Wspolne kontrakty danych dla backendu i frontendu UniSource.",
+  "license": "MIT",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsdown && node -e \"const fs=require('node:fs'); if (fs.existsSync('dist/index.d.mts')) fs.copyFileSync('dist/index.d.mts','dist/index.d.ts');\"",
+    "dev": "tsdown --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "release": "bumpp",
+    "prepublishOnly": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@typescript/native-preview": "7.0.0-dev.20260328.1",
+    "bumpp": "^11.0.1",
+    "tsdown": "^0.21.7",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

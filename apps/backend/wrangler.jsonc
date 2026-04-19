@@ -1,0 +1,29 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "app-backend",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-04-17",
+	"compatibility_flags": ["nodejs_compat"],
+	"d1_databases": [
+		{
+ 			"binding": "APP_DB",
+ 			"database_name": "app-db",
+			"database_id": "00000000-0000-0000-0000-000000000000"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "PRIMARY_BUCKET",
+			"bucket_name": "unisource"
+		}
+	]
+	// Secrets (set via `wrangler secret put`):
+	//   SERVICE_API_KEY             — Bearer token for upload gateway auth
+	//   R2_ACCOUNT_ID        — Cloudflare Account ID (for S3-compat presigned URLs)
+	//   R2_ACCESS_KEY_ID     — R2 API token Access Key ID
+	//   R2_SECRET_ACCESS_KEY — R2 API token Secret Access Key
+	//   APPWRITE_ENDPOINT    — e.g. https://appwrite.example.com/v1
+	//   APPWRITE_PROJECT_ID  — Appwrite Project ID
+	//   APPWRITE_BUCKET_ID   — Appwrite Storage Bucket ID
+	//   APPWRITE_API_KEY     — Appwrite API Key with storage.write scope
+}
