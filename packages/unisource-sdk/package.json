@@ -1,7 +1,7 @@
 {
   "name": "default-sdk",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Wspolne kontrakty danych dla backendu i frontendu UniSource.",
   "license": "MIT",
   "exports": {
