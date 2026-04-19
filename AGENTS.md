@@ -34,8 +34,8 @@ Wersje są **całkowicie niezależne** — zmiana wersji w jednym pakiecie nie w
 
 | Pakiet | Ścieżka | `private` | Publishowany | Wersjonowanie |
 |--------|---------|-----------|--------------|---------------|
-| `frontend` | `apps/frontend` | `true` | NIE | Semantic Versioning, opcjonalne |
-| `backend` | `apps/backend` | `true` | NIE | Semantic Versioning, opcjonalne |
+| `frontend` | `apps/frontend` | `true` | NIE | SemVer + git tagi (trigger CI/CD) |
+| `backend` | `apps/backend` | `true` | NIE | SemVer + git tagi (trigger CI/CD) |
 | `@unisource/sdk` | `packages/unisource-sdk` | `false` | TAK, na npm | Semantic Versioning, obowiązkowe |
 
 ### Jak bumpować wersję SDK
@@ -54,6 +54,21 @@ pnpm changeset version
 ```
 
 `pnpm changeset version` nie publikuje paczki i nie tworzy tagów automatycznie.
+
+### Jak wersjonować frontend/backend
+
+`apps/frontend` i `apps/backend` są prywatne, więc nie są publikowane do npm.
+Wersje tych aplikacji utrzymujemy przez SemVer + tagi git używane jako triggery CI/CD.
+
+```bash
+# backend
+git tag backend@1.2.0
+git push origin backend@1.2.0
+
+# frontend
+git tag frontend@2.0.0
+git push origin frontend@2.0.0
+```
 
 ### Git tagi — format
 
