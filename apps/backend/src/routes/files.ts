@@ -18,10 +18,9 @@ import {
 	FILES_DEFAULT_LIMIT,
 	FILES_MAX_LIMIT,
 	type FileDeleteResponse,
-	type FileDetailsResponse,
 	type FileDownloadUrlResponse,
-	type FileRecord as ApiFileRecord,
-	type FilesListResponse,
+	type UploadRecord as ApiUploadRecord,
+	type UploadsListResponse,
 	uploadDestinationSchema,
 	uploadStatusSchema,
 } from '@unisource/sdk';
@@ -97,15 +96,16 @@ const filesListQuerySchema = z
 		}
 	});
 
-function toFileResponse(record: UploadRecord): ApiFileRecord {
+/** Map internal DB record to the public API shape */
+function toApiUpload(record: UploadRecord): ApiUploadRecord {
 	return {
 		id: record.id,
+		service_id: record.service_id ?? '',
+		user_id: record.user_id ?? null,
 		filename: record.filename,
 		size: record.size,
 		mime_type: record.mime_type,
 		destination: record.destination,
-		storage_key: record.storage_key,
-		bucket: record.bucket,
 		status: record.status,
 		expires_at: record.expires_at,
 		created_at: record.created_at,
@@ -126,8 +126,8 @@ files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), a
 			status: query.status,
 		});
 
-		return c.json<FilesListResponse>({
-			items: result.items.map(toFileResponse),
+		return c.json<UploadsListResponse>({
+			items: result.items.map(toApiUpload),
 			next_cursor: result.next_cursor,
 			limit: query.limit,
 		});
@@ -148,7 +148,7 @@ files.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), a
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 	}
 
-	return c.json<FileDetailsResponse>({ file: toFileResponse(record) });
+	return c.json({ upload: toApiUpload(record) });
 });
 
 files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
@@ -171,6 +171,10 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validation
 				record.storage_key,
 				DOWNLOAD_URL_TTL_SECONDS
 			);
+
+			c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+			c.header('Pragma', 'no-cache');
+			c.header('Expires', '0');
 
 			return c.json<FileDownloadUrlResponse>({
 				upload_id: record.id,
@@ -197,6 +201,11 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validation
 		);
 
 		const downloadUrl = buildAppwriteFileDownloadUrl(c.env, record.bucket, appwriteFileId, token.secret);
+
+		c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+		c.header('Pragma', 'no-cache');
+		c.header('Expires', '0');
+
 		return c.json<FileDownloadUrlResponse>({
 			upload_id: record.id,
 			destination: record.destination,
@@ -216,8 +225,6 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 	}
 
-	let storageNotFound = false;
-
 	try {
 		if (record.destination === 'r2') {
 			await deleteObject(c.env, record.bucket, record.storage_key);
@@ -226,9 +233,7 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 			if (!appwriteFileId) {
 				return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key format' }, 500);
 			}
-
-			const deleteResult = await deleteAppwriteFile(c.env, record.bucket, appwriteFileId);
-			storageNotFound = deleteResult.not_found;
+			await deleteAppwriteFile(c.env, record.bucket, appwriteFileId);
 		}
 	} catch {
 		return c.json({ error: 'Bad Gateway', message: 'Unable to delete file in upstream storage' }, 502);
@@ -241,9 +246,8 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 
 	return c.json<FileDeleteResponse>({
 		success: true,
-		upload_id: id,
-		destination: record.destination,
-		storage_not_found: storageNotFound,
+		id,
+		permanent: true,
 	});
 });
 
