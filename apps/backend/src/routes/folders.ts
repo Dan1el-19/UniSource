@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   createFolder,
   deleteFolderPermanently,
+  getDescendantFolderIds,
   getFolderForUser,
   listFolders,
   restoreFolder,
@@ -11,11 +12,19 @@ import {
   updateFolder,
   type FolderRecord,
 } from '../db/folders';
+import { trashFilesInFolders } from '../db/fileRecords';
+import { logServiceEvent } from '../db/services';
 import {
+  FILES_DEFAULT_LIMIT,
+  FILES_MAX_LIMIT,
   folderCreateRequestSchema,
   folderUpdateRequestSchema,
+  type Folder,
+  type FolderCreateResponse,
+  type FolderUpdateResponse,
   type FolderListResponse,
-  type FolderResponse,
+  type FolderDeleteResponse,
+  type FolderRestoreResponse,
 } from '@unisource/sdk';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
@@ -38,9 +47,33 @@ function validationErrorHook(
 
 const folderIdParamSchema = z.object({ id: z.string().trim().min(1) });
 
-function mapFolder(folder: FolderRecord): FolderResponse {
+const listQuerySchema = z
+  .object({
+    limit: z.string().optional(),
+    cursor: z.string().optional(),
+    parent_id: z.string().optional(),
+    trashed: z.string().optional(),
+  })
+  .transform((v) => ({
+    limit: v.limit !== undefined ? Number(v.limit) : FILES_DEFAULT_LIMIT,
+    cursor: v.cursor?.trim() || undefined,
+    parent_id: v.parent_id?.trim() || undefined,
+    trashed_only: v.trashed === 'true',
+  }))
+  .superRefine((v, ctx) => {
+    if (!Number.isInteger(v.limit) || v.limit < 1 || v.limit > FILES_MAX_LIMIT) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['limit'],
+        message: `limit must be between 1 and ${FILES_MAX_LIMIT}`,
+      });
+    }
+  });
+
+function mapFolder(folder: FolderRecord): Folder {
   return {
     id: folder.id,
+    service_id: folder.service_id,
     user_id: folder.user_id,
     parent_id: folder.parent_id,
     name: folder.name,
@@ -57,10 +90,11 @@ const folders = new Hono<HonoEnv>();
 // Create folder
 folders.post('/', zValidator('json', folderCreateRequestSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const body = c.req.valid('json');
 
   if (body.parent_id) {
-    const parent = await getFolderForUser(c.env.APP_DB, body.parent_id, userId);
+    const parent = await getFolderForUser(c.env.APP_DB, body.parent_id, userId, serviceId);
     if (!parent) {
       return c.json({ error: 'Not Found', message: 'Parent folder not found' }, 404);
     }
@@ -72,38 +106,57 @@ folders.post('/', zValidator('json', folderCreateRequestSchema, validationErrorH
   const id = crypto.randomUUID();
   const folder = await createFolder(c.env.APP_DB, {
     id,
+    service_id: serviceId,
     user_id: userId,
     parent_id: body.parent_id ?? null,
     name: body.name,
     color_tag: body.color_tag ?? null,
   });
 
-  return c.json<FolderResponse>(mapFolder(folder), 201);
+  return c.json<FolderCreateResponse>({ folder: mapFolder(folder) }, 201);
 });
 
-// List folders (root or children of parent_id)
-folders.get('/', async (c) => {
+// List folders — with cursor pagination
+folders.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
-  const rawParentId = c.req.query('parent_id');
-  const trashedOnly = c.req.query('trashed') === 'true';
+  const serviceId = c.get('serviceId');
+  const query = c.req.valid('query');
 
-  const parentId = rawParentId?.trim() || null;
-  const items = await listFolders(c.env.APP_DB, userId, parentId ?? undefined, trashedOnly);
+  try {
+    const result = await listFolders(c.env.APP_DB, {
+      user_id: userId,
+      service_id: serviceId,
+      parent_id: query.parent_id ?? null,
+      trashed_only: query.trashed_only,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
 
-  return c.json<FolderListResponse>({ items: items.map(mapFolder) });
+    return c.json<FolderListResponse>({
+      items: result.items.map(mapFolder),
+      next_cursor: result.next_cursor,
+      limit: query.limit,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid cursor') {
+      return c.json({ error: 'Bad Request', message: 'cursor is invalid' }, 400);
+    }
+    throw err;
+  }
 });
 
 // Get single folder
 folders.get('/:id', zValidator('param', folderIdParamSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const folder = await getFolderForUser(c.env.APP_DB, id, userId);
+  const folder = await getFolderForUser(c.env.APP_DB, id, userId, serviceId);
   if (!folder) {
     return c.json({ error: 'Not Found', message: 'Folder not found' }, 404);
   }
 
-  return c.json<FolderResponse>(mapFolder(folder));
+  return c.json({ folder: mapFolder(folder) });
 });
 
 // Update folder (rename / color)
@@ -113,10 +166,11 @@ folders.patch(
   zValidator('json', folderUpdateRequestSchema, validationErrorHook),
   async (c) => {
     const userId = c.get('userId');
+    const serviceId = c.get('serviceId');
     const { id } = c.req.valid('param');
     const body = c.req.valid('json');
 
-    const updated = await updateFolder(c.env.APP_DB, id, userId, {
+    const updated = await updateFolder(c.env.APP_DB, id, userId, serviceId, {
       name: body.name,
       color_tag: body.color_tag,
     });
@@ -125,43 +179,70 @@ folders.patch(
       return c.json({ error: 'Not Found', message: 'Folder not found or already trashed' }, 404);
     }
 
-    return c.json<FolderResponse>(mapFolder(updated));
+    return c.json<FolderUpdateResponse>({ folder: mapFolder(updated) });
   }
 );
 
-// Soft-delete folder (trash) — or permanent with ?permanent=true
+// Soft-delete (trash) or permanent delete
 folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
   const permanent = c.req.query('permanent') === 'true';
 
   if (permanent) {
-    const deleted = await deleteFolderPermanently(c.env.APP_DB, id, userId);
-    if (!deleted) {
+    // Get all descendant folder IDs (including this folder) via recursive CTE
+    const descendantIds = await getDescendantFolderIds(c.env.APP_DB, id, userId, serviceId);
+    if (descendantIds.length === 0) {
       return c.json({ error: 'Not Found', message: 'Folder not found' }, 404);
     }
-    return c.json({ success: true, id, permanent: true });
+
+    // Mark all files in descendant folders as trashed (mark-for-deletion pattern).
+    // Actual R2/Appwrite cleanup is handled by a Scheduled Worker cron job —
+    // this avoids synchronous loops that could exceed Workers CPU limits on large folders.
+    await trashFilesInFolders(c.env.APP_DB, descendantIds, userId, serviceId);
+
+    // Delete all descendant folders in D1 (FK cascade sets folder_id=NULL on surviving files)
+    // Delete children first, then parent (reverse BFS order isn't needed because FK is SET NULL)
+    for (const folderId of descendantIds) {
+      await deleteFolderPermanently(c.env.APP_DB, folderId, userId, serviceId);
+    }
+
+    c.executionCtx.waitUntil(
+      logServiceEvent(c.env.APP_DB, {
+        serviceId,
+        userId,
+        action: 'folder_deleted',
+        resourceType: 'folder',
+        resourceId: id,
+        metadata: { descendants_deleted: descendantIds.length },
+        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+      })
+    );
+
+    return c.json<FolderDeleteResponse>({ success: true, id, permanent: true, folders_deleted: descendantIds.length });
   }
 
-  const trashed = await trashFolder(c.env.APP_DB, id, userId);
+  const trashed = await trashFolder(c.env.APP_DB, id, userId, serviceId);
   if (!trashed) {
     return c.json({ error: 'Not Found', message: 'Folder not found or already trashed' }, 404);
   }
 
-  return c.json({ success: true, id, permanent: false });
+  return c.json<FolderDeleteResponse>({ success: true, id, permanent: false });
 });
 
 // Restore folder from trash
 folders.post('/:id/restore', zValidator('param', folderIdParamSchema, validationErrorHook), async (c) => {
   const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const restored = await restoreFolder(c.env.APP_DB, id, userId);
+  const restored = await restoreFolder(c.env.APP_DB, id, userId, serviceId);
   if (!restored) {
     return c.json({ error: 'Not Found', message: 'Folder not found or not in trash' }, 404);
   }
 
-  return c.json({ success: true, id });
+  return c.json<FolderRestoreResponse>({ success: true, id });
 });
 
 export default folders;
