@@ -4,8 +4,19 @@ import {
   uploadAppwriteInitResponseSchema,
   uploadR2InitRequestSchema,
 } from '../src';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('unisource-sdk schemas', () => {
+  it('exposes importable built package entrypoint', async () => {
+    const distEntry = resolve(process.cwd(), 'dist/index.mjs');
+    expect(existsSync(distEntry)).toBe(true);
+
+    const mod = await import(distEntry);
+    expect(mod.uploadDestinationSchema).toBeDefined();
+    expect(mod.fileRecordFullSchema).toBeDefined();
+  });
+
   it('accepts valid R2 init request payload', () => {
     const parsed = uploadR2InitRequestSchema.safeParse({
       filename: 'raport.pdf',
