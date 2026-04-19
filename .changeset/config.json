@@ -2,7 +2,6 @@
   "changelog": ["@changesets/cli/changelog", {"repo": "unisource"}],
   "commit": false,
   "linked": [],
-  "ignore": ["app-backend", "service-b"],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch"
