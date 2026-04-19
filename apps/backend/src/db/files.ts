@@ -5,6 +5,8 @@ export type UploadStatus = 'pending' | 'completed' | 'failed';
 
 export interface UploadRecord {
   id: string;
+  service_id: string;
+  user_id: string | null;
   filename: string;
   size: number;
   mime_type: string;
@@ -20,6 +22,8 @@ export interface UploadRecord {
 
 export interface CreateUploadInput {
   id: string;
+  service_id: string;
+  user_id: string | null;
   filename: string;
   size: number;
   mime_type: string;
@@ -67,11 +71,15 @@ export async function createUpload(db: D1Database, input: CreateUploadInput): Pr
   const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
-      `INSERT INTO uploads (id, filename, size, mime_type, destination, storage_key, bucket, status, presigned_url, expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
+      `INSERT INTO uploads
+         (id, service_id, user_id, filename, size, mime_type, destination,
+          storage_key, bucket, status, presigned_url, expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
     )
     .bind(
       input.id,
+      input.service_id,
+      input.user_id,
       input.filename,
       input.size,
       input.mime_type,
@@ -92,6 +100,20 @@ export async function getUpload(db: D1Database, id: string): Promise<UploadRecor
   const result = await db
     .prepare('SELECT * FROM uploads WHERE id = ?')
     .bind(id)
+    .first<UploadRecord>();
+  return result ?? null;
+}
+
+// Used in /upload/complete to prevent cross-user upload hijacking (bug #15)
+export async function getUploadForUser(
+  db: D1Database,
+  id: string,
+  userId: string,
+  serviceId: string
+): Promise<UploadRecord | null> {
+  const result = await db
+    .prepare('SELECT * FROM uploads WHERE id = ? AND service_id = ? AND (user_id = ? OR user_id IS NULL)')
+    .bind(id, serviceId, userId)
     .first<UploadRecord>();
   return result ?? null;
 }

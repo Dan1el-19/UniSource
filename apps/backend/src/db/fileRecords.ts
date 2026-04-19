@@ -3,6 +3,7 @@ import type { UploadDestination } from './files';
 
 export interface FileRecord {
   id: string;
+  service_id: string;
   user_id: string;
   folder_id: string | null;
   upload_id: string | null;
@@ -12,7 +13,7 @@ export interface FileRecord {
   storage_destination: UploadDestination;
   storage_key: string;
   bucket: string;
-  is_trashed: number;
+  is_trashed: 0 | 1;
   trashed_at: number | null;
   created_at: number;
   updated_at: number;
@@ -20,6 +21,7 @@ export interface FileRecord {
 
 export interface CreateFileRecordInput {
   id: string;
+  service_id: string;
   user_id: string;
   folder_id?: string | null;
   upload_id?: string | null;
@@ -33,6 +35,7 @@ export interface CreateFileRecordInput {
 
 export interface ListFileRecordsInput {
   user_id: string;
+  service_id: string;
   folder_id?: string | null;
   trashed_only?: boolean;
   limit: number;
@@ -63,12 +66,14 @@ export async function createFileRecord(db: D1Database, input: CreateFileRecordIn
   const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
-      `INSERT INTO files (id, user_id, folder_id, upload_id, filename, size, mime_type,
-        storage_destination, storage_key, bucket, is_trashed, trashed_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`
+      `INSERT INTO files
+         (id, service_id, user_id, folder_id, upload_id, filename, size, mime_type,
+          storage_destination, storage_key, bucket, is_trashed, trashed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`
     )
     .bind(
       input.id,
+      input.service_id,
       input.user_id,
       input.folder_id ?? null,
       input.upload_id ?? null,
@@ -94,17 +99,25 @@ export async function getFileRecord(db: D1Database, id: string): Promise<FileRec
   return result ?? null;
 }
 
-export async function getFileRecordForUser(db: D1Database, id: string, userId: string): Promise<FileRecord | null> {
+export async function getFileRecordForUser(
+  db: D1Database,
+  id: string,
+  userId: string,
+  serviceId: string
+): Promise<FileRecord | null> {
   const result = await db
-    .prepare('SELECT * FROM files WHERE id = ? AND user_id = ?')
-    .bind(id, userId)
+    .prepare('SELECT * FROM files WHERE id = ? AND user_id = ? AND service_id = ?')
+    .bind(id, userId, serviceId)
     .first<FileRecord>();
   return result ?? null;
 }
 
-export async function listFileRecords(db: D1Database, input: ListFileRecordsInput): Promise<ListFileRecordsResult> {
-  const binds: (string | number | null)[] = [input.user_id];
-  const whereClauses: string[] = ['user_id = ?'];
+export async function listFileRecords(
+  db: D1Database,
+  input: ListFileRecordsInput
+): Promise<ListFileRecordsResult> {
+  const binds: (string | number | null)[] = [input.user_id, input.service_id];
+  const whereClauses: string[] = ['user_id = ?', 'service_id = ?'];
 
   if (input.trashed_only) {
     whereClauses.push('is_trashed = 1');
@@ -149,24 +162,38 @@ export async function listFileRecords(db: D1Database, input: ListFileRecordsInpu
   };
 }
 
-export async function trashFileRecord(db: D1Database, id: string, userId: string): Promise<boolean> {
+export async function trashFileRecord(
+  db: D1Database,
+  id: string,
+  userId: string,
+  serviceId: string
+): Promise<boolean> {
   const now = Math.floor(Date.now() / 1000);
   const result = await db
     .prepare(
-      'UPDATE files SET is_trashed = 1, trashed_at = ?, updated_at = ? WHERE id = ? AND user_id = ? AND is_trashed = 0'
+      `UPDATE files
+       SET is_trashed = 1, trashed_at = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
     )
-    .bind(now, now, id, userId)
+    .bind(now, now, id, userId, serviceId)
     .run();
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function restoreFileRecord(db: D1Database, id: string, userId: string): Promise<boolean> {
+export async function restoreFileRecord(
+  db: D1Database,
+  id: string,
+  userId: string,
+  serviceId: string
+): Promise<boolean> {
   const now = Math.floor(Date.now() / 1000);
   const result = await db
     .prepare(
-      'UPDATE files SET is_trashed = 0, trashed_at = NULL, updated_at = ? WHERE id = ? AND user_id = ? AND is_trashed = 1'
+      `UPDATE files
+       SET is_trashed = 0, trashed_at = NULL, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 1`
     )
-    .bind(now, id, userId)
+    .bind(now, id, userId, serviceId)
     .run();
   return (result.meta.changes ?? 0) > 0;
 }
@@ -175,22 +202,55 @@ export async function moveFileRecord(
   db: D1Database,
   id: string,
   userId: string,
+  serviceId: string,
   newFolderId: string | null
 ): Promise<boolean> {
   const now = Math.floor(Date.now() / 1000);
   const result = await db
     .prepare(
-      'UPDATE files SET folder_id = ?, updated_at = ? WHERE id = ? AND user_id = ? AND is_trashed = 0'
+      `UPDATE files
+       SET folder_id = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
     )
-    .bind(newFolderId, now, id, userId)
+    .bind(newFolderId, now, id, userId, serviceId)
     .run();
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function deleteFileRecordPermanently(db: D1Database, id: string, userId: string): Promise<boolean> {
+export async function deleteFileRecordPermanently(
+  db: D1Database,
+  id: string,
+  userId: string,
+  serviceId: string
+): Promise<boolean> {
   const result = await db
-    .prepare('DELETE FROM files WHERE id = ? AND user_id = ?')
-    .bind(id, userId)
+    .prepare('DELETE FROM files WHERE id = ? AND user_id = ? AND service_id = ?')
+    .bind(id, userId, serviceId)
     .run();
   return (result.meta.changes ?? 0) > 0;
+}
+
+// Soft-delete all files belonging to a set of folder IDs (for cascading folder delete)
+// Does NOT delete from R2/Appwrite — cron handles physical cleanup after retention period
+export async function trashFilesInFolders(
+  db: D1Database,
+  folderIds: string[],
+  userId: string,
+  serviceId: string
+): Promise<number> {
+  if (folderIds.length === 0) return 0;
+  const now = Math.floor(Date.now() / 1000);
+
+  const stmts = folderIds.map((folderId) =>
+    db
+      .prepare(
+        `UPDATE files
+         SET is_trashed = 1, trashed_at = ?, updated_at = ?
+         WHERE folder_id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
+      )
+      .bind(now, now, folderId, userId, serviceId)
+  );
+
+  const results = await db.batch(stmts);
+  return results.reduce((acc, r) => acc + (r.meta.changes ?? 0), 0);
 }
