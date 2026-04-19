@@ -24,7 +24,7 @@ import {
 	type FilesListResponse,
 	uploadDestinationSchema,
 	uploadStatusSchema,
-} from 'default-sdk';
+} from '@unisource/sdk';
 
 const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
 

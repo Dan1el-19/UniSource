@@ -11,7 +11,7 @@
     uploadLifecycleRequestSchema,
     uploadR2InitRequestSchema,
     uploadR2InitResponseSchema,
-  } from 'default-sdk';
+  } from '@unisource/sdk';
   import { uploadUiState } from '../../state/upload.svelte';
 
   type Destination = 'r2' | 'appwrite';

@@ -32,13 +32,15 @@ pnpm check
 
 ## Releases
 
-Releases are created by `semantic-release` from Conventional Commits on `main`.
-Use `feat:` for a minor release, `fix:` for a patch release, and the standard
-`BREAKING CHANGE` footer for a major release.
+`apps/backend` is a private workspace package (`"private": true`) and is not
+published to npm.
 
-The release workflow uses a GitHub token stored as `SEMANTIC_RELEASE_TOKEN`.
-Do not use `GITHUB_TOKEN` for that secret, because releases created with
-`GITHUB_TOKEN` do not trigger downstream `release.published` workflows.
+Versioning and publishing automation in this monorepo is handled with
+Changesets for the public `@unisource/sdk` package.
 
-After a GitHub release is published, a separate workflow deploys the tagged
-release to Cloudflare Workers.
+To ship backend changes, deploy the current code revision:
+
+```txt
+pnpm build
+pnpm deploy
+```

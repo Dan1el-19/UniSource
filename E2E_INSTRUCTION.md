@@ -4,7 +4,7 @@
 Celem tego zadania jest ożywienie obecnego monorepo poprzez wprowadzenie ustandaryzowanej komunikacji i testowego, ale kompletnego, frontendu. Monorepo (prowadzone przy użyciu `pnpm`) składa się z:
 - `apps/backend`: Aplikacja Hono oparta o Cloudflare Workers.
 - `apps/frontend`: Czysty szablon Astro skonfigurowany pod `Svelte`.
-- `packages/default-sdk`: Szablon `tsdown` do wytworzenia publicznej paczki NPM.
+- `packages/unisource-sdk`: Szablon `tsdown` do wytworzenia publicznej paczki NPM (`@unisource/sdk`).
 
 Twoim zadaniem jest stworzenie uniwersalnych kontraktów danych komunikacyjnych (schema validation) i zbudowanie frontendu udowadniającego, że cała architektura działa stabilnie i w sposób typowany E2E.
 
@@ -31,10 +31,10 @@ Zanim podejmiesz jakiekolwiek kroki programistyczne, musisz zaadaptować poniżs
 
 ---
 
-## 🔥 Faza 1: Wdrożenie SDK (Zod + TypeScript w `packages/default-sdk`)
+## 🔥 Faza 1: Wdrożenie SDK (Zod + TypeScript w `packages/unisource-sdk`)
 Paczka ta musi być zaprojektowana jako uniwersalne API do integracji w różnych środowiskach (Astro, Hono, React Native Expo).
 
-1. Zainstaluj `zod` (`pnpm add zod --filter default-sdk` lub manualnie dodaj pnpm z workspace).
+1. Zainstaluj `zod` (`pnpm add zod --filter @unisource/sdk` lub manualnie dodaj pnpm z workspace).
 2. Zdefiniuj obiekty schematów (`z.object`) odpowiadające domenom występującym z backendzie. Przeanalizuj endpointy `/upload` i `/files`, które są wstrzyknięte w pliku `apps/backend/src/index.ts`.
 3. Wyodrębnij typy TS ze schematów korzystając z inferencji (np. `export type UploadRequest = z.infer<typeof uploadSchema>;`).
 4. Skonfiguruj `index.ts` jako publiczny punkt wejściowy udostępniający wyłącznie schematy i przypisane im typy.
@@ -45,7 +45,7 @@ Paczka ta musi być zaprojektowana jako uniwersalne API do integracji w różnyc
 ## 🔥 Faza 2: Połączenie z Backendem (`apps/backend`)
 Przekształć API pod pełne typowanie opierając się na schematach.
 
-1. W pliku `apps/backend/package.json` zasymuluj włączenie pakietu `default-sdk` z wewnątrz workspace.
+1. W pliku `apps/backend/package.json` zasymuluj włączenie pakietu `@unisource/sdk` z wewnątrz workspace.
 2. Zamiast manualnie sprawdzać payload wysyłany na endpointy `/upload` oraz `/files`, zainstaluj pakiet `@hono/zod-validator` w backendzie.
 3. Przepisz logikę walidacji odpowiednich route'ów.
 4. Zwracane obiekty z backedu (JSON) typuj ręcznie lub na podstawie wcześniej przygotowanych, udostępnionych typów z paczki SDK.
@@ -57,7 +57,7 @@ Zbuduj narzędzie wizualne (Wyspy Svelte), testujące łączność zachowując p
 
 1. **Konfiguracja UI:** Wykonaj instalację Tailwind CSS do projektu Astro (`pnpm astro add tailwind` lub przez plik konfiguracyjny). Dodaj wsparcie dla gotowej biblioteki UI opartej na Tailwind dla płynnego interfejsu (np. components wg. wzoru shadcn).
 2. **Svelte Islands:** Frontend Astro korzystać ma z nowoczesnych komponentów Svelte oznaczonych dyrektywą `client:load`.
-3. **Komunikacja:** Zaimportuj typy i schematy Zod bezpośrednio z twojej nowej, wewnętrznej paczki `default-sdk`. 
+3. **Komunikacja:** Zaimportuj typy i schematy Zod bezpośrednio z twojej nowej, wewnętrznej paczki `@unisource/sdk`. 
 4. W nowych komponentach przetestuj komunikację ze stworzonym na backendzie endpointami wprowadzając otypowany `fetch()`. Formularz wysyłający dane ma bezpiecznie walidować pola za pomocą metody `schema.safeParse()` prosto z paczki SDK.
 5. **Estetyka MVP:** Aplikacja ma wyglądać profesjonalnie na pierwszy rzut oka – unikaj potocznych standardów (tzw. AI-boilerplate design), wdrażaj przemyślane stany wczytywania, komunikaty błędów z wykorzystaniem toast notification, a całą interakcję obuduj z użyciem utility-classes z Tailwinda.
 
@@ -68,7 +68,7 @@ Zbuduj narzędzie wizualne (Wyspy Svelte), testujące łączność zachowując p
 ### 4.1 Kompilacja
 - Uruchom `pnpm -r typecheck` — żaden pakiet nie może mieć błędów TS
 - Uruchom `pnpm -r build` — wszystkie trzy pakiety muszą się zbudować bez błędów
-- Sprawdź że `packages/default-sdk/dist/` zawiera `index.mjs` i pliki `.d.ts`
+- Sprawdź że `packages/unisource-sdk/dist/` zawiera `index.mjs` i pliki `.d.ts`
 
 ### 4.2 Testy E2E flow uploadu
 
