@@ -113,7 +113,7 @@ function toFileResponse(record: UploadRecord): ApiFileRecord {
 	};
 }
 
-const files = new Hono<{ Bindings: CloudflareBindings }>();
+const files = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
 files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), async (c) => {
 	const query = c.req.valid('query');

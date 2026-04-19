@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { createUpload, getUpload, completeUpload, failUpload } from '../db/files';
+import { createFileRecord } from '../db/fileRecords';
 import { generatePresignedPutUrl } from '../services/r2';
 import { getAppwriteUploadConfig } from '../services/appwrite';
 import {
@@ -16,7 +17,7 @@ import {
 const DEFAULT_R2_BUCKET = 'unisource';
 const UPLOAD_TTL_SECONDS = 3600; // 1 hour
 
-const upload = new Hono<{ Bindings: CloudflareBindings }>();
+const upload = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
 function validationErrorHook(
   result: {
@@ -160,6 +161,22 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   const updated = await completeUpload(c.env.APP_DB, upload_id);
   if (!updated) {
     return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
+  }
+
+  // Promote to confirmed file record (linked to authenticated user)
+  const userId = c.get('userId') as string | undefined;
+  if (userId) {
+    await createFileRecord(c.env.APP_DB, {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      upload_id,
+      filename: record.filename,
+      size: record.size,
+      mime_type: record.mime_type,
+      storage_destination: record.destination,
+      storage_key: record.storage_key,
+      bucket: record.bucket,
+    });
   }
 
   return c.json<UploadCompleteResponse>({ success: true, upload_id, status: 'completed' });

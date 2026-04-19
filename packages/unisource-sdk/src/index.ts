@@ -123,3 +123,7 @@ export const fileDeleteResponseSchema = z.object({
   storage_not_found: z.boolean(),
 });
 export type FileDeleteResponse = z.infer<typeof fileDeleteResponseSchema>;
+
+// Folders and per-user file records (E2E architecture)
+export * from './folders';
+export * from './fileRecords';

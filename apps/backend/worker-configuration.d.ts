@@ -1,3 +1,4 @@
+// Cloudflare Worker bindings (injected by Wrangler)
 declare interface CloudflareBindings {
   APP_DB: D1Database;
   PRIMARY_BUCKET: R2Bucket;
@@ -10,4 +11,10 @@ declare interface CloudflareBindings {
   APPWRITE_PROJECT_ID: string;
   APPWRITE_BUCKET_ID: string;
   APPWRITE_API_KEY: string;
+}
+
+// Context variables set by authMiddleware — used as Hono Variables generic
+declare interface WorkerVariables {
+  userId: string;
+  authType: 'appwrite' | 'apikey';
 }

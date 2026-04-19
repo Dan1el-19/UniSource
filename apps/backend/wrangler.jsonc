@@ -8,7 +8,8 @@
 		{
  			"binding": "APP_DB",
  			"database_name": "app-db",
-			"database_id": "00000000-0000-0000-0000-000000000000"
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "src/db/migrations"
 		}
 	],
 	"r2_buckets": [
