@@ -30,11 +30,14 @@ importers:
         specifier: ^0.7.6
         version: 0.7.6(hono@4.12.14)(zod@4.3.6)
       '@unisource/sdk':
-        specifier: npm:@unisource/sdk@^0.1.2
-        version: 0.1.2
+        specifier: workspace:*
+        version: link:../../packages/unisource-sdk
       hono:
         specifier: ^4.12.12
         version: 4.12.14
+      node-appwrite:
+        specifier: ^24.0.0
+        version: 24.0.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -3009,6 +3012,12 @@ packages:
 
   nlcst-to-string@4.0.0:
     resolution: {integrity: sha512-YKLBCcUYKAg0FNlOBT6aI91qFmSiFKiluk655WzPF+DDMA02qIyy8uiRqI8QXtcFpEvll12LpL5MXqEmAZ+dcA==}
+
+  node-appwrite@24.0.0:
+    resolution: {integrity: sha512-6oPNGkNHMcBAcu2GmaOTl4uCrabEcin0NzHRlE8lBfsduG+o4MtYjdLoXlA0IdGtlkFFa+qA4Hmkb7Z7By0ySQ==}
+
+  node-fetch-native-with-agent@1.7.2:
+    resolution: {integrity: sha512-5MaOOCuJEvcckoz7/tjdx1M6OusOY6Xc5f459IaruGStWnKzlI1qpNgaAwmn4LmFYcsSlj+jBMk84wmmRxfk5g==}
 
   node-fetch-native@1.6.7:
     resolution: {integrity: sha512-g9yhqoedzIUm0nTnTqAQvueMPVOuIY16bqgAJJC8XOOubYFNwz6IER9qs0Gq2Xd0+CecCKFjtdDTMA4u4xG06Q==}
@@ -7495,6 +7504,13 @@ snapshots:
   nlcst-to-string@4.0.0:
     dependencies:
       '@types/nlcst': 2.0.3
+
+  node-appwrite@24.0.0:
+    dependencies:
+      json-bigint: 1.0.0
+      node-fetch-native-with-agent: 1.7.2
+
+  node-fetch-native-with-agent@1.7.2: {}
 
   node-fetch-native@1.6.7: {}
 

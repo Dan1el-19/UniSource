@@ -8,7 +8,8 @@
 		{
  			"binding": "usrc_d1",
  			"database_name": "usrc-d1",
-			"database_id": "548cf71c-49e7-4080-9a16-8a6d143772c8"
+			"database_id": "548cf71c-49e7-4080-9a16-8a6d143772c8",
+			"migrations_dir": "src/db/migrations"
 		}
 	],
 	"r2_buckets": [
