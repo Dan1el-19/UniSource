@@ -1,36 +1,87 @@
 import { z } from 'zod';
-import { uploadDestinationSchema } from './index';
+import { nonEmptyString, positiveInt, uploadDestinationSchema } from './primitives';
 
-const nonEmptyStringSchema = z.string().trim().min(1);
-const positiveIntegerSchema = z.number().int().positive();
+// ─── User-facing file record ──────────────────────────────────────────────────
 
-// Full file record (confirmed upload in the `files` D1 table)
-export const fileRecordFullSchema = z.object({
-  id: nonEmptyStringSchema,
-  user_id: nonEmptyStringSchema,
-  folder_id: nonEmptyStringSchema.nullable(),
-  upload_id: nonEmptyStringSchema.nullable(),
-  filename: nonEmptyStringSchema,
-  size: positiveIntegerSchema,
-  mime_type: nonEmptyStringSchema,
+/**
+ * A confirmed file record owned by a user.
+ * Internal fields (storage_key, bucket) are intentionally excluded from the public API.
+ */
+export const fileRecordSchema = z.object({
+  id: nonEmptyString,
+  service_id: nonEmptyString,
+  user_id: nonEmptyString,
+  folder_id: nonEmptyString.nullable(),
+  upload_id: nonEmptyString.nullable(),
+  filename: nonEmptyString,
+  size: positiveInt,
+  mime_type: nonEmptyString,
   storage_destination: uploadDestinationSchema,
-  storage_key: nonEmptyStringSchema,
-  bucket: nonEmptyStringSchema,
   is_trashed: z.boolean(),
-  trashed_at: positiveIntegerSchema.nullable(),
-  created_at: positiveIntegerSchema,
-  updated_at: positiveIntegerSchema,
+  trashed_at: positiveInt.nullable(),
+  created_at: positiveInt,
+  updated_at: positiveInt,
 });
-export type FileRecordFullResponse = z.infer<typeof fileRecordFullSchema>;
+export type FileRecord = z.infer<typeof fileRecordSchema>;
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+export const FILES_DEFAULT_LIMIT = 25;
+export const FILES_MAX_LIMIT = 100;
+
+export const fileRecordsListQuerySchema = z.object({
+  folder_id: nonEmptyString.nullable().optional(),
+  is_trashed: z.boolean().optional(),
+  cursor: nonEmptyString.optional(),
+  limit: z.number().int().min(1).max(FILES_MAX_LIMIT).optional(),
+});
+export type FileRecordsListQuery = z.infer<typeof fileRecordsListQuerySchema>;
 
 export const fileRecordsListResponseSchema = z.object({
-  items: z.array(fileRecordFullSchema),
+  items: z.array(fileRecordSchema),
   next_cursor: z.string().nullable(),
-  limit: z.number().int().positive(),
+  limit: positiveInt,
 });
 export type FileRecordsListResponse = z.infer<typeof fileRecordsListResponseSchema>;
 
+// ─── Single file detail ───────────────────────────────────────────────────────
+
+export const fileRecordDetailResponseSchema = z.object({
+  file: fileRecordSchema,
+});
+export type FileRecordDetailResponse = z.infer<typeof fileRecordDetailResponseSchema>;
+
+// ─── Move ────────────────────────────────────────────────────────────────────
+
 export const fileMoveRequestSchema = z.object({
-  folder_id: nonEmptyStringSchema.nullable().optional(),
+  /** null = move to root, undefined = keep unchanged */
+  folder_id: nonEmptyString.nullable().optional(),
 });
 export type FileMoveRequest = z.infer<typeof fileMoveRequestSchema>;
+
+// ─── Download URL ─────────────────────────────────────────────────────────────
+
+export const fileDownloadUrlResponseSchema = z.object({
+  upload_id: nonEmptyString,
+  destination: uploadDestinationSchema,
+  download_url: z.string().url(),
+  expires_at: positiveInt,
+});
+export type FileDownloadUrlResponse = z.infer<typeof fileDownloadUrlResponseSchema>;
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+export const fileDeleteResponseSchema = z.object({
+  success: z.literal(true),
+  id: nonEmptyString,
+  permanent: z.boolean(),
+});
+export type FileDeleteResponse = z.infer<typeof fileDeleteResponseSchema>;
+
+// ─── Restore ──────────────────────────────────────────────────────────────────
+
+export const fileRestoreResponseSchema = z.object({
+  success: z.literal(true),
+  id: nonEmptyString,
+});
+export type FileRestoreResponse = z.infer<typeof fileRestoreResponseSchema>;
