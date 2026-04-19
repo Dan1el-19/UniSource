@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { authMiddleware } from './middleware/auth';
+import { loggerMiddleware, logError } from './middleware/logger';
+import { cleanupOrphanedUploads } from './worker/cron';
 import upload from './routes/upload';
 import files from './routes/files';
 import folders from './routes/folders';
@@ -10,6 +12,7 @@ import myFiles from './routes/fileRecords';
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
 app.use('*', cors());
+app.use('*', loggerMiddleware);
 
 // Health check — no auth required
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Math.floor(Date.now() / 1000) }));
@@ -30,4 +33,19 @@ app.route('/folders', folders);
 app.use('/my-files/*', authMiddleware);
 app.route('/my-files', myFiles);
 
-export default app;
+app.onError((err, c) => {
+  logError('Unhandled Application Error', err, c as any);
+  return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
+});
+
+export default {
+  fetch: app.fetch,
+  scheduled: async (event: ScheduledEvent, env: CloudflareBindings, ctx: ExecutionContext) => {
+    // Scheduled Cron job for orphaned uploads cleanup
+    const mockLogger = {
+      info: (msg: string, data?: any) => console.info(JSON.stringify({ level: 'info', message: msg, ...data })),
+      error: (msg: string, err: any) => console.error(JSON.stringify({ level: 'error', message: msg, error: String(err) }))
+    };
+    ctx.waitUntil(cleanupOrphanedUploads(env.APP_DB, env, mockLogger));
+  },
+};

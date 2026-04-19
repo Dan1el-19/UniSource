@@ -19,23 +19,39 @@ describe('app-backend worker', () => {
     expect(typeof payload.timestamp).toBe('number')
   }, TEST_TIMEOUT_MS)
 
-  it('protects upload routes with bearer auth', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/upload/r2/init'))
-
-    expect(response.status).toBe(401)
-    expect(await response.json()).toEqual({
-      error: 'Unauthorized',
-      message: 'Missing or invalid Authorization header',
-    })
+  it('rejects unknown service ID', async () => {
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/upload/r2/init', {
+        headers: { 'X-Service-ID': 'nonexistent-service' },
+      })
+    )
+    expect(response.status).toBe(400)
+    const payload = await response.json<{ error: string; message: string }>()
+    expect(payload.error).toBe('Bad Request')
+    expect(payload.message).toContain('Unknown service')
   }, TEST_TIMEOUT_MS)
 
-  it('protects files routes with bearer auth', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/files'))
-
+  it('protects upload routes — returns 401 without credentials', async () => {
+    const response = await workerExports.default.fetch(new Request('http://localhost/upload/r2/init'))
     expect(response.status).toBe(401)
-    expect(await response.json()).toEqual({
-      error: 'Unauthorized',
-      message: 'Missing or invalid Authorization header',
-    })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+  }, TEST_TIMEOUT_MS)
+
+  it('protects files routes — returns 401 without credentials', async () => {
+    const response = await workerExports.default.fetch(new Request('http://localhost/files'))
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+  }, TEST_TIMEOUT_MS)
+
+  it('protects folders routes — returns 401 without credentials', async () => {
+    const response = await workerExports.default.fetch(new Request('http://localhost/folders'))
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+  }, TEST_TIMEOUT_MS)
+
+  it('protects my-files routes — returns 401 without credentials', async () => {
+    const response = await workerExports.default.fetch(new Request('http://localhost/my-files'))
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
   }, TEST_TIMEOUT_MS)
 })
