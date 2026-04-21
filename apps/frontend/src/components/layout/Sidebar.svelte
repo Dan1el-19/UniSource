@@ -8,6 +8,7 @@
     LogOut,
     Settings,
     Share2,
+    ShieldCheck,
     Trash2,
   } from 'lucide-svelte';
   import { authState } from '../../state/auth.svelte';
@@ -17,17 +18,19 @@
 
   const activeTab = $derived.by(() => {
     const path = page.url.pathname;
-    if (path.startsWith('/shared')) return 'shared';
-    if (path.startsWith('/trash')) return 'trash';
+    if (path.startsWith('/shared'))   return 'shared';
+    if (path.startsWith('/trash'))    return 'trash';
     if (path.startsWith('/settings')) return 'settings';
+    if (path.startsWith('/admin'))    return 'admin';
     return 'drive';
   });
 
   const navItems = [
-    { id: 'drive', label: 'Mój dysk', href: '/drive', icon: HardDrive },
-    { id: 'shared', label: 'Udostępnione', href: '/shared', icon: Share2 },
-    { id: 'trash', label: 'Kosz', href: '/trash', icon: Trash2 },
-    { id: 'settings', label: 'Ustawienia', href: '/settings', icon: Settings },
+    { id: 'drive',    label: 'Mój dysk',     href: '/drive',    icon: HardDrive },
+    { id: 'shared',   label: 'Udostępnione', href: '/shared',   icon: Share2 },
+    { id: 'trash',    label: 'Kosz',         href: '/trash',    icon: Trash2 },
+    { id: 'admin',    label: 'Admin',        href: '/admin',    icon: ShieldCheck },
+    { id: 'settings', label: 'Ustawienia',   href: '/settings', icon: Settings },
   ] as const;
 
   function toggleSidebar() {
