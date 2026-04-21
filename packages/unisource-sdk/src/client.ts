@@ -117,6 +117,7 @@ import type {
 import type {
   FolderListQuery,
   FolderListResponse,
+  FolderDetailResponse,
   FolderCreateRequest,
   FolderCreateResponse,
   FolderUpdateRequest,
@@ -166,6 +167,10 @@ export class UnisourceClient {
     list: (query?: FileRecordsListQuery): Promise<FileRecordsListResponse> =>
       apiRequest(this.config, 'GET', '/my-files', { query }),
 
+    /** List files in the trash */
+    trash: (query?: { cursor?: string; limit?: number }): Promise<FileRecordsListResponse> =>
+      apiRequest(this.config, 'GET', '/my-files/trash', { query }),
+
     /** Get a single file record */
     get: (id: string): Promise<FileRecordDetailResponse> =>
       apiRequest(this.config, 'GET', `/my-files/${id}`),
@@ -193,6 +198,10 @@ export class UnisourceClient {
     /** List folders owned by the authenticated user */
     list: (query?: FolderListQuery): Promise<FolderListResponse> =>
       apiRequest(this.config, 'GET', '/folders', { query }),
+
+    /** Get a single folder by ID */
+    get: (id: string): Promise<FolderDetailResponse> =>
+      apiRequest(this.config, 'GET', `/folders/${id}`),
 
     /** Create a new folder */
     create: (body: FolderCreateRequest): Promise<FolderCreateResponse> =>
