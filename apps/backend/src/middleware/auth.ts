@@ -109,8 +109,8 @@ export const authMiddleware = createMiddleware<{
   const pathname = new URL(c.req.url).pathname;
   const { routeMode, jwtToken, apiKeyToken } = resolveAuthDecision(
     pathname,
-    c.req.header('Authorization'),
-    c.req.header('X-Appwrite-JWT')
+    c.req.header('Authorization') ?? null,
+    c.req.header('X-Appwrite-JWT') ?? null
   );
 
   // Derive service from header — treat as hint, ALWAYS verify access below

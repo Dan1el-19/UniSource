@@ -41,6 +41,7 @@ export interface ListUploadsInput {
   cursor?: string | null;
   destination?: UploadDestination;
   status?: UploadStatus;
+  service_id?: string;
 }
 
 export interface ListUploadsResult {
@@ -142,6 +143,11 @@ export async function failUpload(db: D1Database, id: string): Promise<boolean> {
 export async function listUploads(db: D1Database, input: ListUploadsInput): Promise<ListUploadsResult> {
   const binds: Array<string | number> = [];
   const whereClauses: string[] = ['1 = 1'];
+
+  if (input.service_id) {
+    whereClauses.push('service_id = ?');
+    binds.push(input.service_id);
+  }
 
   if (input.destination) {
     whereClauses.push('destination = ?');

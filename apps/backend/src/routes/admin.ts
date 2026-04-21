@@ -72,7 +72,7 @@ admin.get('/service/usage', async (c) => {
 const auditLogQuerySchema = z.object({
   user_id: z.string().optional(),
   action: z
-    .enum(['upload_completed', 'file_deleted', 'folder_deleted', 'quota_exceeded'])
+    .enum(['upload_completed', 'file_deleted', 'folder_deleted', 'quota_exceeded', 'share_link_accessed'])
     .optional(),
   resource_type: z.enum(['file', 'folder', 'service']).optional(),
   cursor: z.string().optional(),
