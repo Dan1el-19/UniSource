@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp *)",
+      "Bash(grep -E \"\\\\.\\(mjs|json|yml|yaml|toml|md\\)$\")",
+      "Bash(pnpm --filter default-nexus exec svelte-kit sync)",
+      "Bash(pnpm install *)",
+      "Bash(./node_modules/.bin/svelte-kit sync *)",
+      "Bash(mkdir -p \"A:/Projects/UniSource/apps/frontend/src/routes/\\(app\\)/drive/[...path]\")",
+      "Bash(mv \"A:/Projects/UniSource/apps/frontend/src/routes/\\(app\\)/drive/[[...path]]/+page.ts\" \"A:/Projects/UniSource/apps/frontend/src/routes/\\(app\\)/drive/[...path]/+page.ts\")",
+      "Bash(mv \"A:/Projects/UniSource/apps/frontend/src/routes/\\(app\\)/drive/[[...path]]/+page.svelte\" \"A:/Projects/UniSource/apps/frontend/src/routes/\\(app\\)/drive/[...path]/+page.svelte\")",
+      "Bash(rmdir \"A:/Projects/UniSource/apps/frontend/src/routes/\\(app\\)/drive/[[...path]]\")",
+      "Bash(./node_modules/.bin/svelte-check --tsconfig ./tsconfig.json)",
+      "Bash(timeout 15 ./node_modules/.bin/vite dev --port 5173)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm build *)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "svelte"
+  ]
+}

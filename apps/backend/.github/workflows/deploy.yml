@@ -35,8 +35,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Switch app SDK dependency source to npm
+        run: pnpm run sdk:deps:npm
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --config.link-workspace-packages=false
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3

@@ -6,7 +6,11 @@
     "changeset:version": "changeset version",
     "changeset:publish": "changeset publish",
     "changeset:status": "changeset status --verbose",
-    "release:sdk": "pnpm run changeset:version && pnpm --filter @unisource/sdk build && pnpm run changeset:publish"
+    "backend": "pnpm --filter ./apps/backend run dev",
+    "frontend": "pnpm --filter ./apps/frontend dev",
+    "release:sdk": "pnpm run changeset:version && pnpm --filter @unisource/sdk build && pnpm run changeset:publish",
+    "sdk:deps:workspace": "node scripts/set-app-sdk-source.mjs workspace",
+    "sdk:deps:npm": "node scripts/set-app-sdk-source.mjs npm"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.0",

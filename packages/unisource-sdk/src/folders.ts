@@ -75,6 +75,13 @@ export const folderDeleteResponseSchema = z.object({
 });
 export type FolderDeleteResponse = z.infer<typeof folderDeleteResponseSchema>;
 
+// ─── Single folder detail ─────────────────────────────────────────────────────
+
+export const folderDetailResponseSchema = z.object({
+  folder: folderSchema,
+});
+export type FolderDetailResponse = z.infer<typeof folderDetailResponseSchema>;
+
 // ─── Restore ──────────────────────────────────────────────────────────────────
 
 export const folderRestoreResponseSchema = z.object({
