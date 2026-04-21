@@ -9,6 +9,7 @@
   import { uploadUiState } from '../../state/upload.svelte';
 
   import ContextMenu from './ContextMenu.svelte';
+  import ShareLinksModal from './ShareLinksModal.svelte';
   import CreateFolderDialog from './CreateFolderDialog.svelte';
   import DriveHeader from './DriveHeader.svelte';
   import FileGrid from './FileGrid.svelte';
@@ -53,6 +54,7 @@
   let showCreateFolderDialog = $state(false);
   let renameTarget = $state<DriveItem | null>(null);
   let moveTarget = $state<DriveItem | null>(null);
+  let shareTarget = $state<DriveItem | null>(null);
 
   let operationMessage = $state<string | null>(null);
   let operationError = $state<string | null>(null);
@@ -288,7 +290,7 @@
     contextMenuConfig = { x: e.clientX, y: e.clientY, item };
   }
 
-  async function handleMenuAction(action: 'download' | 'rename' | 'move' | 'delete', item: DriveItem) {
+  async function handleMenuAction(action: 'download' | 'rename' | 'move' | 'delete' | 'share', item: DriveItem) {
     operationError = null;
     operationMessage = null;
 
@@ -313,6 +315,12 @@
           return;
         }
         moveTarget = item;
+        return;
+      }
+
+      if (action === 'share') {
+        shareTarget = item;
+        contextMenuConfig = null;
         return;
       }
 
@@ -461,6 +469,14 @@
         folders={moveCandidates}
         onclose={() => (moveTarget = null)}
         onconfirm={handleMove}
+      />
+    {/if}
+
+    {#if shareTarget && shareTarget.kind === 'file'}
+      <ShareLinksModal
+        fileId={shareTarget.id}
+        filename={shareTarget.name}
+        onclose={() => { shareTarget = null; }}
       />
     {/if}
 
