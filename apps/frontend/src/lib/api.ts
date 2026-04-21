@@ -45,3 +45,21 @@ export async function downloadFileById(fileId: string, preferredFileName?: strin
 
   setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 }
+
+const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+
+export async function getPublicFileInfo(slug: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${PUBLIC_API_URL}/public/${encodeURIComponent(slug)}`, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
+  return res.json() as Promise<Record<string, unknown>>;
+}
+
+export async function unlockPublicFile(slug: string, password: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${PUBLIC_API_URL}/public/${encodeURIComponent(slug)}/unlock`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    body: JSON.stringify({ password }),
+  });
+  return res.json() as Promise<Record<string, unknown>>;
+}
