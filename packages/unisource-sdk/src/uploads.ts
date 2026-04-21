@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString, positiveInt, uploadDestinationSchema } from './primitives';
+import { nonEmptyString, positiveInt, uploadDestinationSchema, FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from './primitives';
 
 // ─── Init: R2 ────────────────────────────────────────────────────────────────
 
@@ -65,8 +65,7 @@ export type UploadFailResponse = z.infer<typeof uploadFailResponseSchema>;
 
 // ─── Admin: list uploads ──────────────────────────────────────────────────────
 
-export const FILES_DEFAULT_LIMIT = 25;
-export const FILES_MAX_LIMIT = 100;
+export { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT };
 
 /** Raw upload record — returned by admin `/files` endpoints. */
 export const uploadRecordSchema = z.object({

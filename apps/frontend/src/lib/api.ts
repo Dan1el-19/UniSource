@@ -1,4 +1,4 @@
-import type { Folder } from '@unisource/sdk';
+import type { Folder, PublicFileAccessResponse, PublicFileLockedResponse } from '@unisource/sdk';
 import { UnisourceClient } from '@unisource/sdk';
 import { account } from './appwrite';
 
@@ -48,18 +48,19 @@ export async function downloadFileById(fileId: string, preferredFileName?: strin
 
 const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
 
-export async function getPublicFileInfo(slug: string): Promise<Record<string, unknown>> {
+export async function getPublicFileInfo(slug: string): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
   const res = await fetch(`${PUBLIC_API_URL}/public/${encodeURIComponent(slug)}`, {
     headers: { 'Cache-Control': 'no-store' },
   });
-  return res.json() as Promise<Record<string, unknown>>;
+  return res.json() as Promise<PublicFileAccessResponse | PublicFileLockedResponse>;
 }
 
-export async function unlockPublicFile(slug: string, password: string): Promise<Record<string, unknown>> {
+export async function unlockPublicFile(slug: string, password: string): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
   const res = await fetch(`${PUBLIC_API_URL}/public/${encodeURIComponent(slug)}/unlock`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     body: JSON.stringify({ password }),
   });
-  return res.json() as Promise<Record<string, unknown>>;
+  return res.json() as Promise<PublicFileAccessResponse | PublicFileLockedResponse>;
 }
+

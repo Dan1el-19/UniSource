@@ -1,17 +1,16 @@
 <script lang="ts">
   import { Lock, Download, FileText, AlertTriangle, Eye, EyeOff } from 'lucide-svelte';
   import { unlockPublicFile } from '$lib/api';
+  import type { PublicFileAccessResponse, PublicFileLockedResponse } from '@unisource/sdk';
+  import type { PublicPageData } from './+page.server';
 
-  let { data } = $props<{ data: {
-    slug: string;
-    status: number;
-    error: string | null;
-    data: Record<string, unknown> | null;
-  }}>();
+  let { data } = $props<{ data: PublicPageData }>();
+
+  type FileInfo = PublicFileAccessResponse | PublicFileLockedResponse;
 
   // unlockedInfo holds the response from /unlock — null means show server data
-  let unlockedInfo = $state<Record<string, unknown> | null>(null);
-  const fileInfo = $derived(unlockedInfo ?? data.data);
+  let unlockedInfo = $state<PublicFileAccessResponse | null>(null);
+  const fileInfo = $derived<FileInfo | null>(unlockedInfo ?? data.data);
   let passwordInput = $state('');
   let showPassword = $state(false);
   let isUnlocking = $state(false);
@@ -22,6 +21,7 @@
   const isError = $derived(!fileInfo && !!data.error);
   const requiresPassword = $derived(fileInfo?.requires_password === true);
   const hasAccess = $derived(fileInfo?.requires_password === false);
+  const accessInfo = $derived(hasAccess ? (fileInfo as PublicFileAccessResponse) : null);
 
   function formatBytes(bytes: number) {
     if (!+bytes) return '0 B';
@@ -36,12 +36,12 @@
     isUnlocking = true;
     unlockError = null;
     try {
-      const result = await unlockPublicFile(data.slug, passwordInput) as any;
+      const result = await unlockPublicFile(data.slug, passwordInput);
       if (result.requires_password === false) {
-        unlockedInfo = result;
+        unlockedInfo = result as PublicFileAccessResponse;
         passwordInput = '';
       } else {
-        unlockError = result.message ?? 'Nieprawidłowe hasło';
+        unlockError = 'Nieprawidłowe hasło';
       }
     } catch {
       unlockError = 'Błąd sieci. Spróbuj ponownie.';
@@ -51,12 +51,12 @@
   }
 
   async function handleDownload() {
-    if (!fileInfo?.download_url) return;
+    if (!accessInfo?.download_url) return;
     isDownloading = true;
     try {
       const anchor = document.createElement('a');
-      anchor.href = fileInfo.download_url as string;
-      anchor.download = fileInfo.filename as string;
+      anchor.href = accessInfo.download_url;
+      anchor.download = accessInfo.filename;
       anchor.rel = 'noopener noreferrer';
       document.body.appendChild(anchor);
       anchor.click();
@@ -66,6 +66,7 @@
     }
   }
 </script>
+
 
 <svelte:head>
   <title>{fileInfo?.filename ? `${fileInfo.filename} — UniSource` : 'UniSource Share'}</title>
@@ -79,12 +80,13 @@
       <p class="card-sub">{data.error ?? 'Ten link nie istnieje lub został dezaktywowany.'}</p>
 
     {:else if requiresPassword}
+      {@const lockedInfo = fileInfo as import('@unisource/sdk').PublicFileLockedResponse}
       <div class="state-icon lock"><Lock size={36} /></div>
-      <h1 class="card-title">{fileInfo?.filename as string}</h1>
-      {#if fileInfo?.link_name}
-        <p class="link-name">„{fileInfo.link_name}"</p>
+      <h1 class="card-title">{lockedInfo.filename}</h1>
+      {#if lockedInfo.link_name}
+        <p class="link-name">„{lockedInfo.link_name}"</p>
       {/if}
-      <p class="card-sub">{formatBytes(fileInfo?.size as number)} · chronione hasłem</p>
+      <p class="card-sub">{formatBytes(lockedInfo.size)} · chronione hasłem</p>
 
       <form class="password-form" onsubmit={(e) => { e.preventDefault(); handleUnlock(); }}>
         <div class="input-wrap">
@@ -112,13 +114,13 @@
         </button>
       </form>
 
-    {:else if hasAccess}
+    {:else if hasAccess && accessInfo}
       <div class="state-icon file"><FileText size={36} /></div>
-      <h1 class="card-title">{fileInfo?.filename as string}</h1>
-      {#if fileInfo?.link_name}
-        <p class="link-name">„{fileInfo.link_name}"</p>
+      <h1 class="card-title">{accessInfo.filename}</h1>
+      {#if accessInfo.link_name}
+        <p class="link-name">„{accessInfo.link_name}"</p>
       {/if}
-      <p class="card-sub">{formatBytes(fileInfo?.size as number)}</p>
+      <p class="card-sub">{formatBytes(accessInfo.size)}</p>
 
       <button class="btn-primary" onclick={handleDownload} disabled={isDownloading}>
         <Download size={18} />
