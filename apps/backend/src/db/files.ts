@@ -7,6 +7,7 @@ export interface UploadRecord {
   id: string;
   service_id: string;
   user_id: string | null;
+  folder_id: string | null;
   filename: string;
   size: number;
   mime_type: string;
@@ -24,6 +25,7 @@ export interface CreateUploadInput {
   id: string;
   service_id: string;
   user_id: string | null;
+  folder_id?: string | null;
   filename: string;
   size: number;
   mime_type: string;
@@ -72,14 +74,15 @@ export async function createUpload(db: D1Database, input: CreateUploadInput): Pr
   await db
     .prepare(
       `INSERT INTO uploads
-         (id, service_id, user_id, filename, size, mime_type, destination,
+         (id, service_id, user_id, folder_id, filename, size, mime_type, destination,
           storage_key, bucket, status, presigned_url, expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
     )
     .bind(
       input.id,
       input.service_id,
       input.user_id,
+      input.folder_id ?? null,
       input.filename,
       input.size,
       input.mime_type,
