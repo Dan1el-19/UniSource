@@ -2,11 +2,11 @@
   import { onMount } from 'svelte';
   import { spring } from 'svelte/motion';
   import { innerHeight, innerWidth } from 'svelte/reactivity/window';
-  import { Download, Edit2, FolderInput, Trash2 } from 'lucide-svelte';
+  import { Download, Edit2, FolderInput, Share2, Trash2 } from 'lucide-svelte';
   import type { DriveItem } from './types';
   import { isFileItem } from './types';
 
-  type ContextAction = 'download' | 'rename' | 'move' | 'delete';
+  type ContextAction = 'download' | 'rename' | 'move' | 'share' | 'delete';
 
   let { 
     x = 0, 
@@ -23,7 +23,7 @@
   }>();
 
   const menuWidth = 220;
-  const menuHeight = 220;
+  const menuHeight = 260;
   const viewportWidth = $derived(innerWidth.current ?? menuWidth + 20);
   const viewportHeight = $derived(innerHeight.current ?? menuHeight + 20);
 
@@ -35,6 +35,7 @@
 
   const canDownload = $derived(isFileItem(item));
   const canMove = $derived(isFileItem(item));
+  const canShare = $derived(isFileItem(item));
 
   onMount(() => {
     scale.set(1);
@@ -98,6 +99,13 @@
     <button class="menu-item" onclick={() => handleAction('move')} role="menuitem" type="button">
       <FolderInput size={18} />
       <span>Przenieś do</span>
+    </button>
+  {/if}
+
+  {#if canShare}
+    <button class="menu-item" onclick={() => handleAction('share')} role="menuitem" type="button">
+      <Share2 size={18} />
+      <span>Udostępnij</span>
     </button>
   {/if}
 
