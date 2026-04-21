@@ -217,6 +217,27 @@ export async function moveFileRecord(
   return (result.meta.changes ?? 0) > 0;
 }
 
+export async function updateFileRecord(
+  db: D1Database,
+  id: string,
+  userId: string,
+  serviceId: string,
+  updates: { filename: string }
+): Promise<FileRecord | null> {
+  const now = Math.floor(Date.now() / 1000);
+  const result = await db
+    .prepare(
+      `UPDATE files
+       SET filename = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ?`
+    )
+    .bind(updates.filename, now, id, userId, serviceId)
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) return null;
+  return getFileRecord(db, id);
+}
+
 export async function deleteFileRecordPermanently(
   db: D1Database,
   id: string,
