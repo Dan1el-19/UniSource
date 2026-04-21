@@ -30,6 +30,7 @@ function mapAuditEvent(row: AuditEventRow): AuditEvent {
 export interface ListAuditEventsResult {
   items: AuditEvent[];
   next_cursor: string | null;
+  limit: number;
 }
 
 export interface ServiceRecord {
@@ -174,14 +175,14 @@ export async function listAuditEvents(
     const cursorTs = Number(query.cursor.slice(0, separatorIndex));
     const cursorId = query.cursor.slice(separatorIndex + 1);
     if (!Number.isInteger(cursorTs) || cursorTs <= 0 || !cursorId) throw new Error('Invalid cursor');
-    whereClauses.push('(created_at < ? OR (created_at = ? AND id > ?))');
+    whereClauses.push('(created_at < ? OR (created_at = ? AND id < ?))');
     binds.push(cursorTs, cursorTs, cursorId);
   }
 
   const sql = `
     SELECT * FROM service_user_events
     WHERE ${whereClauses.join(' AND ')}
-    ORDER BY created_at DESC, id ASC
+    ORDER BY created_at DESC, id DESC
     LIMIT ?
   `;
 
@@ -196,5 +197,5 @@ export async function listAuditEvents(
   const last = items[items.length - 1];
   const next_cursor = hasMore && last ? `${last.created_at}:${last.id}` : null;
 
-  return { items: items.map(mapAuditEvent), next_cursor };
+  return { items: items.map(mapAuditEvent), next_cursor, limit };
 }
