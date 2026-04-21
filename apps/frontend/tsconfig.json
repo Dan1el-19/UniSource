@@ -9,8 +9,9 @@
 		"skipLibCheck": true,
 		"sourceMap": true,
 		"strict": true,
-		"moduleResolution": "bundler"
+		"moduleResolution": "bundler",
+		"typeRoots": ["./.svelte-kit", "./node_modules/@types"]
 	},
-	"include": ["**/*"],
+	"include": [".svelte-kit/ambient.d.ts", ".svelte-kit/non-ambient.d.ts", "**/*"],
 	"exclude": ["dist", "node_modules"]
 }

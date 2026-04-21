@@ -173,16 +173,18 @@
 
 <div
   class="modal-backdrop"
+  role="presentation"
+  onclick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+></div>
+
+<div
+  class="modal glass"
   role="dialog"
   aria-modal="true"
   aria-label="Udostępnij plik"
-  onclick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+  tabindex="-1"
+  style="transform: scale({$scale}); opacity: {$opacity};"
 >
-  <div
-    class="modal glass"
-    style="transform: scale({$scale}); opacity: {$opacity};"
-    onclick={(e) => e.stopPropagation()}
-  >
     <!-- Header -->
     <div class="modal-header">
       <div class="modal-title-row">
@@ -410,7 +412,6 @@
       {/if}
     </div>
   </div>
-</div>
 
 <style>
   .modal-backdrop {
@@ -420,14 +421,15 @@
     background: color-mix(in oklab, #000 52%, transparent);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-4);
   }
 
   .modal {
-    width: min(520px, 100%);
+    position: fixed;
+    z-index: 71;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: min(520px, calc(100vw - 2 * var(--space-4)));
     max-height: min(88dvh, 680px);
     border-radius: var(--radius-xl);
     border-color: var(--color-glass-border);
