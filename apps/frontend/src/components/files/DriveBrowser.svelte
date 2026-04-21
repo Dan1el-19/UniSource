@@ -344,13 +344,15 @@
       return;
     }
 
-    if (!isFolderItem(renameTarget)) {
-      throw new Error('Zmiana nazwy plików nie jest jeszcze dostępna po stronie API.');
+    if (isFolderItem(renameTarget)) {
+      const { folder } = await apiClient.folders.update(renameTarget.folder.id, { name });
+      folders = folders.map((f) => (f.id === folder.id ? folder : f));
+      setOperationMessage(`Zmieniono nazwę folderu na: ${name}`);
+    } else {
+      const { file } = await apiClient.myFiles.update(renameTarget.file.id, { filename: name });
+      files = files.map((f) => (f.id === file.id ? file : f));
+      setOperationMessage(`Zmieniono nazwę pliku na: ${name}`);
     }
-
-    await apiClient.folders.update(renameTarget.folder.id, { name });
-    await loadData();
-    setOperationMessage(`Zmieniono nazwę folderu na: ${name}`);
   }
 
   async function handleMove(folderId: string | null) {
