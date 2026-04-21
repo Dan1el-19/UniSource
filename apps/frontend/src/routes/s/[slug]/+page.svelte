@@ -66,9 +66,7 @@
 </script>
 
 <svelte:head>
-  <title>
-    {#if fileInfo?.filename}{fileInfo.filename as string} — UniSource{:else}UniSource Share{/if}
-  </title>
+  <title>{fileInfo?.filename ? `${fileInfo.filename} — UniSource` : 'UniSource Share'}</title>
 </svelte:head>
 
 <div class="public-wrap">
