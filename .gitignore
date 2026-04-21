@@ -72,3 +72,4 @@ wrangler.toml
 *.tmp
 *.temp
 npm-debug.log*
+.claude/
