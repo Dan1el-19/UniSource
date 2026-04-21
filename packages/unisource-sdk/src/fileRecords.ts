@@ -85,3 +85,15 @@ export const fileRestoreResponseSchema = z.object({
   id: nonEmptyString,
 });
 export type FileRestoreResponse = z.infer<typeof fileRestoreResponseSchema>;
+
+// ─── Update (rename) ──────────────────────────────────────────────────────────
+
+export const fileUpdateRequestSchema = z.object({
+  filename: nonEmptyString,
+});
+export type FileUpdateRequest = z.infer<typeof fileUpdateRequestSchema>;
+
+export const fileUpdateResponseSchema = z.object({
+  file: fileRecordSchema,
+});
+export type FileUpdateResponse = z.infer<typeof fileUpdateResponseSchema>;

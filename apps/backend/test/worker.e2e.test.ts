@@ -54,4 +54,29 @@ describe('usrc-backend worker', () => {
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
   }, TEST_TIMEOUT_MS)
+
+  it('protects admin routes — returns 401 without credentials', async () => {
+    const adminRoutes = [
+      'http://localhost/admin/service',
+      'http://localhost/admin/service/usage',
+      'http://localhost/admin/audit-log',
+    ]
+    for (const url of adminRoutes) {
+      const response = await workerExports.default.fetch(new Request(url))
+      expect(response.status, `expected 401 for ${url}`).toBe(401)
+      expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    }
+  }, TEST_TIMEOUT_MS)
+
+  it('PATCH /my-files/:id returns 401 without credentials', async () => {
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/my-files/some-file-id', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: 'new-name.pdf' }),
+      })
+    )
+    expect(response.status).toBe(401)
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+  }, TEST_TIMEOUT_MS)
 })
