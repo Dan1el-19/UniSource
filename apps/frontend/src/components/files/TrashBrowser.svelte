@@ -1,17 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { FileRecord } from '@unisource/sdk';
-  import { LoaderCircle, Trash2, Undo2 } from 'lucide-svelte';
+  import type { FileRecord, Folder } from '@unisource/sdk';
+  import { LoaderCircle, Trash2, Undo2, Folder as FolderIcon, FileText } from 'lucide-svelte';
 
   import { apiClient } from '../../lib/api';
   import { authState } from '../../state/auth.svelte';
   import Button from '../ui/Button.svelte';
 
+  type TrashItem =
+    | { kind: 'file'; data: FileRecord }
+    | { kind: 'folder'; data: Folder };
+
   let isLoading = $state(true);
   let sessionReady = $state(false);
   let error = $state<string | null>(null);
   let message = $state<string | null>(null);
-  let items = $state<FileRecord[]>([]);
+  let items = $state<TrashItem[]>([]);
   let busyId = $state<string | null>(null);
   let bannerTimer: number | ReturnType<typeof setTimeout> | null = null;
 
@@ -24,13 +28,37 @@
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
   }
 
+  function getItemId(item: TrashItem) {
+    return item.data.id;
+  }
+
+  function getItemName(item: TrashItem) {
+    return item.kind === 'file' ? item.data.filename : item.data.name;
+  }
+
+  function getDeletedAt(item: TrashItem): number {
+    const ts = item.data.trashed_at ?? item.data.updated_at;
+    return ts;
+  }
+
   async function loadTrash() {
     isLoading = true;
     error = null;
 
     try {
-      const payload = await apiClient.myFiles.trash({ limit: 100 });
-      items = payload.items;
+      const [filesPayload, foldersPayload] = await Promise.all([
+        apiClient.myFiles.trash({ limit: 100 }),
+        apiClient.folders.list({ trashed: true } as any, undefined),
+      ]);
+
+      const fileItems: TrashItem[] = filesPayload.items.map((f) => ({ kind: 'file', data: f }));
+      const folderItems: TrashItem[] = (foldersPayload.items as Folder[])
+        .filter((f) => f.is_trashed)
+        .map((f) => ({ kind: 'folder', data: f }));
+
+      items = [...folderItems, ...fileItems].sort(
+        (a, b) => getDeletedAt(b) - getDeletedAt(a)
+      );
     } catch (err) {
       error = err instanceof Error ? err.message : 'Nie udało się pobrać zawartości kosza.';
     } finally {
@@ -39,10 +67,7 @@
   }
 
   function scheduleBannerClear() {
-    if (bannerTimer) {
-      window.clearTimeout(bannerTimer);
-    }
-
+    if (bannerTimer) window.clearTimeout(bannerTimer);
     bannerTimer = window.setTimeout(() => {
       message = null;
       error = null;
@@ -55,9 +80,7 @@
 
     (async () => {
       const currentUser = await authState.checkSession();
-      if (cancelled) {
-        return;
-      }
+      if (cancelled) return;
 
       if (!currentUser) {
         const redirectTarget = `${window.location.pathname}${window.location.search}`;
@@ -71,37 +94,42 @@
 
     return () => {
       cancelled = true;
-
-      if (bannerTimer) {
-        window.clearTimeout(bannerTimer);
-      }
+      if (bannerTimer) window.clearTimeout(bannerTimer);
     };
   });
 
-  async function restore(item: FileRecord) {
-    busyId = item.id;
+  async function restore(item: TrashItem) {
+    busyId = item.data.id;
     try {
-      await apiClient.myFiles.restore(item.id);
-      message = `Przywrócono: ${item.filename}`;
+      if (item.kind === 'file') {
+        await apiClient.myFiles.restore(item.data.id);
+      } else {
+        await apiClient.folders.restore(item.data.id);
+      }
+      message = `Przywrócono: ${getItemName(item)}`;
       scheduleBannerClear();
       await loadTrash();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Nie udało się przywrócić pliku.';
+      error = err instanceof Error ? err.message : 'Nie udało się przywrócić elementu.';
       scheduleBannerClear();
     } finally {
       busyId = null;
     }
   }
 
-  async function removeForever(item: FileRecord) {
-    busyId = item.id;
+  async function removeForever(item: TrashItem) {
+    busyId = item.data.id;
     try {
-      await apiClient.myFiles.delete(item.id, { permanent: true });
-      message = `Usunięto na stałe: ${item.filename}`;
+      if (item.kind === 'file') {
+        await apiClient.myFiles.delete(item.data.id, { permanent: true });
+      } else {
+        await apiClient.folders.delete(item.data.id, { permanent: true });
+      }
+      message = `Usunięto na stałe: ${getItemName(item)}`;
       scheduleBannerClear();
       await loadTrash();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Nie udało się usunąć pliku na stałe.';
+      error = err instanceof Error ? err.message : 'Nie udało się usunąć elementu na stałe.';
       scheduleBannerClear();
     } finally {
       busyId = null;
@@ -112,7 +140,7 @@
 <section class="trash-wrap mx-auto w-full max-w-4xl xl:max-w-5xl">
   <header>
     <h1>Kosz</h1>
-    <p>Pliki w koszu możesz przywrócić lub usunąć bezpowrotnie.</p>
+    <p>Elementy w koszu możesz przywrócić lub usunąć bezpowrotnie.</p>
   </header>
 
   {#if error}
@@ -123,17 +151,9 @@
     <div class="banner banner-success" role="status">{message}</div>
   {/if}
 
-  {#if !sessionReady}
+  {#if !sessionReady || isLoading}
     <div class="state-wrap">
-      <div class="spin">
-        <LoaderCircle size={36} />
-      </div>
-    </div>
-  {:else if isLoading}
-    <div class="state-wrap">
-      <div class="spin">
-        <LoaderCircle size={36} />
-      </div>
+      <div class="spin"><LoaderCircle size={36} /></div>
     </div>
   {:else if items.length === 0}
     <div class="state-wrap">
@@ -145,18 +165,29 @@
     </div>
   {:else}
     <div class="table glass">
-      {#each items as item (item.id)}
+      {#each items as item (item.data.id)}
         <article class="row">
+          <div class="row-icon" class:is-folder={item.kind === 'folder'}>
+            {#if item.kind === 'folder'}
+              <FolderIcon size={18} />
+            {:else}
+              <FileText size={18} />
+            {/if}
+          </div>
+
           <div class="meta">
-            <h3>{item.filename}</h3>
-            <p>{formatBytes(item.size)} • usunięto {new Date((item.trashed_at ?? item.updated_at) * 1000).toLocaleDateString('pl-PL')}</p>
+            <h3>{getItemName(item)}</h3>
+            <p>
+              {item.kind === 'folder' ? 'Folder' : formatBytes((item.data as FileRecord).size)}
+              · usunięto {new Date(getDeletedAt(item) * 1000).toLocaleDateString('pl-PL')}
+            </p>
           </div>
 
           <div class="actions">
             <Button
               size="sm"
               variant="secondary"
-              disabled={busyId === item.id}
+              disabled={busyId === item.data.id}
               onclick={() => restore(item)}
             >
               <span class="inline-flex items-center gap-1"><Undo2 size={14} /> Przywróć</span>
@@ -164,7 +195,7 @@
             <Button
               size="sm"
               variant="danger"
-              disabled={busyId === item.id}
+              disabled={busyId === item.data.id}
               onclick={() => removeForever(item)}
             >
               Usuń na zawsze
@@ -261,14 +292,31 @@
     min-height: 56px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: var(--space-3);
     padding: var(--space-3);
     background: color-mix(in oklab, var(--color-bg-elevated) 72%, transparent);
   }
 
+  .row-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--color-info) 12%, transparent);
+    color: var(--color-info);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .row-icon.is-folder {
+    background: color-mix(in oklab, var(--color-warning) 12%, transparent);
+    color: var(--color-warning);
+  }
+
   .meta {
     min-width: 0;
+    flex: 1;
   }
 
   .meta h3 {
@@ -299,18 +347,12 @@
   }
 
   @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
   }
 
   @media (max-width: 760px) {
     .row {
-      flex-direction: column;
-      align-items: flex-start;
+      flex-wrap: wrap;
     }
 
     .actions {
@@ -327,8 +369,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .spin {
-      animation: none;
-    }
+    .spin { animation: none; }
   }
 </style>
