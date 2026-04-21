@@ -7,6 +7,7 @@ import upload from './routes/upload';
 import files from './routes/files';
 import folders from './routes/folders';
 import myFiles from './routes/fileRecords';
+import admin from './routes/admin';
 
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
@@ -32,6 +33,10 @@ app.route('/folders', folders);
 // Per-user file records (with trash/move) — requires Appwrite JWT
 app.use('/my-files/*', authMiddleware);
 app.route('/my-files', myFiles);
+
+// Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
+app.use('/admin/*', authMiddleware);
+app.route('/admin', admin);
 
 app.onError((err, c) => {
   logError('Unhandled Application Error', err, c as any);

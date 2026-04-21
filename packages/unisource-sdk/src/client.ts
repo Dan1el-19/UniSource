@@ -113,6 +113,8 @@ import type {
   FileDownloadUrlResponse,
   FileDeleteResponse,
   FileRestoreResponse,
+  FileUpdateRequest,
+  FileUpdateResponse,
 } from './fileRecords';
 
 import type {
@@ -191,6 +193,10 @@ export class UnisourceClient {
     /** Restore a file from trash */
     restore: (id: string, signal?: AbortSignal): Promise<FileRestoreResponse> =>
       apiRequest(this.config, 'POST', `/my-files/${id}/restore`, { signal }),
+
+    /** Rename a file */
+    update: (id: string, body: FileUpdateRequest, signal?: AbortSignal): Promise<FileUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/my-files/${id}`, { body, signal }),
   };
 
   // ─── Folders ──────────────────────────────────────────────────────────────

@@ -12,7 +12,11 @@ export interface AuthDecision {
 }
 
 function getAuthRouteMode(pathname: string): AuthRouteMode {
-  if (pathname.startsWith('/upload') || pathname.startsWith('/files')) {
+  if (
+    pathname.startsWith('/upload') ||
+    pathname.startsWith('/files') ||
+    pathname.startsWith('/admin')
+  ) {
     return 'dual';
   }
 

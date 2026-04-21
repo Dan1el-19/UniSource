@@ -8,6 +8,7 @@ import {
   moveFileRecord,
   restoreFileRecord,
   trashFileRecord,
+  updateFileRecord,
   type FileRecord,
 } from '../db/fileRecords';
 import { getFolderForUser } from '../db/folders';
@@ -27,6 +28,7 @@ import {
   type FileRecordDetailResponse,
   type FileRecordsListResponse,
   type FileDownloadUrlResponse,
+  type FileUpdateResponse,
 } from '@unisource/sdk';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
@@ -296,6 +298,30 @@ myFiles.post('/:id/restore', zValidator('param', fileIdParamSchema, validationEr
 
   return c.json({ success: true, id });
 });
+
+const fileUpdateBodySchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+});
+
+// Rename file
+myFiles.patch(
+  '/:id',
+  zValidator('param', fileIdParamSchema, validationErrorHook),
+  zValidator('json', fileUpdateBodySchema, validationErrorHook),
+  async (c) => {
+    const userId = c.get('userId');
+    const serviceId = c.get('serviceId');
+    const { id } = c.req.valid('param');
+    const { filename } = c.req.valid('json');
+
+    const file = await updateFileRecord(c.env.APP_DB, id, userId, serviceId, { filename });
+    if (!file) {
+      return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+    }
+
+    return c.json<FileUpdateResponse>({ file: mapFileRecord(file) });
+  }
+);
 
 // Move file to target folder — verifies target folder ownership (fixes bug #4)
 myFiles.patch(

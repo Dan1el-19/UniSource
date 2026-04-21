@@ -45,6 +45,8 @@ export {
   fileDownloadUrlResponseSchema,
   fileDeleteResponseSchema,
   fileRestoreResponseSchema,
+  fileUpdateRequestSchema,
+  fileUpdateResponseSchema,
 } from './fileRecords';
 export type {
   FileRecord,
@@ -55,6 +57,8 @@ export type {
   FileDownloadUrlResponse,
   FileDeleteResponse,
   FileRestoreResponse,
+  FileUpdateRequest,
+  FileUpdateResponse,
 } from './fileRecords';
 
 // ─── Folders ─────────────────────────────────────────────────────────────────
