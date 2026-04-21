@@ -136,6 +136,14 @@ import type {
   AuditLogListResponse,
 } from './services';
 
+import type {
+  ShareLinkCreateRequest,
+  ShareLinkCreateResponse,
+  ShareLinkListResponse,
+  ShareLinkUpdateRequest,
+  ShareLinkUpdateResponse,
+} from './shareLinks';
+
 export class UnisourceClient {
   private config: UnisourceClientConfig;
 
@@ -245,5 +253,25 @@ export class UnisourceClient {
     /** List audit log events for this service */
     auditLog: (query?: AuditLogListQuery, signal?: AbortSignal): Promise<AuditLogListResponse> =>
       apiRequest(this.config, 'GET', '/admin/audit-log', { query, signal }),
+  };
+
+  // ─── Share Links ──────────────────────────────────────────────────────────────
+
+  readonly shareLinks = {
+    /** Create a public share link for a file */
+    create: (fileId: string, body: ShareLinkCreateRequest, signal?: AbortSignal): Promise<ShareLinkCreateResponse> =>
+      apiRequest(this.config, 'POST', `/my-files/${fileId}/share-links`, { body, signal }),
+
+    /** List all share links for a file */
+    list: (fileId: string, signal?: AbortSignal): Promise<ShareLinkListResponse> =>
+      apiRequest(this.config, 'GET', `/my-files/${fileId}/share-links`, { signal }),
+
+    /** Update a share link (rename, toggle, change password/expiry) */
+    update: (linkId: string, body: ShareLinkUpdateRequest, signal?: AbortSignal): Promise<ShareLinkUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/share-links/${linkId}`, { body, signal }),
+
+    /** Permanently delete a share link */
+    delete: (linkId: string, signal?: AbortSignal): Promise<{ success: true; id: string }> =>
+      apiRequest(this.config, 'DELETE', `/share-links/${linkId}`, { signal }),
   };
 }
