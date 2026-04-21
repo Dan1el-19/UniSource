@@ -107,6 +107,28 @@ export type {
   AuditLogListResponse,
 } from './services';
 
+// ─── Share Links ──────────────────────────────────────────────────────────────
+export {
+  shareLinkSchema,
+  shareLinkCreateRequestSchema,
+  shareLinkUpdateRequestSchema,
+  shareLinkListResponseSchema,
+  shareLinkCreateResponseSchema,
+  shareLinkUpdateResponseSchema,
+  publicFileAccessResponseSchema,
+  publicFileLockedResponseSchema,
+} from './shareLinks';
+export type {
+  ShareLink,
+  ShareLinkCreateRequest,
+  ShareLinkUpdateRequest,
+  ShareLinkListResponse,
+  ShareLinkCreateResponse,
+  ShareLinkUpdateResponse,
+  PublicFileAccessResponse,
+  PublicFileLockedResponse,
+} from './shareLinks';
+
 // ─── HTTP Client ─────────────────────────────────────────────────────────────
 export { UnisourceClient, UnisourceError, UnisourceNetworkError } from './client';
 export type { UnisourceClientConfig } from './client';
