@@ -9,7 +9,9 @@
     data: Record<string, unknown> | null;
   }}>();
 
-  let fileInfo = $state(data.data);
+  // unlockedInfo holds the response from /unlock — null means show server data
+  let unlockedInfo = $state<Record<string, unknown> | null>(null);
+  const fileInfo = $derived(unlockedInfo ?? data.data);
   let passwordInput = $state('');
   let showPassword = $state(false);
   let isUnlocking = $state(false);
@@ -36,7 +38,7 @@
     try {
       const result = await unlockPublicFile(data.slug, passwordInput) as any;
       if (result.requires_password === false) {
-        fileInfo = result;
+        unlockedInfo = result;
         passwordInput = '';
       } else {
         unlockError = result.message ?? 'Nieprawidłowe hasło';
