@@ -1,0 +1,20 @@
+# Local development secrets for Wrangler (copy to .dev.vars and fill in values)
+# Production secrets are set via: wrangler secret put <NAME>
+
+# Bearer token that upload clients must present (X-API-Key or Authorization: Bearer)
+SERVICE_API_KEY=
+
+# Cloudflare Account ID — used when generating R2 presigned PUT URLs via the S3-compat API
+R2_ACCOUNT_ID=
+
+# R2 API token credentials (create in Cloudflare dashboard → R2 → Manage API tokens)
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+
+# Appwrite project and bucket used as the secondary storage destination
+APPWRITE_ENDPOINT=https://appwrite.example.com/v1
+APPWRITE_PROJECT_ID=
+APPWRITE_BUCKET_ID=
+
+# Appwrite server-side API key with storage.read + storage.write scope
+APPWRITE_API_KEY=

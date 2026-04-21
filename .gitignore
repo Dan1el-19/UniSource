@@ -42,11 +42,14 @@ coverage/
 # Env files
 .env
 .env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 .envrc
+.dev.vars
+!.dev.vars.example
 
 # Editor directories and files
 .vscode/
@@ -72,3 +75,4 @@ wrangler.toml
 *.tmp
 *.temp
 npm-debug.log*
+
