@@ -6,6 +6,11 @@ export const nonEmptyString = z.string().trim().min(1);
 export const positiveInt = z.number().int().positive();
 export const unixTimestamp = z.number().int().nonnegative();
 
+// ─── Pagination constants ─────────────────────────────────────────────────────
+
+export const FILES_DEFAULT_LIMIT = 25;
+export const FILES_MAX_LIMIT = 100;
+
 // ─── Upload Destination ──────────────────────────────────────────────────────
 
 export const uploadDestinationSchema = z.enum(['r2', 'appwrite']);

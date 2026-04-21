@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString, positiveInt, uploadDestinationSchema } from './primitives';
+import { nonEmptyString, positiveInt, uploadDestinationSchema, FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from './primitives';
 
 // ─── User-facing file record ──────────────────────────────────────────────────
 
@@ -26,8 +26,8 @@ export type FileRecord = z.infer<typeof fileRecordSchema>;
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export const FILES_DEFAULT_LIMIT = 25;
-export const FILES_MAX_LIMIT = 100;
+export { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT };
+
 
 export const fileRecordsListQuerySchema = z.object({
   folder_id: nonEmptyString.nullable().optional(),

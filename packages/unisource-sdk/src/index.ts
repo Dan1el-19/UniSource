@@ -6,13 +6,14 @@ export {
   uploadDestinationSchema,
   uploadStatusSchema,
   apiErrorSchema,
+  FILES_DEFAULT_LIMIT,
+  FILES_MAX_LIMIT,
 } from './primitives';
 export type { UploadDestination, UploadStatus, ApiError } from './primitives';
 
+
 // ─── Upload ───────────────────────────────────────────────────────────────────
 export {
-  FILES_DEFAULT_LIMIT,
-  FILES_MAX_LIMIT,
   uploadR2InitRequestSchema,
   uploadR2InitResponseSchema,
   uploadAppwriteInitRequestSchema,
