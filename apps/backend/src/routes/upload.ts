@@ -66,7 +66,7 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
 
-  const { filename, size, mime_type } = body;
+  const { filename, size, mime_type, folder_id } = body;
 
   // Quota check and reserve before creating presigned URL (atomic)
   const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size);
@@ -111,6 +111,7 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
     id: uploadId,
     service_id: serviceId,
     user_id: userId === 'system' ? null : userId,
+    folder_id: folder_id ?? null,
     filename,
     size,
     mime_type,
@@ -139,7 +140,7 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
 
-  const { filename, size, mime_type } = body;
+  const { filename, size, mime_type, folder_id } = body;
 
   // Quota check and reserve (atomic)
   const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size);
@@ -170,6 +171,7 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
     id: uploadId,
     service_id: serviceId,
     user_id: userId === 'system' ? null : userId,
+    folder_id: folder_id ?? null,
     filename,
     size,
     mime_type,
@@ -236,6 +238,7 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
       id: newFileId,
       service_id: serviceId,
       user_id: userId,
+      folder_id: record.folder_id ?? null,
       upload_id,
       filename: record.filename,
       size: record.size,

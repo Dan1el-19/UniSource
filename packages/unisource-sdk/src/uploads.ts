@@ -7,6 +7,7 @@ export const uploadR2InitRequestSchema = z.object({
   filename: nonEmptyString,
   size: positiveInt,
   mime_type: nonEmptyString,
+  folder_id: nonEmptyString.optional(),
 });
 export type UploadR2InitRequest = z.infer<typeof uploadR2InitRequestSchema>;
 
@@ -26,6 +27,7 @@ export const uploadAppwriteInitRequestSchema = z.object({
   filename: nonEmptyString,
   size: positiveInt,
   mime_type: nonEmptyString,
+  folder_id: nonEmptyString.optional(),
 });
 export type UploadAppwriteInitRequest = z.infer<typeof uploadAppwriteInitRequestSchema>;
 
