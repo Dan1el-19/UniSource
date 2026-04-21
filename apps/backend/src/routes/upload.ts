@@ -268,9 +268,15 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
 
 upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
   const { upload_id } = c.req.valid('json');
+  const userId = c.get('userId');
+  const serviceId = c.get('serviceId');
 
-  const record = await getUpload(c.env.usrc_d1, upload_id);
-  if (!record) {
+  // Mirror Bug #15 fix from /complete: verify ownership before allowing fail
+  const record = userId === 'system'
+    ? await getUpload(c.env.usrc_d1, upload_id)
+    : await getUploadForUser(c.env.usrc_d1, upload_id, userId, serviceId);
+
+  if (!record || record.service_id !== serviceId) {
     return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
   }
 

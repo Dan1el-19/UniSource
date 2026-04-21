@@ -117,6 +117,7 @@ const files = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariable
 
 files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), async (c) => {
 	const query = c.req.valid('query');
+	const serviceId = c.get('serviceId');
 
 	try {
 		const result = await listUploads(c.env.usrc_d1, {
@@ -124,6 +125,7 @@ files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), a
 			cursor: query.cursor,
 			destination: query.destination,
 			status: query.status,
+			service_id: serviceId,
 		});
 
 		return c.json<UploadsListResponse>({
@@ -142,9 +144,10 @@ files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), a
 
 files.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
 	const { id } = c.req.valid('param');
+	const serviceId = c.get('serviceId');
 	const record = await getUpload(c.env.usrc_d1, id);
 
-	if (!record) {
+	if (!record || record.service_id !== serviceId) {
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 	}
 
@@ -153,9 +156,10 @@ files.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), a
 
 files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
 	const { id } = c.req.valid('param');
+	const serviceId = c.get('serviceId');
 	const record = await getUpload(c.env.usrc_d1, id);
 
-	if (!record) {
+	if (!record || record.service_id !== serviceId) {
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 	}
 
@@ -219,9 +223,10 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validation
 
 files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
 	const { id } = c.req.valid('param');
+	const serviceId = c.get('serviceId');
 	const record = await getUpload(c.env.usrc_d1, id);
 
-	if (!record) {
+	if (!record || record.service_id !== serviceId) {
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 	}
 

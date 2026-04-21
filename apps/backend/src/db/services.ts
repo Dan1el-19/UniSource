@@ -5,7 +5,7 @@ interface AuditEventRow {
   id: string;
   service_id: string;
   user_id: string;
-  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded';
+  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded' | 'share_link_accessed';
   resource_type: 'file' | 'folder' | 'service';
   resource_id: string;
   metadata: string | null;
@@ -109,7 +109,7 @@ export async function decrementServiceUsage(
 export interface LogEventInput {
   serviceId: string;
   userId: string;
-  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded';
+  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded' | 'share_link_accessed';
   resourceType: 'file' | 'folder' | 'service';
   resourceId: string;
   metadata?: Record<string, any>;

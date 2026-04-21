@@ -21,6 +21,7 @@ import {
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
 import { getServiceConfig } from '../config/services';
+import { deactivateShareLinksForFile } from '../db/shareLinks';
 import {
   FILES_DEFAULT_LIMIT,
   FILES_MAX_LIMIT,
@@ -257,6 +258,7 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
       return c.json({ error: 'Bad Gateway', message: 'Unable to delete file from storage' }, 502);
     }
 
+    await deactivateShareLinksForFile(c.env.usrc_d1, id, serviceId);
     await deleteFileRecordPermanently(c.env.usrc_d1, id, userId, serviceId);
 
     // Decrement service quota usage after physical deletion
