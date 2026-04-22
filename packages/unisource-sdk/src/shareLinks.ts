@@ -27,13 +27,23 @@ export const shareLinkCreateRequestSchema = z.object({
 });
 export type ShareLinkCreateRequest = z.infer<typeof shareLinkCreateRequestSchema>;
 
-export const shareLinkUpdateRequestSchema = z.object({
-  name: z.string().trim().max(128).nullable().optional(),
-  is_active: z.boolean().optional(),
-  password: z.string().min(1).nullable().optional(),
-  expires_at: unixTimestamp.nullable().optional(),
-  max_downloads: positiveInt.nullable().optional(),
-});
+export const shareLinkUpdateRequestSchema = z
+  .object({
+    name: z.string().trim().max(128).nullable().optional(),
+    is_active: z.boolean().optional(),
+    password: z.string().min(1).nullable().optional(),
+    expires_at: unixTimestamp.nullable().optional(),
+    max_downloads: positiveInt.nullable().optional(),
+  })
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.is_active !== undefined ||
+      v.password !== undefined ||
+      v.expires_at !== undefined ||
+      v.max_downloads !== undefined,
+    { message: 'At least one field must be provided' }
+  );
 export type ShareLinkUpdateRequest = z.infer<typeof shareLinkUpdateRequestSchema>;
 
 export const shareLinkListResponseSchema = z.object({
@@ -74,3 +84,10 @@ export const publicFileLockedResponseSchema = z.object({
   link_name: z.string().nullable(),
 });
 export type PublicFileLockedResponse = z.infer<typeof publicFileLockedResponseSchema>;
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+export const shareLinkDeleteResponseSchema = z.object({
+  success: z.literal(true),
+  id: nonEmptyString,
+});
+export type ShareLinkDeleteResponse = z.infer<typeof shareLinkDeleteResponseSchema>;
