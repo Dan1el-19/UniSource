@@ -98,7 +98,7 @@
       <LoaderCircle size={32} class="page-state__spinner" />
     </div>
   {:else}
-    <AdminCard label="Log" title="Aktywność">
+    <AdminCard title="Aktywność">
       {#snippet action()}
         <span class="meta-text">{feed.length} pozycji</span>
       {/snippet}
@@ -116,7 +116,6 @@
                 <div class="feed-row__content">
                   <strong class="body-text">{actionLabels[entry.data.action] ?? entry.data.action}</strong>
                   <span class="meta-text truncate">{entry.data.resource_type}</span>
-                  <span class="user-id truncate">{entry.data.user_id}</span>
                 </div>
                 <span class="meta-text feed-row__meta">{formatDate(entry.data.created_at)}</span>
               </AdminListRow>
@@ -200,12 +199,6 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-  }
-
-  .user-id {
-    color: var(--color-text-secondary);
-    font-size: var(--admin-text-meta-size);
-    line-height: 1.3;
   }
 
   .banner {
