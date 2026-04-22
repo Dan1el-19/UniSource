@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  adminServiceUpdateRequestSchema,
   fileRecordSchema,
   folderListQuerySchema,
   getPublicFileInfo,
@@ -124,6 +125,24 @@ describe('unisource-sdk schemas', () => {
     };
     expect(uploadRecordSchema.safeParse({ ...base, status: 'completed' }).success).toBe(true);
     expect(uploadRecordSchema.safeParse({ ...base, status: 'archived' }).success).toBe(false);
+  });
+
+  it('adminServiceUpdateRequestSchema allows partial update', () => {
+    // Only one of the fields should be sufficient
+    expect(
+      adminServiceUpdateRequestSchema.safeParse({
+        max_storage_bytes: 10_000_000_000,
+      }).success
+    ).toBe(true);
+
+    expect(
+      adminServiceUpdateRequestSchema.safeParse({
+        max_file_size_bytes: 500_000_000,
+      }).success
+    ).toBe(true);
+
+    // Empty object should FAIL
+    expect(adminServiceUpdateRequestSchema.safeParse({}).success).toBe(false);
   });
 });
 
