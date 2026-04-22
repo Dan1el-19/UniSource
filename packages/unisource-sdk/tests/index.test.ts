@@ -8,6 +8,7 @@ import {
   UnisourceError,
   uploadAppwriteInitResponseSchema,
   uploadRecordDetailResponseSchema,
+  uploadRecordSchema,
   uploadR2InitRequestSchema,
 } from '../src';
 import { existsSync } from 'node:fs';
@@ -106,6 +107,23 @@ describe('unisource-sdk schemas', () => {
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it('uploadRecordSchema.status rejects values outside uploadStatusSchema', () => {
+    const base = {
+      id: 'u1',
+      service_id: 'svc',
+      user_id: null,
+      filename: 'a.pdf',
+      size: 100,
+      mime_type: 'application/pdf',
+      destination: 'r2',
+      expires_at: 1_900_000_000,
+      created_at: 1_800_000_000,
+      updated_at: 1_800_000_010,
+    };
+    expect(uploadRecordSchema.safeParse({ ...base, status: 'completed' }).success).toBe(true);
+    expect(uploadRecordSchema.safeParse({ ...base, status: 'archived' }).success).toBe(false);
   });
 });
 
