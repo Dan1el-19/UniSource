@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Activity, ArrowLeft, LoaderCircle, RefreshCw, Upload } from 'lucide-svelte';
+  import { Activity, LoaderCircle, RefreshCw, Upload } from 'lucide-svelte';
   import type { AuditLogListResponse, UploadsListResponse } from '@unisource/sdk';
   import { apiClient } from '$lib/api';
   import { authState } from '../../../../state/auth.svelte';
+  import { formatBytes, formatDate } from '$lib/admin-utils';
   import AdminBadge from '$components/admin/AdminBadge.svelte';
   import AdminButton from '$components/admin/AdminButton.svelte';
   import AdminCard from '$components/admin/AdminCard.svelte';
   import AdminListRow from '$components/admin/AdminListRow.svelte';
+  import AdminTabs from '$components/admin/AdminTabs.svelte';
 
   const actionLabels: Record<string, string> = {
     upload_completed: 'Upload zakończony',
@@ -23,6 +25,10 @@
     failed: 'Błąd',
   };
 
+  type FeedEntry =
+    | { kind: 'audit'; ts: number; data: AuditLogListResponse['items'][0] }
+    | { kind: 'upload'; ts: number; data: UploadsListResponse['items'][0] };
+
   let sessionReady = $state(false);
   let isLoading = $state(true);
   let isRefreshing = $state(false);
@@ -30,34 +36,18 @@
   let auditLog = $state<AuditLogListResponse['items']>([]);
   let uploads = $state<UploadsListResponse['items']>([]);
 
-  function formatBytes(bytes: number | null | undefined) {
-    if (!bytes) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    return `${(bytes / 1024 ** power).toFixed(power === 0 ? 0 : 1)} ${units[power]}`;
-  }
-
-  function formatDate(ts: number) {
-    return new Date(ts * 1000).toLocaleString('pl-PL', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
-  }
-
   async function loadFeed() {
     isRefreshing = true;
     error = null;
-
     try {
       const [auditRes, uploadsRes] = await Promise.all([
         apiClient.admin.auditLog({ limit: 40 }),
         apiClient.admin.listUploads({ limit: 30 }),
       ]);
-
       auditLog = auditRes.items;
       uploads = uploadsRes.items;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Nie udało się pobrać pełnego logu.';
+      error = err instanceof Error ? err.message : 'Nie udało się pobrać logu.';
     } finally {
       isRefreshing = false;
       isLoading = false;
@@ -66,48 +56,38 @@
 
   onMount(() => {
     let cancelled = false;
-
     (async () => {
       const currentUser = await authState.checkSession();
       if (cancelled) return;
-
-      if (!currentUser) {
-        window.location.replace('/login');
-        return;
-      }
-
-      if (!authState.isAdmin(currentUser)) {
-        window.location.replace('/drive');
-        return;
-      }
-
+      if (!currentUser) { window.location.replace('/login'); return; }
+      if (!authState.isAdmin(currentUser)) { window.location.replace('/drive'); return; }
       sessionReady = true;
       await loadFeed();
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   });
+
+  const feed = $derived<FeedEntry[]>(
+    [
+      ...auditLog.map((item) => ({ kind: 'audit' as const, ts: item.created_at, data: item })),
+      ...uploads.map((item) => ({ kind: 'upload' as const, ts: item.created_at, data: item })),
+    ].sort((a, b) => b.ts - a.ts)
+  );
 </script>
 
-<section class="admin-log">
+<div class="log-page">
   <header class="page-header">
     <div class="page-header__copy">
-      <a class="back-link" href="/admin">
-        <ArrowLeft size={16} />
-        Wróć do panelu
-      </a>
-      <span class="page-header__eyebrow">Feed</span>
-      <h1 class="page-title">Pełny log administracyjny</h1>
-      <p class="page-body">Rozszerzony widok zdarzeń i uploadów poza głównym dashboardem.</p>
+      <span class="page-header__eyebrow">Admin</span>
+      <h1 class="page-title">Panel administracyjny</h1>
     </div>
-
     <AdminButton variant="secondary" size="sm" onclick={loadFeed} isLoading={isRefreshing} disabled={isLoading}>
       <RefreshCw size={16} />
       Odśwież
     </AdminButton>
   </header>
+
+  <AdminTabs />
 
   {#if error}
     <div class="banner banner--error" role="alert">{error}</div>
@@ -118,91 +98,56 @@
       <LoaderCircle size={32} class="page-state__spinner" />
     </div>
   {:else}
-    <div class="log-grid">
-      <AdminCard
-        className="log-card"
-        label="Audit log"
-        title="Zdarzenia"
-        description="Wyrównana lista zdarzeń z jednolitą wysokością i stałym rozstawem metadanych."
-      >
-        <div class="log-list">
-          {#if auditLog.length === 0}
-            <p class="empty-state">Brak zdarzeń.</p>
-          {:else}
-            {#each auditLog as event (event.id)}
-              <AdminListRow as="article" className="log-row">
-                <span class="log-row__icon">
+    <AdminCard label="Log" title="Aktywność">
+      {#snippet action()}
+        <span class="meta-text">{feed.length} pozycji</span>
+      {/snippet}
+
+      {#if feed.length === 0}
+        <p class="empty-state">Brak zdarzeń.</p>
+      {:else}
+        <div class="feed-list">
+          {#each feed as entry (entry.kind + entry.data.id)}
+            {#if entry.kind === 'audit'}
+              <AdminListRow as="article" className="feed-row">
+                <span class="feed-row__icon">
                   <Activity size={16} />
                 </span>
-                <div class="log-row__content">
-                  <strong class="body-text">{actionLabels[event.action] ?? event.action}</strong>
-                  <span class="meta-text truncate">{event.resource_type}</span>
-                  <span class="body-text truncate">{event.user_id}</span>
+                <div class="feed-row__content">
+                  <strong class="body-text">{actionLabels[entry.data.action] ?? entry.data.action}</strong>
+                  <span class="meta-text truncate">{entry.data.resource_type}</span>
+                  <span class="user-id truncate">{entry.data.user_id}</span>
                 </div>
-                <span class="meta-text log-row__meta">{formatDate(event.created_at)}</span>
+                <span class="meta-text feed-row__meta">{formatDate(entry.data.created_at)}</span>
               </AdminListRow>
-            {/each}
-          {/if}
-        </div>
-      </AdminCard>
-
-      <AdminCard
-        className="log-card"
-        label="Uploady"
-        title="Ostatnie operacje"
-        description="Ten sam system wierszy, badge’y statusu i czytelny podział na treść oraz metadane."
-      >
-        <div class="log-list">
-          {#if uploads.length === 0}
-            <p class="empty-state">Brak uploadów.</p>
-          {:else}
-            {#each uploads as upload (upload.id)}
-              <AdminListRow as="article" className="log-row">
-                <span class="log-row__icon">
+            {:else}
+              <AdminListRow as="article" className="feed-row">
+                <span class="feed-row__icon">
                   <Upload size={16} />
                 </span>
-                <div class="log-row__content">
-                  <strong class="body-text truncate">{upload.filename}</strong>
-                  <span class="meta-text">{formatBytes(upload.size)}</span>
+                <div class="feed-row__content">
+                  <strong class="body-text truncate">{entry.data.filename}</strong>
+                  <span class="meta-text">{formatBytes(entry.data.size)}</span>
                 </div>
-                <div class="log-row__meta log-row__meta--stack">
-                  <AdminBadge tone={upload.status === 'completed' ? 'success' : upload.status === 'failed' ? 'danger' : 'accent'}>
-                    {uploadStatusLabels[upload.status] ?? upload.status}
+                <div class="feed-row__meta feed-row__meta--stack">
+                  <AdminBadge
+                    tone={entry.data.status === 'completed' ? 'success' : entry.data.status === 'failed' ? 'danger' : 'accent'}
+                  >
+                    {uploadStatusLabels[entry.data.status] ?? entry.data.status}
                   </AdminBadge>
-                  <span class="meta-text">{formatDate(upload.created_at)}</span>
+                  <span class="meta-text">{formatDate(entry.data.created_at)}</span>
                 </div>
               </AdminListRow>
-            {/each}
-          {/if}
+            {/if}
+          {/each}
         </div>
-      </AdminCard>
-    </div>
+      {/if}
+    </AdminCard>
   {/if}
-</section>
+</div>
 
 <style>
-  .admin-log {
-    --admin-space-1: 8px;
-    --admin-space-2: 12px;
-    --admin-space-3: 16px;
-    --admin-space-4: 24px;
-    --admin-space-5: 32px;
-    --admin-text-page-size: 32px;
-    --admin-text-page-line-height: 1.1;
-    --admin-text-section-size: 20px;
-    --admin-text-section-line-height: 1.2;
-    --admin-text-card-size: 16px;
-    --admin-text-card-line-height: 1.25;
-    --admin-text-body-size: 14px;
-    --admin-text-body-line-height: 1.4;
-    --admin-text-meta-size: 12px;
-    --admin-text-meta-line-height: 1.3;
-    --admin-radius-md: 16px;
-    --admin-radius-lg: 24px;
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 24px 24px calc(88px + env(safe-area-inset-bottom));
+  .log-page {
     display: grid;
     gap: 24px;
   }
@@ -228,10 +173,10 @@
     background: color-mix(in oklab, var(--color-bg-overlay) 80%, transparent);
     color: var(--color-text-secondary);
     font-size: var(--admin-text-meta-size);
-    line-height: var(--admin-text-meta-line-height);
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
+    line-height: var(--admin-text-meta-line-height);
   }
 
   .page-title {
@@ -242,7 +187,6 @@
     letter-spacing: -0.03em;
   }
 
-  .page-body,
   .body-text {
     color: var(--color-text-secondary);
     font-size: var(--admin-text-body-size);
@@ -258,21 +202,10 @@
     text-transform: uppercase;
   }
 
-  .back-link {
-    display: inline-flex;
-    width: fit-content;
-    align-items: center;
-    gap: 8px;
-    min-height: 40px;
-    padding: 0 12px;
-    border-radius: var(--admin-radius-md);
-    border: 1px solid color-mix(in oklab, var(--color-glass-border) 82%, transparent);
-    background: color-mix(in oklab, var(--color-bg-overlay) 76%, transparent);
-    color: var(--color-text-primary);
-    font-size: var(--admin-text-body-size);
-    line-height: var(--admin-text-body-line-height);
-    font-weight: 600;
-    text-decoration: none;
+  .user-id {
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1.3;
   }
 
   .banner {
@@ -293,57 +226,51 @@
   }
 
   :global(.page-state__spinner) {
-    animation: admin-log-spin 900ms linear infinite;
+    animation: log-spin 900ms linear infinite;
   }
 
-  @keyframes admin-log-spin {
-    to {
-      transform: rotate(360deg);
-    }
+  @keyframes log-spin {
+    to { transform: rotate(360deg); }
   }
 
-  .log-grid {
+  @media (prefers-reduced-motion: reduce) {
+    :global(.page-state__spinner) { animation: none; }
+  }
+
+  .feed-list {
     display: grid;
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 24px;
+    gap: 8px;
   }
 
-  :global(.log-card) {
-    grid-column: span 12;
+  :global(.feed-row) {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    min-height: 64px;
   }
 
-  .log-list {
-    display: grid;
-    gap: 16px;
-  }
-
-  :global(.log-row) {
-    grid-template-columns: 16px minmax(0, 1fr) auto;
-  }
-
-  .log-row__icon {
+  .feed-row__icon {
     color: var(--color-text-secondary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
 
-  .log-row__content {
+  .feed-row__content {
     min-width: 0;
     display: grid;
-    gap: 8px;
+    gap: 4px;
   }
 
-  .log-row__meta {
+  .feed-row__meta {
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
     text-align: right;
+    white-space: nowrap;
   }
 
-  .log-row__meta--stack {
+  .feed-row__meta--stack {
     display: grid;
-    gap: 12px;
+    gap: 6px;
     justify-items: end;
     align-content: center;
   }
@@ -360,40 +287,24 @@
     white-space: nowrap;
   }
 
-  @media (min-width: 1120px) {
-    :global(.log-card) {
-      grid-column: span 6;
-    }
-  }
-
   @media (max-width: 959px) {
-    .admin-log {
-      --admin-text-page-size: 24px;
-    }
-
     .page-header {
       flex-direction: column;
-      align-items: stretch;
+      align-items: flex-start;
     }
 
-    :global(.log-row) {
-      grid-template-columns: 16px minmax(0, 1fr);
+    :global(.feed-row) {
+      grid-template-columns: 20px minmax(0, 1fr);
     }
 
-    .log-row__meta {
+    .feed-row__meta {
       grid-column: 2;
       justify-content: flex-start;
       text-align: left;
     }
 
-    .log-row__meta--stack {
+    .feed-row__meta--stack {
       justify-items: start;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :global(.page-state__spinner) {
-      animation: none;
     }
   }
 </style>
