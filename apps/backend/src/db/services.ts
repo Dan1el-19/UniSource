@@ -47,7 +47,14 @@ export interface ServiceUserRecord {
   service_id: string;
   user_id: string;
   role: string;
+  max_storage_bytes: number | null;
+  current_used_bytes: number;
   created_at: number;
+}
+
+interface UserUsageRow {
+  user_id: string;
+  used_bytes: number | null;
 }
 
 export async function checkUserServiceAccess(
@@ -62,6 +69,14 @@ export async function checkUserServiceAccess(
   return result ?? null;
 }
 
+export async function getServiceUser(
+  db: D1Database,
+  serviceId: string,
+  userId: string
+): Promise<ServiceUserRecord | null> {
+  return checkUserServiceAccess(db, serviceId, userId);
+}
+
 export async function getServiceDetails(
   db: D1Database,
   serviceId: string
@@ -73,13 +88,186 @@ export async function getServiceDetails(
   return result ?? null;
 }
 
+export async function updateServiceDetails(
+  db: D1Database,
+  serviceId: string,
+  updates: {
+    max_storage_bytes: number;
+    max_file_size_bytes: number;
+  }
+): Promise<ServiceRecord | null> {
+  const result = await db
+    .prepare(
+      `UPDATE services
+       SET max_storage_bytes = ?, max_file_size_bytes = ?
+       WHERE id = ?`
+    )
+    .bind(updates.max_storage_bytes, updates.max_file_size_bytes, serviceId)
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) {
+    return null;
+  }
+
+  return getServiceDetails(db, serviceId);
+}
+
+export async function getUserStorageUsage(
+  db: D1Database,
+  serviceId: string,
+  userId: string
+): Promise<number> {
+  const result = await db
+    .prepare(
+      `SELECT COALESCE(SUM(size), 0) AS used_bytes
+       FROM files
+       WHERE service_id = ? AND user_id = ?`
+    )
+    .bind(serviceId, userId)
+    .first<{ used_bytes: number | null }>();
+
+  return Number(result?.used_bytes ?? 0);
+}
+
+export async function listUserStorageUsageByService(
+  db: D1Database,
+  serviceId: string
+): Promise<Record<string, number>> {
+  const result = await db
+    .prepare(
+      `SELECT user_id, COALESCE(SUM(size), 0) AS used_bytes
+       FROM files
+       WHERE service_id = ?
+       GROUP BY user_id`
+    )
+    .bind(serviceId)
+    .all<UserUsageRow>();
+
+  const usageMap: Record<string, number> = {};
+  for (const row of result.results ?? []) {
+    usageMap[row.user_id] = Number(row.used_bytes ?? 0);
+  }
+  return usageMap;
+}
+
+export async function listServiceUsersByService(
+  db: D1Database,
+  serviceId: string
+): Promise<ServiceUserRecord[]> {
+  const result = await db
+    .prepare('SELECT * FROM service_users WHERE service_id = ? ORDER BY created_at DESC')
+    .bind(serviceId)
+    .all<ServiceUserRecord>();
+
+  return result.results ?? [];
+}
+
+export async function ensureServiceUser(
+  db: D1Database,
+  serviceId: string,
+  userId: string,
+  role = 'user'
+): Promise<ServiceUserRecord> {
+  const currentUsedBytes = await getUserStorageUsage(db, serviceId, userId);
+
+  await db
+    .prepare(
+      `INSERT INTO service_users (service_id, user_id, role, max_storage_bytes, current_used_bytes, created_at)
+       VALUES (?, ?, ?, NULL, ?, unixepoch())
+       ON CONFLICT(service_id, user_id) DO UPDATE SET current_used_bytes = excluded.current_used_bytes`
+    )
+    .bind(serviceId, userId, role, currentUsedBytes)
+    .run();
+
+  const record = await getServiceUser(db, serviceId, userId);
+  if (!record) {
+    throw new Error('Unable to ensure service user');
+  }
+
+  return record;
+}
+
+export async function upsertServiceUserSettings(
+  db: D1Database,
+  input: {
+    serviceId: string;
+    userId: string;
+    role: string;
+    max_storage_bytes: number | null;
+  }
+): Promise<ServiceUserRecord> {
+  const currentUsedBytes = await getUserStorageUsage(db, input.serviceId, input.userId);
+
+  await db
+    .prepare(
+      `INSERT INTO service_users (service_id, user_id, role, max_storage_bytes, current_used_bytes, created_at)
+       VALUES (?, ?, ?, ?, ?, unixepoch())
+       ON CONFLICT(service_id, user_id) DO UPDATE SET
+         role = excluded.role,
+         max_storage_bytes = excluded.max_storage_bytes,
+         current_used_bytes = excluded.current_used_bytes`
+    )
+    .bind(input.serviceId, input.userId, input.role, input.max_storage_bytes, currentUsedBytes)
+    .run();
+
+  const record = await getServiceUser(db, input.serviceId, input.userId);
+  if (!record) {
+    throw new Error('Unable to update service user settings');
+  }
+
+  return record;
+}
+
+async function decrementUserStorageUsage(
+  db: D1Database,
+  serviceId: string,
+  userId: string,
+  bytes: number
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE service_users
+       SET current_used_bytes = MAX(0, current_used_bytes - ?)
+       WHERE service_id = ? AND user_id = ?`
+    )
+    .bind(bytes, serviceId, userId)
+    .run();
+}
+
 // Atomically checks quota and reserves space to prevent race conditions during concurrent uploads.
 // Returns true if quota was reserved successfully, false if quota exceeded.
 export async function reserveQuota(
   db: D1Database,
   serviceId: string,
-  additionalBytes: number
-): Promise<boolean> {
+  additionalBytes: number,
+  userId?: string | null
+): Promise<{ ok: true } | { ok: false; scope: 'service' | 'user' }> {
+  if (userId) {
+    const userRecord = await ensureServiceUser(db, serviceId, userId);
+    const userResult =
+      userRecord.max_storage_bytes === null
+        ? await db
+            .prepare(
+              `UPDATE service_users
+               SET current_used_bytes = current_used_bytes + ?
+               WHERE service_id = ? AND user_id = ?`
+            )
+            .bind(additionalBytes, serviceId, userId)
+            .run()
+        : await db
+            .prepare(
+              `UPDATE service_users
+               SET current_used_bytes = current_used_bytes + ?
+               WHERE service_id = ? AND user_id = ? AND (current_used_bytes + ?) <= max_storage_bytes`
+            )
+            .bind(additionalBytes, serviceId, userId, additionalBytes)
+            .run();
+
+    if ((userResult.meta.changes ?? 0) === 0) {
+      return { ok: false, scope: 'user' };
+    }
+  }
+
   const result = await db
     .prepare(
       `UPDATE services 
@@ -88,8 +276,15 @@ export async function reserveQuota(
     )
     .bind(additionalBytes, serviceId, additionalBytes)
     .run();
-    
-  return (result.meta.changes ?? 0) > 0;
+
+  if ((result.meta.changes ?? 0) === 0) {
+    if (userId) {
+      await decrementUserStorageUsage(db, serviceId, userId, additionalBytes);
+    }
+    return { ok: false, scope: 'service' };
+  }
+
+  return { ok: true };
 }
 
 // Note: incrementServiceUsage was replaced by reserveQuota which atomically checks and reserves space.
@@ -104,6 +299,19 @@ export async function decrementServiceUsage(
     .prepare('UPDATE services SET current_used_bytes = MAX(0, current_used_bytes - ?) WHERE id = ?')
     .bind(bytes, serviceId)
     .run();
+}
+
+export async function releaseQuota(
+  db: D1Database,
+  serviceId: string,
+  bytes: number,
+  userId?: string | null
+): Promise<void> {
+  await decrementServiceUsage(db, serviceId, bytes);
+
+  if (userId) {
+    await decrementUserStorageUsage(db, serviceId, userId, bytes);
+  }
 }
 
 export interface LogEventInput {

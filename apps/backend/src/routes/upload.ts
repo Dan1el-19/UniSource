@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload } from '../db/files';
 import { createFileRecord } from '../db/fileRecords';
-import { reserveQuota, decrementServiceUsage, logServiceEvent } from '../db/services';
+import { reserveQuota, releaseQuota, logServiceEvent } from '../db/services';
 import { rateLimitMiddleware } from '../middleware/ratelimit';
 import { generatePresignedPutUrl } from '../services/r2';
 import { getAppwriteUploadConfig } from '../services/appwrite';
@@ -69,8 +69,8 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
   const { filename, size, mime_type, folder_id } = body;
 
   // Quota check and reserve before creating presigned URL (atomic)
-  const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size);
-  if (!quotaReserved) {
+  const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size, userId === 'system' ? null : userId);
+  if (!quotaReserved.ok) {
     if (userId !== 'system') {
       c.executionCtx.waitUntil(
         logServiceEvent(c.env.usrc_d1, {
@@ -84,7 +84,16 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
         })
       );
     }
-    return c.json({ error: 'Conflict', message: 'Storage quota exceeded for this service' }, 409);
+    return c.json(
+      {
+        error: 'Conflict',
+        message:
+          quotaReserved.scope === 'user'
+            ? 'Storage quota exceeded for this user'
+            : 'Storage quota exceeded for this service',
+      },
+      409
+    );
   }
 
   const svcConfig = getServiceConfig(serviceId)!;
@@ -143,8 +152,8 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
   const { filename, size, mime_type, folder_id } = body;
 
   // Quota check and reserve (atomic)
-  const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size);
-  if (!quotaReserved) {
+  const quotaReserved = await reserveQuota(c.env.usrc_d1, serviceId, size, userId === 'system' ? null : userId);
+  if (!quotaReserved.ok) {
     if (userId !== 'system') {
       c.executionCtx.waitUntil(
         logServiceEvent(c.env.usrc_d1, {
@@ -158,7 +167,16 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
         })
       );
     }
-    return c.json({ error: 'Conflict', message: 'Storage quota exceeded for this service' }, 409);
+    return c.json(
+      {
+        error: 'Conflict',
+        message:
+          quotaReserved.scope === 'user'
+            ? 'Storage quota exceeded for this user'
+            : 'Storage quota exceeded for this service',
+      },
+      409
+    );
   }
 
   const uploadId = crypto.randomUUID();
@@ -221,7 +239,7 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
     const updated = await failUpload(c.env.usrc_d1, upload_id);
     if (updated) {
       // Release quota since upload expired
-      await decrementServiceUsage(c.env.usrc_d1, record.service_id, record.size);
+      await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
     }
     return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
   }
@@ -287,7 +305,7 @@ upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validation
   const updated = await failUpload(c.env.usrc_d1, upload_id);
   // Release reserved quota
   if (updated) {
-    await decrementServiceUsage(c.env.usrc_d1, record.service_id, record.size);
+    await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
   }
   return c.json<UploadFailResponse>({ success: true, upload_id, status: 'failed' });
 });

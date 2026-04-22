@@ -1,5 +1,7 @@
 // Appwrite mapping service
-// This service provides parameters for direct client-side uploads.
+// This service provides parameters for direct client-side uploads and admin access.
+
+import { Client, Query, Users, type Models } from 'node-appwrite';
 
 export interface AppwriteUploadConfig {
   endpoint: string;
@@ -24,10 +26,23 @@ export interface AppwriteDeleteFileResult {
   not_found: boolean;
 }
 
+export interface AppwriteUserListOptions {
+  search?: string;
+  limit: number;
+  offset: number;
+}
+
 const APPWRITE_RESPONSE_FORMAT = '1.8.0';
 
 function normalizeAppwriteEndpoint(endpoint: string): string {
   return endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+}
+
+function createAppwriteAdminClient(env: CloudflareBindings): Client {
+  return new Client()
+    .setEndpoint(env.APPWRITE_ENDPOINT)
+    .setProject(env.APPWRITE_PROJECT_ID)
+    .setKey(env.APPWRITE_API_KEY);
 }
 
 function getAppwriteApiBaseUrl(env: CloudflareBindings): string {
@@ -148,4 +163,70 @@ export async function deleteAppwriteFile(
   }
 
   return { deleted: true, not_found: false };
+}
+
+export async function listAppwriteUsers(
+  env: CloudflareBindings,
+  options: AppwriteUserListOptions
+): Promise<Models.UserList<Models.Preferences>> {
+  const users = new Users(createAppwriteAdminClient(env));
+  return users.list({
+    queries: [Query.limit(options.limit), Query.offset(options.offset)],
+    search: options.search?.trim() || undefined,
+    total: true,
+  });
+}
+
+export async function getAppwriteUser(
+  env: CloudflareBindings,
+  userId: string
+): Promise<Models.User<Models.Preferences>> {
+  const users = new Users(createAppwriteAdminClient(env));
+  return users.get({ userId });
+}
+
+export async function updateAppwriteUserName(
+  env: CloudflareBindings,
+  userId: string,
+  name: string
+): Promise<Models.User<Models.Preferences>> {
+  const users = new Users(createAppwriteAdminClient(env));
+  return users.updateName({ userId, name });
+}
+
+export async function updateAppwriteUserEmail(
+  env: CloudflareBindings,
+  userId: string,
+  email: string
+): Promise<Models.User<Models.Preferences>> {
+  const users = new Users(createAppwriteAdminClient(env));
+  return users.updateEmail({ userId, email });
+}
+
+export async function updateAppwriteUserLabels(
+  env: CloudflareBindings,
+  userId: string,
+  labels: string[]
+): Promise<Models.User<Models.Preferences>> {
+  const users = new Users(createAppwriteAdminClient(env));
+  return users.updateLabels({ userId, labels });
+}
+
+export async function updateAppwriteUserStatus(
+  env: CloudflareBindings,
+  userId: string,
+  status: boolean
+): Promise<Models.User<Models.Preferences>> {
+  const users = new Users(createAppwriteAdminClient(env));
+  return users.updateStatus({ userId, status });
+}
+
+export async function updateAppwriteUserPassword(
+  env: CloudflareBindings,
+  userId: string,
+  password: string
+): Promise<void> {
+  const users = new Users(createAppwriteAdminClient(env));
+  await users.updatePassword({ userId, password });
+  await users.deleteSessions({ userId });
 }

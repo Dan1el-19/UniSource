@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { authMiddleware } from './middleware/auth';
+import { requireAdminMiddleware } from './middleware/admin';
 import { loggerMiddleware, logError } from './middleware/logger';
 import { cleanupOrphanedUploads } from './worker/cron';
 import upload from './routes/upload';
@@ -26,6 +27,7 @@ app.route('/upload', upload);
 
 // Admin files list — Dual-Auth (API key server-to-server or JWT)
 app.use('/files/*', authMiddleware);
+app.use('/files/*', requireAdminMiddleware);
 app.route('/files', files);
 
 // Per-user folders CRUD — requires Appwrite JWT (userId extracted)
@@ -38,6 +40,7 @@ app.route('/my-files', myFiles);
 
 // Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
 app.use('/admin/*', authMiddleware);
+app.use('/admin/*', requireAdminMiddleware);
 app.route('/admin', admin);
 
 // Share link CRUD — JWT only (user must own the file)
