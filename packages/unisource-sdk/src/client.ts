@@ -1,4 +1,60 @@
 import type { ApiError, UploadStatus } from './primitives';
+import type {
+  UploadR2InitRequest,
+  UploadR2InitResponse,
+  UploadAppwriteInitRequest,
+  UploadAppwriteInitResponse,
+  UploadLifecycleRequest,
+  UploadCompleteResponse,
+  UploadFailResponse,
+  UploadsListResponse,
+  UploadRecordDetailResponse,
+} from './uploads';
+import type {
+  FileRecord,
+  FileRecordsListQuery,
+  FileRecordsListResponse,
+  FileRecordDetailResponse,
+  FileMoveRequest,
+  FileDownloadUrlResponse,
+  FileDeleteResponse,
+  FileRestoreResponse,
+  FileUpdateRequest,
+  FileUpdateResponse,
+} from './fileRecords';
+import type {
+  FolderListQuery,
+  FolderListResponse,
+  FolderDetailResponse,
+  FolderCreateRequest,
+  FolderCreateResponse,
+  FolderUpdateRequest,
+  FolderUpdateResponse,
+  FolderDeleteResponse,
+  FolderRestoreResponse,
+} from './folders';
+import type {
+  ServiceDetailResponse,
+  ServiceUsageResponse,
+  AdminServiceUpdateRequest,
+  AdminServiceUpdateResponse,
+  AuditLogListQuery,
+  AuditLogListResponse,
+  AdminUserListResponse,
+  AdminUserUpdateRequest,
+  AdminUserUpdateResponse,
+  AdminUserPasswordResetRequest,
+  AdminUserPasswordResetResponse,
+} from './services';
+import type {
+  ShareLinkCreateRequest,
+  ShareLinkCreateResponse,
+  ShareLinkListResponse,
+  PublicFileAccessResponse,
+  PublicFileLockedResponse,
+  ShareLinkUpdateRequest,
+  ShareLinkUpdateResponse,
+} from './shareLinks';
 
 // ─── SDK Error classes ────────────────────────────────────────────────────────
 
@@ -129,67 +185,6 @@ async function publicApiRequest<T>(
 }
 
 // ─── Client class ─────────────────────────────────────────────────────────────
-
-import type {
-  UploadR2InitRequest,
-  UploadR2InitResponse,
-  UploadAppwriteInitRequest,
-  UploadAppwriteInitResponse,
-  UploadLifecycleRequest,
-  UploadCompleteResponse,
-  UploadFailResponse,
-  UploadsListResponse,
-  UploadRecordDetailResponse,
-} from './uploads';
-
-import type {
-  FileRecord,
-  FileRecordsListQuery,
-  FileRecordsListResponse,
-  FileRecordDetailResponse,
-  FileMoveRequest,
-  FileDownloadUrlResponse,
-  FileDeleteResponse,
-  FileRestoreResponse,
-  FileUpdateRequest,
-  FileUpdateResponse,
-} from './fileRecords';
-
-import type {
-  FolderListQuery,
-  FolderListResponse,
-  FolderDetailResponse,
-  FolderCreateRequest,
-  FolderCreateResponse,
-  FolderUpdateRequest,
-  FolderUpdateResponse,
-  FolderDeleteResponse,
-  FolderRestoreResponse,
-} from './folders';
-
-import type {
-  ServiceDetailResponse,
-  ServiceUsageResponse,
-  AdminServiceUpdateRequest,
-  AdminServiceUpdateResponse,
-  AuditLogListQuery,
-  AuditLogListResponse,
-  AdminUserListResponse,
-  AdminUserUpdateRequest,
-  AdminUserUpdateResponse,
-  AdminUserPasswordResetRequest,
-  AdminUserPasswordResetResponse,
-} from './services';
-
-import type {
-  ShareLinkCreateRequest,
-  ShareLinkCreateResponse,
-  ShareLinkListResponse,
-  PublicFileAccessResponse,
-  PublicFileLockedResponse,
-  ShareLinkUpdateRequest,
-  ShareLinkUpdateResponse,
-} from './shareLinks';
 
 export async function getPublicFileInfo(
   baseUrl: string,
