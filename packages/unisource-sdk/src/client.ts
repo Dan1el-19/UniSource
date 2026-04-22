@@ -96,15 +96,18 @@ export interface UnisourceClientConfig {
 
 // ─── Internal fetch helper ────────────────────────────────────────────────────
 
-async function apiRequest<T>(
-  config: UnisourceClientConfig,
+async function fetchApi<T>(
+  baseUrl: string,
   method: string,
   path: string,
-  options: { body?: unknown; query?: Record<string, string | number | boolean | undefined | null>; signal?: AbortSignal } = {}
+  options: {
+    body?: unknown;
+    query?: Record<string, string | number | boolean | undefined | null>;
+    signal?: AbortSignal;
+    authHeaders?: Record<string, string>;
+  } = {}
 ): Promise<T> {
-  const token = await config.getToken();
-
-  const url = new URL(path, config.baseUrl);
+  const url = new URL(path, baseUrl);
   if (options.query) {
     for (const [key, value] of Object.entries(options.query)) {
       if (value !== undefined && value !== null) {
@@ -113,12 +116,7 @@ async function apiRequest<T>(
     }
   }
 
-  const headers: Record<string, string> = {
-    'X-Service-ID': config.serviceId,
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  const headers: Record<string, string> = { ...options.authHeaders };
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
@@ -148,41 +146,20 @@ async function apiRequest<T>(
   return response.json() as Promise<T>;
 }
 
-async function publicApiRequest<T>(
-  baseUrl: string,
+async function apiRequest<T>(
+  config: UnisourceClientConfig,
   method: string,
   path: string,
-  options: { body?: unknown; signal?: AbortSignal } = {}
+  options: { body?: unknown; query?: Record<string, string | number | boolean | undefined | null>; signal?: AbortSignal } = {}
 ): Promise<T> {
-  const url = new URL(path, baseUrl);
-  const headers: Record<string, string> = {};
-  if (options.body !== undefined) {
-    headers['Content-Type'] = 'application/json';
+  const token = await config.getToken();
+  const authHeaders: Record<string, string> = {
+    'X-Service-ID': config.serviceId,
+  };
+  if (token) {
+    authHeaders['Authorization'] = `Bearer ${token}`;
   }
-
-  let response: Response;
-  try {
-    response = await fetch(url.toString(), {
-      method,
-      headers,
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-      signal: options.signal,
-    });
-  } catch (err) {
-    throw new UnisourceNetworkError('Network request failed', err);
-  }
-
-  if (!response.ok) {
-    let body: ApiError;
-    try {
-      body = (await response.json()) as ApiError;
-    } catch {
-      body = { error: 'Unknown', message: response.statusText };
-    }
-    throw new UnisourceError(body.message, response.status, body);
-  }
-
-  return response.json() as Promise<T>;
+  return fetchApi<T>(config.baseUrl, method, path, { ...options, authHeaders });
 }
 
 // ─── Client class ─────────────────────────────────────────────────────────────
@@ -192,7 +169,7 @@ export async function getPublicFileInfo(
   slug: string,
   signal?: AbortSignal
 ): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
-  return publicApiRequest(baseUrl, 'GET', `/public/${encodeURIComponent(slug)}`, { signal });
+  return fetchApi(baseUrl, 'GET', `/public/${encodeURIComponent(slug)}`, { signal });
 }
 
 export async function unlockPublicFile(
@@ -201,7 +178,7 @@ export async function unlockPublicFile(
   password: string,
   signal?: AbortSignal
 ): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
-  return publicApiRequest(baseUrl, 'POST', `/public/${encodeURIComponent(slug)}/unlock`, {
+  return fetchApi(baseUrl, 'POST', `/public/${encodeURIComponent(slug)}/unlock`, {
     body: { password },
     signal,
   });
