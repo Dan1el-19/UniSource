@@ -241,8 +241,8 @@ export class UnisourceClient {
       apiRequest(this.config, 'GET', '/my-files', { query, signal }),
 
     /** List files in the trash */
-    trash: (query?: { cursor?: string; limit?: number }): Promise<FileRecordsListResponse> =>
-      apiRequest(this.config, 'GET', '/my-files/trash', { query }),
+    trash: (query?: { cursor?: string; limit?: number }, signal?: AbortSignal): Promise<FileRecordsListResponse> =>
+      apiRequest(this.config, 'GET', '/my-files/trash', { query, signal }),
 
     /** Get a single file record */
     get: (id: string, signal?: AbortSignal): Promise<FileRecordDetailResponse> =>
@@ -277,8 +277,8 @@ export class UnisourceClient {
       apiRequest(this.config, 'GET', '/folders', { query, signal }),
 
     /** Get a single folder by ID */
-    get: (id: string): Promise<FolderDetailResponse> =>
-      apiRequest(this.config, 'GET', `/folders/${id}`),
+    get: (id: string, signal?: AbortSignal): Promise<FolderDetailResponse> =>
+      apiRequest(this.config, 'GET', `/folders/${id}`, { signal }),
 
     /** Create a new folder */
     create: (body: FolderCreateRequest, signal?: AbortSignal): Promise<FolderCreateResponse> =>
