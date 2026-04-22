@@ -10,6 +10,7 @@
   import AdminCard from '$components/admin/AdminCard.svelte';
   import AdminInput from '$components/admin/AdminInput.svelte';
   import AdminProgress from '$components/admin/AdminProgress.svelte';
+  import AdminSelect from '$components/admin/AdminSelect.svelte';
   import AdminTabs from '$components/admin/AdminTabs.svelte';
 
   type ByteUnit = 'MB' | 'GB' | 'TB';
@@ -45,7 +46,7 @@
   }
 
   function parseLimitDraft(draft: LimitDraft): number {
-    const parsed = Number(draft.value.replace(',', '.'));
+    const parsed = Number(String(draft.value).replace(',', '.'));
     if (!Number.isFinite(parsed) || parsed <= 0) throw new Error('Podaj dodatnią wartość limitu.');
     return Math.round(parsed * BYTE_FACTORS[draft.unit]);
   }
@@ -167,7 +168,7 @@
     </div>
   {:else if service && usage}
     <div class="service-grid">
-      <AdminCard label="Serwis" title={service.name} className="service-grid__config">
+      <AdminCard title={service.name} className="service-grid__config">
         {#snippet action()}
           <div class="service-id">{service?.id ?? ''}</div>
         {/snippet}
@@ -177,11 +178,11 @@
             <span class="meta-text">Limit storage</span>
             <div class="field-combo">
               <AdminInput bind:value={serviceStorageDraft.value} type="number" min="1" step="0.01" />
-              <select bind:value={serviceStorageDraft.unit} class="form-select">
+              <AdminSelect bind:value={serviceStorageDraft.unit}>
                 <option value="MB">MB</option>
                 <option value="GB">GB</option>
                 <option value="TB">TB</option>
-              </select>
+              </AdminSelect>
             </div>
           </label>
 
@@ -189,11 +190,11 @@
             <span class="meta-text">Maksymalny rozmiar pliku</span>
             <div class="field-combo">
               <AdminInput bind:value={serviceFileDraft.value} type="number" min="1" step="0.01" />
-              <select bind:value={serviceFileDraft.unit} class="form-select">
+              <AdminSelect bind:value={serviceFileDraft.unit}>
                 <option value="MB">MB</option>
                 <option value="GB">GB</option>
                 <option value="TB">TB</option>
-              </select>
+              </AdminSelect>
             </div>
           </label>
         </div>
@@ -206,7 +207,7 @@
         {/snippet}
       </AdminCard>
 
-      <AdminCard label="Wykorzystanie" title="Storage usage" className="service-grid__usage">
+      <AdminCard title="Storage usage" className="service-grid__usage">
         <div class="usage-layout">
           <div class="usage-header">
             <div class="usage-headline">
@@ -400,23 +401,6 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) 120px;
     gap: 12px;
-  }
-
-  .form-select {
-    width: 100%;
-    min-height: 48px;
-    padding: 0 16px;
-    border-radius: var(--admin-radius-md);
-    border: 1px solid color-mix(in oklab, var(--color-glass-border) 88%, transparent);
-    background: color-mix(in oklab, var(--color-bg-overlay) 74%, transparent);
-    color: var(--color-text-primary);
-    font-size: var(--admin-text-body-size);
-    outline: none;
-  }
-
-  .form-select:hover,
-  .form-select:focus-visible {
-    border-color: color-mix(in oklab, var(--color-accent) 36%, var(--color-glass-border));
   }
 
   .usage-layout {

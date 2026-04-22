@@ -13,6 +13,7 @@
   import AdminListRow from '$components/admin/AdminListRow.svelte';
   import AdminModal from '$components/admin/AdminModal.svelte';
   import AdminProgress from '$components/admin/AdminProgress.svelte';
+  import AdminSelect from '$components/admin/AdminSelect.svelte';
   import AdminTabs from '$components/admin/AdminTabs.svelte';
 
   type ByteUnit = 'MB' | 'GB' | 'TB';
@@ -26,8 +27,7 @@
   };
 
   type UserDraft = {
-    role: string;
-    labelsText: string;
+    role: 'admin' | 'user';
     quotaEnabled: boolean;
     quotaValue: string;
     quotaUnit: ByteUnit;
@@ -50,10 +50,6 @@
   let modalMode = $state<AdminModalMode>(null);
   let modalUserId = $state<string | null>(null);
 
-  function normalizeLabelInput(value: string) {
-    return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
-  }
-
   function bytesToDraft(bytes: number, preferredUnit: ByteUnit): { value: string; unit: ByteUnit } {
     const exactUnits: ByteUnit[] = ['TB', 'GB', 'MB'];
     const exactUnit = exactUnits.find((unit) => bytes % BYTE_FACTORS[unit] === 0);
@@ -65,7 +61,7 @@
   }
 
   function parseLimitDraft(value: string, unit: ByteUnit): number {
-    const parsed = Number(value.replace(',', '.'));
+    const parsed = Number(String(value).replace(',', '.'));
     if (!Number.isFinite(parsed) || parsed <= 0) throw new Error('Podaj dodatnią wartość limitu.');
     return Math.round(parsed * BYTE_FACTORS[unit]);
   }
@@ -86,8 +82,7 @@
       ? bytesToDraft(user.max_storage_bytes, 'GB')
       : { value: '', unit: 'GB' as ByteUnit };
     return {
-      role: user.role,
-      labelsText: user.labels.join(', '),
+      role: user.labels.includes('admin') ? 'admin' : 'user',
       quotaEnabled: user.max_storage_bytes !== null,
       quotaValue: quotaDraft.value,
       quotaUnit: quotaDraft.unit,
@@ -101,8 +96,7 @@
     const nextDrafts: Record<string, UserDraft> = {};
     for (const user of items) {
       nextDrafts[user.id] = userDrafts[user.id] ?? createUserDraft(user);
-      nextDrafts[user.id].role = user.role;
-      nextDrafts[user.id].labelsText = user.labels.join(', ');
+      nextDrafts[user.id].role = user.labels.includes('admin') ? 'admin' : 'user';
       nextDrafts[user.id].quotaEnabled = user.max_storage_bytes !== null;
       if (user.max_storage_bytes !== null) {
         const d = bytesToDraft(user.max_storage_bytes, nextDrafts[user.id].quotaUnit);
@@ -196,8 +190,8 @@
     if (!draft) return;
     await updateUser(
       user.id,
-      { role: draft.role.trim() || 'user', labels: normalizeLabelInput(draft.labelsText) },
-      `Zapisano rolę i labelsy użytkownika ${user.email}.`,
+      { role: draft.role },
+      `Zapisano rolę użytkownika ${user.email}.`,
       { closeModal: true }
     );
   }
@@ -306,7 +300,7 @@
       <LoaderCircle size={32} class="page-state__spinner" />
     </div>
   {:else}
-    <AdminCard label="Użytkownicy" title="Zarządzanie użytkownikami">
+    <AdminCard title="Zarządzanie użytkownikami">
       {#snippet action()}
         <form class="search-form" onsubmit={handleSearchSubmit}>
           <AdminInput bind:value={search} type="search" placeholder="Szukaj po emailu lub nazwie" icon="search" />
@@ -350,12 +344,11 @@
                 </div>
 
                 <div class="user-cell">
-                  <div class="role-stack">
-                    <AdminBadge>{user.role}</AdminBadge>
-                    {#if user.labels.includes('admin')}
-                      <AdminBadge tone="accent">admin</AdminBadge>
-                    {/if}
-                  </div>
+                  {#if user.labels.includes('admin')}
+                    <AdminBadge tone="accent">Admin</AdminBadge>
+                  {:else}
+                    <AdminBadge>User</AdminBadge>
+                  {/if}
                 </div>
 
                 <div class="user-cell user-cell--storage">
@@ -384,7 +377,7 @@
                     {#if activeMenuUserId === user.id}
                       <div class="action-menu glass" role="menu">
                         <button type="button" role="menuitem" onclick={() => openUserModal(user, 'identity')}>
-                          Rola i labelsy
+                          Rola
                         </button>
                         <button type="button" role="menuitem" onclick={() => openUserModal(user, 'quota')}>
                           Limit miejsca
@@ -424,19 +417,18 @@
 {#if modalUser && modalDraft && modalMode}
   <AdminModal
     label="Użytkownik"
-    title={modalMode === 'identity' ? 'Rola i labelsy' : modalMode === 'quota' ? 'Limit miejsca' : 'Nadpisanie hasła'}
+    title={modalMode === 'identity' ? 'Rola' : modalMode === 'quota' ? 'Limit miejsca' : 'Nadpisanie hasła'}
     description={`${modalUser.name || modalUser.email} · ${modalUser.email}`}
     onclose={closeUserModal}
   >
     {#if modalMode === 'identity'}
       <div class="modal-grid">
         <label class="field-group">
-          <span class="meta-text">Rola aplikacyjna</span>
-          <AdminInput bind:value={modalDraft.role} type="text" placeholder="np. user, admin, manager" />
-        </label>
-        <label class="field-group">
-          <span class="meta-text">Labelsy Appwrite</span>
-          <AdminInput bind:value={modalDraft.labelsText} type="text" placeholder="admin, beta, vip" />
+          <span class="meta-text">Rola</span>
+          <AdminSelect bind:value={modalDraft.role}>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </AdminSelect>
         </label>
       </div>
     {:else if modalMode === 'quota'}
@@ -452,11 +444,11 @@
         {#if modalDraft.quotaEnabled}
           <div class="field-combo">
             <AdminInput bind:value={modalDraft.quotaValue} type="number" min="1" step="0.01" placeholder="np. 25" />
-            <select bind:value={modalDraft.quotaUnit} class="form-select">
+            <AdminSelect bind:value={modalDraft.quotaUnit}>
               <option value="MB">MB</option>
               <option value="GB">GB</option>
               <option value="TB">TB</option>
-            </select>
+            </AdminSelect>
           </div>
         {:else}
           <p class="body-text">Po wyłączeniu użytkownik dziedziczy limit serwisu.</p>
@@ -679,12 +671,6 @@
     white-space: nowrap;
   }
 
-  .role-stack {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
   .storage-stack {
     display: grid;
     gap: 8px;
@@ -767,23 +753,6 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) 120px;
     gap: 12px;
-  }
-
-  .form-select {
-    width: 100%;
-    min-height: 48px;
-    padding: 0 16px;
-    border-radius: var(--admin-radius-md);
-    border: 1px solid color-mix(in oklab, var(--color-glass-border) 88%, transparent);
-    background: color-mix(in oklab, var(--color-bg-overlay) 74%, transparent);
-    color: var(--color-text-primary);
-    font-size: var(--admin-text-body-size);
-    outline: none;
-  }
-
-  .form-select:hover,
-  .form-select:focus-visible {
-    border-color: color-mix(in oklab, var(--color-accent) 36%, var(--color-glass-border));
   }
 
   .quota-summary {
