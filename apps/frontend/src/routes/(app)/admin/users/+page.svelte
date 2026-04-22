@@ -584,7 +584,7 @@
     justify-content: center;
   }
 
-  :global(.page-state__spinner) {
+  .users-page :global(.page-state__spinner) {
     animation: users-spin 900ms linear infinite;
   }
 
@@ -593,7 +593,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :global(.page-state__spinner) { animation: none; }
+    .users-page :global(.page-state__spinner) { animation: none; }
   }
 
   .sub-state {
@@ -615,7 +615,7 @@
   }
 
   .user-table__head,
-  :global(.user-row) {
+  .users-page :global(.user-row) {
     display: grid;
     grid-template-columns: minmax(0, 2.5fr) minmax(130px, 1fr) minmax(200px, 2fr) 40px;
     gap: 16px;
@@ -638,7 +638,7 @@
     margin-top: 4px;
   }
 
-  :global(.user-row--blocked) {
+  .users-page :global(.user-row--blocked) {
     opacity: 0.6;
   }
 
@@ -829,7 +829,7 @@
       display: none;
     }
 
-    :global(.user-row) {
+    .users-page :global(.user-row) {
       grid-template-columns: 1fr;
     }
 

@@ -204,7 +204,7 @@
 
   .user-id {
     color: var(--color-text-secondary);
-    font-size: 11px;
+    font-size: var(--admin-text-meta-size);
     line-height: 1.3;
   }
 
@@ -225,7 +225,7 @@
     justify-content: center;
   }
 
-  :global(.page-state__spinner) {
+  .log-page :global(.page-state__spinner) {
     animation: log-spin 900ms linear infinite;
   }
 
@@ -234,7 +234,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :global(.page-state__spinner) { animation: none; }
+    .log-page :global(.page-state__spinner) { animation: none; }
   }
 
   .feed-list {
@@ -242,7 +242,7 @@
     gap: 8px;
   }
 
-  :global(.feed-row) {
+  .log-page :global(.feed-row) {
     grid-template-columns: 20px minmax(0, 1fr) auto;
     min-height: 64px;
   }
