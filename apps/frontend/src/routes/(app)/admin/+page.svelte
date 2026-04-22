@@ -1,6 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Activity, ArrowRight, HardDrive, KeyRound, LoaderCircle, MoreHorizontal, RefreshCw, Save, Search, Upload, X } from 'lucide-svelte';
+  import {
+    Activity,
+    ArrowRight,
+    HardDrive,
+    KeyRound,
+    LoaderCircle,
+    MoreHorizontal,
+    RefreshCw,
+    Save,
+    Upload,
+    Users,
+  } from 'lucide-svelte';
   import type {
     AdminUser,
     AuditLogListResponse,
@@ -10,9 +21,17 @@
   } from '@unisource/sdk';
   import { apiClient } from '$lib/api';
   import { authState } from '../../../state/auth.svelte';
+  import AdminBadge from '$components/admin/AdminBadge.svelte';
+  import AdminButton from '$components/admin/AdminButton.svelte';
+  import AdminCard from '$components/admin/AdminCard.svelte';
+  import AdminInput from '$components/admin/AdminInput.svelte';
+  import AdminListRow from '$components/admin/AdminListRow.svelte';
+  import AdminModal from '$components/admin/AdminModal.svelte';
+  import AdminProgress from '$components/admin/AdminProgress.svelte';
 
   type ByteUnit = 'MB' | 'GB' | 'TB';
   type AdminModalMode = 'identity' | 'quota' | 'password' | null;
+  type ProgressTone = 'accent' | 'success' | 'warning' | 'danger';
 
   const BYTE_FACTORS: Record<ByteUnit, number> = {
     MB: 1024 ** 2,
@@ -81,7 +100,10 @@
   }
 
   function formatDate(ts: number) {
-    return new Date(ts * 1000).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' });
+    return new Date(ts * 1000).toLocaleString('pl-PL', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
   }
 
   function normalizeLabelInput(value: string) {
@@ -105,6 +127,17 @@
       throw new Error('Podaj dodatnią wartość limitu.');
     }
     return Math.round(parsed * BYTE_FACTORS[draft.unit]);
+  }
+
+  function getProgressTone(percent: number): ProgressTone {
+    if (percent >= 85) return 'danger';
+    if (percent >= 65) return 'warning';
+    if (percent >= 35) return 'accent';
+    return 'success';
+  }
+
+  function getUserStoragePercent(user: AdminUser) {
+    return Math.min((user.current_used_bytes / Math.max(user.effective_max_storage_bytes, 1)) * 100, 100);
   }
 
   function createUserDraft(user: AdminUser): UserDraft {
@@ -224,6 +257,14 @@
       closeUserModal();
       return;
     }
+
+    activeMenuUserId = null;
+  }
+
+  function handleWindowClick(event: MouseEvent) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('[data-user-action-anchor]')) return;
 
     activeMenuUserId = null;
   }
@@ -387,914 +428,833 @@
     }
   });
 
-  const usageColor = $derived.by(() => {
-    if (!usage) return 'var(--color-success)';
-    if (usage.used_percent >= 85) return 'var(--color-danger)';
-    if (usage.used_percent >= 65) return 'var(--color-warning)';
-    return 'var(--color-success)';
-  });
-
+  const usagePercent = $derived(usage?.used_percent ?? 0);
+  const usageTone = $derived(getProgressTone(usagePercent));
   const auditPreview = $derived(auditLog.slice(0, 3));
   const uploadPreview = $derived(uploads.slice(0, 3));
   const modalUser = $derived(modalUserId ? users.find((user) => user.id === modalUserId) ?? null : null);
   const modalDraft = $derived(modalUserId ? userDrafts[modalUserId] ?? null : null);
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} />
+<svelte:window onkeydown={handleWindowKeydown} onclick={handleWindowClick} />
 
-<section class="admin-wrap">
-  <div class="page-header">
-    <div class="page-copy">
-      <span class="eyebrow">Admin</span>
-      <h1>Panel administracyjny</h1>
-      <p>Lżejszy, bardziej czytelny układ do limitów, użytkowników i szybkiego podglądu zdarzeń.</p>
+<section class="admin-page">
+  <header class="page-header">
+    <div class="page-header__copy">
+      <span class="page-header__eyebrow">Admin</span>
+      <h1 class="page-title">Panel administracyjny</h1>
+      <p class="page-body">Spójny podgląd limitów, zdarzeń i użytkowników Appwrite Auth.</p>
     </div>
 
-    <button class="ghost-btn compact" type="button" onclick={refreshAll} disabled={isRefreshing || isLoading}>
-      <RefreshCw size={16} class={isRefreshing ? 'is-spinning' : ''} />
-      {isRefreshing ? 'Odświeżanie…' : 'Odśwież'}
-    </button>
-  </div>
+    <AdminButton variant="secondary" size="sm" onclick={refreshAll} isLoading={isRefreshing} disabled={isLoading}>
+      <RefreshCw size={16} />
+      Odśwież
+    </AdminButton>
+  </header>
 
   {#if error}
-    <div class="banner banner-error" role="alert">{error}</div>
+    <div class="banner banner--error" role="alert">{error}</div>
   {/if}
 
   {#if success}
-    <div class="banner banner-success" role="status">{success}</div>
+    <div class="banner banner--success" role="status">{success}</div>
   {/if}
 
   {#if !sessionReady || isLoading}
-    <div class="state-wrap">
-      <div class="spin"><LoaderCircle size={36} /></div>
+    <div class="page-state">
+      <LoaderCircle size={32} class="page-state__spinner" />
     </div>
   {:else if service && usage}
-    <div class="top-grid">
-      <section class="card liquid-card overview-card">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Serwis</span>
-            <h2>{service.name}</h2>
-          </div>
-          <span class="surface-id mono">{service.id}</span>
-        </div>
+    <div class="dashboard-grid">
+      <AdminCard
+        className="dashboard-card dashboard-card--primary"
+        label="Serwis"
+        title={service.name}
+        description="Konfiguracja limitów i główny stan wykorzystania przestrzeni."
+      >
+        {#snippet action()}
+          <div class="service-id">{service?.id ?? ''}</div>
+        {/snippet}
 
-        <div class="usage-panel">
-          <div class="usage-caption">
-            <div>
-              <strong>{usage.used_percent.toFixed(1)}%</strong>
-              <p>Zajętego miejsca</p>
+        <div class="service-layout">
+          <div class="service-usage">
+            <div class="service-usage__header">
+              <div class="service-usage__headline">
+                <HardDrive size={18} />
+                <span class="meta-text">Storage usage</span>
+              </div>
+              <strong class="numeric-stat">{usagePercent.toFixed(1)}%</strong>
             </div>
-            <span>{formatBytes(usage.current_used_bytes)} / {formatBytes(usage.max_storage_bytes)}</span>
+
+            <div class="service-usage__meta">
+              <span class="body-text">{formatBytes(usage.current_used_bytes)}</span>
+              <span class="meta-text">z {formatBytes(usage.max_storage_bytes)}</span>
+            </div>
+
+            <AdminProgress value={usagePercent} tone={usageTone} />
           </div>
 
-          <div class="usage-bar-track">
-            <div class="usage-bar-fill" style="width: {Math.min(usage.used_percent, 100)}%; background: {usageColor};"></div>
-          </div>
-        </div>
-
-        <div class="micro-grid">
-          <article class="micro-card">
-            <span>Maks. plik</span>
-            <strong>{formatBytes(service.max_file_size_bytes)}</strong>
-          </article>
-          <article class="micro-card">
-            <span>Użytkownicy</span>
-            <strong>{usersTotal}</strong>
-          </article>
-          <article class="micro-card">
-            <span>Podgląd zdarzeń</span>
-            <strong>{auditLog.length}</strong>
-          </article>
-        </div>
-
-        <div class="settings-shell">
-          <div class="section-head section-head-tight">
-            <div>
-              <h3>Limity serwisu</h3>
-              <p>Własne wartości i jednostki, bez sztywnych progów.</p>
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span class="meta-text">Maks. plik</span>
+              <strong class="card-title">{formatBytes(service.max_file_size_bytes)}</strong>
+            </div>
+            <div class="metric-card">
+              <span class="meta-text">Użytkownicy</span>
+              <strong class="card-title">{usersTotal}</strong>
+            </div>
+            <div class="metric-card">
+              <span class="meta-text">Zdarzenia</span>
+              <strong class="card-title">{auditLog.length}</strong>
             </div>
           </div>
 
-          <div class="field-grid compact-grid">
-            <label class="field">
-              <span>Limit storage</span>
-              <div class="field-inline">
-                <input bind:value={serviceStorageDraft.value} type="number" min="1" step="0.01" />
-                <select bind:value={serviceStorageDraft.unit}>
-                  <option value="MB">MB</option>
-                  <option value="GB">GB</option>
-                  <option value="TB">TB</option>
-                </select>
+          <div class="settings-block">
+            <div class="block-header">
+              <div class="block-header__copy">
+                <h3 class="card-title">Limity serwisu</h3>
+                <p class="body-text">Własne wartości i jednostki bez sztywnych progów.</p>
               </div>
-            </label>
+            </div>
 
-            <label class="field">
-              <span>Maksymalny rozmiar pliku</span>
-              <div class="field-inline">
-                <input bind:value={serviceFileDraft.value} type="number" min="1" step="0.01" />
-                <select bind:value={serviceFileDraft.unit}>
-                  <option value="MB">MB</option>
-                  <option value="GB">GB</option>
-                  <option value="TB">TB</option>
-                </select>
-              </div>
-            </label>
+            <div class="form-grid">
+              <label class="field-group">
+                <span class="meta-text">Limit storage</span>
+                <div class="field-combo">
+                  <AdminInput bind:value={serviceStorageDraft.value} type="number" min="1" step="0.01" />
+                  <select bind:value={serviceStorageDraft.unit} class="form-select">
+                    <option value="MB">MB</option>
+                    <option value="GB">GB</option>
+                    <option value="TB">TB</option>
+                  </select>
+                </div>
+              </label>
+
+              <label class="field-group">
+                <span class="meta-text">Maksymalny rozmiar pliku</span>
+                <div class="field-combo">
+                  <AdminInput bind:value={serviceFileDraft.value} type="number" min="1" step="0.01" />
+                  <select bind:value={serviceFileDraft.unit} class="form-select">
+                    <option value="MB">MB</option>
+                    <option value="GB">GB</option>
+                    <option value="TB">TB</option>
+                  </select>
+                </div>
+              </label>
+            </div>
           </div>
+        </div>
 
-          <button class="primary-btn compact" type="button" onclick={handleServiceSave} disabled={isSavingService}>
+        {#snippet footer()}
+          <AdminButton variant="primary" onclick={handleServiceSave} isLoading={isSavingService}>
             <Save size={16} />
-            {isSavingService ? 'Zapisywanie…' : 'Zapisz limity'}
-          </button>
-        </div>
-      </section>
+            Zapisz limity
+          </AdminButton>
+        {/snippet}
+      </AdminCard>
 
-      <section class="card liquid-card activity-card">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Feed</span>
-            <h2>Ostatnie zdarzenia</h2>
-            <p>Krótki podgląd. Pełny widok przeniesiony na osobną podstronę.</p>
-          </div>
-
-          <a class="text-link" href="/admin/log">
+      <AdminCard
+        className="dashboard-card dashboard-card--secondary"
+        label="Aktywność"
+        title="Ostatnie zdarzenia"
+        description="Krótki podgląd feedu z równym rytmem, stałą wysokością wierszy i wyraźną hierarchią."
+      >
+        {#snippet action()}
+          <a class="link-button" href="/admin/log">
             Pełny log
-            <ArrowRight size={15} />
+            <ArrowRight size={16} />
           </a>
-        </div>
+        {/snippet}
 
-        <div class="preview-grid">
-          <div class="preview-column">
-            <div class="preview-head">
-              <Activity size={15} />
-              <span>Audit log</span>
+        <div class="activity-stack">
+          <section class="activity-section">
+            <div class="activity-section__header">
+              <div class="activity-section__title">
+                <Activity size={16} />
+                <span class="card-title">Audit log</span>
+              </div>
+              <span class="meta-text">{auditLog.length} pozycji</span>
             </div>
 
             {#if auditPreview.length === 0}
-              <p class="empty-text">Brak zdarzeń.</p>
+              <p class="empty-state">Brak zdarzeń.</p>
             {:else}
-              <div class="preview-list">
+              <div class="activity-list">
                 {#each auditPreview as event (event.id)}
-                  <article class="preview-item">
-                    <div class="preview-copy">
-                      <strong>{actionLabels[event.action] ?? event.action}</strong>
-                      <span class="muted truncate">{event.resource_type}</span>
+                  <AdminListRow as="article" className="activity-row">
+                    <span class="activity-row__icon">
+                      <Activity size={16} />
+                    </span>
+                    <div class="activity-row__content">
+                      <strong class="body-text">{actionLabels[event.action] ?? event.action}</strong>
+                      <span class="meta-text truncate">{event.resource_type}</span>
                     </div>
-                    <span class="muted preview-time">{formatDate(event.created_at)}</span>
-                  </article>
+                    <span class="meta-text activity-row__meta">{formatDate(event.created_at)}</span>
+                  </AdminListRow>
                 {/each}
               </div>
             {/if}
-          </div>
+          </section>
 
-          <div class="preview-column">
-            <div class="preview-head">
-              <Upload size={15} />
-              <span>Uploady</span>
+          <section class="activity-section">
+            <div class="activity-section__header">
+              <div class="activity-section__title">
+                <Upload size={16} />
+                <span class="card-title">Uploady</span>
+              </div>
+              <span class="meta-text">{uploads.length} pozycji</span>
             </div>
 
             {#if uploadPreview.length === 0}
-              <p class="empty-text">Brak uploadów.</p>
+              <p class="empty-state">Brak uploadów.</p>
             {:else}
-              <div class="preview-list">
+              <div class="activity-list">
                 {#each uploadPreview as upload (upload.id)}
-                  <article class="preview-item">
-                    <div class="preview-copy">
-                      <strong class="truncate">{upload.filename}</strong>
-                      <span class="muted">{formatBytes(upload.size)}</span>
+                  <AdminListRow as="article" className="activity-row activity-row--upload">
+                    <span class="activity-row__icon">
+                      <Upload size={16} />
+                    </span>
+                    <div class="activity-row__content">
+                      <strong class="body-text truncate">{upload.filename}</strong>
+                      <span class="meta-text">{formatBytes(upload.size)}</span>
                     </div>
-                    <span class="pill status-{upload.status}">{uploadStatusLabels[upload.status] ?? upload.status}</span>
-                  </article>
+                    <div class="activity-row__meta activity-row__meta--stack">
+                      <AdminBadge tone={upload.status === 'completed' ? 'success' : upload.status === 'failed' ? 'danger' : 'accent'}>
+                        {uploadStatusLabels[upload.status] ?? upload.status}
+                      </AdminBadge>
+                      <span class="meta-text">{formatDate(upload.created_at)}</span>
+                    </div>
+                  </AdminListRow>
                 {/each}
               </div>
             {/if}
+          </section>
+        </div>
+      </AdminCard>
+
+      <AdminCard
+        className="dashboard-card dashboard-card--full"
+        label="Użytkownicy"
+        title="Zarządzanie użytkownikami"
+        description="Jedna siatka z konsekwentnymi kolumnami: użytkownik, status, role, storage i akcje."
+      >
+        {#snippet action()}
+          <form class="search-form" onsubmit={handleSearchSubmit}>
+            <AdminInput bind:value={search} type="search" placeholder="Szukaj po emailu lub nazwie" icon="search" />
+            <AdminButton variant="secondary" size="sm" type="submit" isLoading={isLoadingUsers}>
+              Szukaj
+            </AdminButton>
+          </form>
+        {/snippet}
+
+        {#if isLoadingUsers}
+          <div class="sub-state">
+            <LoaderCircle size={20} class="page-state__spinner" />
+            <span class="body-text">Ładowanie użytkowników…</span>
           </div>
-        </div>
-      </section>
-    </div>
+        {:else if users.length === 0}
+          <p class="empty-state">Brak użytkowników dla bieżącego filtra.</p>
+        {:else}
+          <div class="user-table">
+            <div class="user-table__head">
+              <span>User</span>
+              <span>Status</span>
+              <span>Role</span>
+              <span>Storage usage</span>
+              <span class="user-table__actions-label">Actions</span>
+            </div>
 
-    <section class="card liquid-card user-section">
-      <div class="section-head section-head-stack">
-        <div>
-          <span class="section-kicker">Użytkownicy</span>
-          <h2>Prosta lista z akcjami</h2>
-          <p>Role, labelsy, limity i hasło są dostępne z menu, bez przeładowania ekranu formularzami.</p>
-        </div>
-
-        <form class="search-bar" onsubmit={handleSearchSubmit}>
-          <Search size={16} />
-          <input bind:value={search} type="search" placeholder="Szukaj po emailu lub nazwie" />
-          <button class="ghost-btn compact" type="submit" disabled={isLoadingUsers}>
-            Szukaj
-          </button>
-        </form>
-      </div>
-
-      {#if isLoadingUsers}
-        <div class="sub-state"><LoaderCircle size={20} class="spin-inline" /> Ładowanie użytkowników…</div>
-      {:else if users.length === 0}
-        <p class="empty-text">Brak użytkowników dla bieżącego filtra.</p>
-      {:else}
-        <div class="user-list">
-          {#each users as user (user.id)}
-            {@const draft = userDrafts[user.id]}
-            <article class="user-row">
-              <div class="user-main">
-                <div>
-                  <h3>{user.name || user.email}</h3>
-                  <p class="muted">{user.email}</p>
-                </div>
-
-                <div class="pill-group">
-                  <span class="pill {user.status ? 'is-success' : 'is-danger'}">{user.status ? 'Aktywny' : 'Zablokowany'}</span>
-                  <span class="pill">{user.role}</span>
-                  {#if user.labels.includes('admin')}
-                    <span class="pill is-accent">admin</span>
-                  {/if}
-                </div>
-              </div>
-
-              <div class="user-storage">
-                <div class="usage-caption">
-                  <span>Zajęte miejsce</span>
-                  <strong>{formatBytes(user.current_used_bytes)}</strong>
-                </div>
-
-                <div class="usage-bar-track compact-track">
-                  <div
-                    class="usage-bar-fill"
-                    style="width: {Math.min((user.current_used_bytes / Math.max(user.effective_max_storage_bytes, 1)) * 100, 100)}%;"
-                  ></div>
-                </div>
-
-                <p class="muted">
-                  Limit efektywny: {formatBytes(user.effective_max_storage_bytes)}
-                  {#if user.max_storage_bytes === null}
-                    · dziedziczy z serwisu
-                  {/if}
-                </p>
-              </div>
-
-              <div class="user-actions">
-                <button
-                  class="ghost-btn icon-btn"
-                  type="button"
-                  aria-label="Opcje dla {user.email}"
-                  aria-expanded={activeMenuUserId === user.id}
-                  onclick={() => toggleUserMenu(user.id)}
-                >
-                  <MoreHorizontal size={16} />
-                </button>
-
-                {#if activeMenuUserId === user.id}
-                  <div class="menu-panel glass" role="menu">
-                    <button type="button" role="menuitem" onclick={() => openUserModal(user, 'identity')}>
-                      Rola i labelsy
-                    </button>
-                    <button type="button" role="menuitem" onclick={() => openUserModal(user, 'quota')}>
-                      Limit miejsca
-                    </button>
-                    <button type="button" role="menuitem" onclick={() => openUserModal(user, 'password')}>
-                      Nadpisz hasło
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      class={user.status ? 'menu-danger' : ''}
-                      onclick={() => handleStatusToggle(user)}
-                      disabled={draft.isSaving}
-                    >
-                      {user.status ? 'Zablokuj konto' : 'Aktywuj konto'}
-                    </button>
+            <div class="user-table__body">
+              {#each users as user (user.id)}
+                {@const draft = userDrafts[user.id]}
+                {@const storagePercent = getUserStoragePercent(user)}
+                <AdminListRow as="article" className="user-row">
+                  <div class="user-cell user-cell--identity">
+                    <span class="mobile-label">User</span>
+                    <div class="user-identity">
+                      <strong class="body-text">{user.name || user.email}</strong>
+                      <span class="meta-text">{user.email}</span>
+                    </div>
                   </div>
-                {/if}
-              </div>
-            </article>
-          {/each}
-        </div>
-      {/if}
-    </section>
+
+                  <div class="user-cell">
+                    <span class="mobile-label">Status</span>
+                    <AdminBadge tone={user.status ? 'success' : 'danger'}>
+                      {user.status ? 'Aktywny' : 'Zablokowany'}
+                    </AdminBadge>
+                  </div>
+
+                  <div class="user-cell">
+                    <span class="mobile-label">Role</span>
+                    <div class="role-stack">
+                      <AdminBadge>{user.role}</AdminBadge>
+                      {#if user.labels.includes('admin')}
+                        <AdminBadge tone="accent">admin</AdminBadge>
+                      {/if}
+                    </div>
+                  </div>
+
+                  <div class="user-cell user-cell--storage">
+                    <span class="mobile-label">Storage usage</span>
+                    <div class="storage-stack">
+                      <div class="storage-stack__meta">
+                        <strong class="body-text">{formatBytes(user.current_used_bytes)}</strong>
+                        <span class="meta-text">z {formatBytes(user.effective_max_storage_bytes)}</span>
+                      </div>
+                      <AdminProgress value={storagePercent} tone={getProgressTone(storagePercent)} />
+                    </div>
+                  </div>
+
+                  <div class="user-cell user-cell--actions">
+                    <span class="mobile-label">Actions</span>
+                    <div class="action-anchor" data-user-action-anchor>
+                      <AdminButton
+                        variant="ghost"
+                        size="sm"
+                        iconOnly={true}
+                        onclick={() => toggleUserMenu(user.id)}
+                        aria-expanded={activeMenuUserId === user.id}
+                        aria-label={`Opcje dla ${user.email}`}
+                      >
+                        <MoreHorizontal size={16} />
+                      </AdminButton>
+
+                      {#if activeMenuUserId === user.id}
+                        <div class="action-menu glass" role="menu">
+                          <button type="button" role="menuitem" onclick={() => openUserModal(user, 'identity')}>
+                            Rola i labelsy
+                          </button>
+                          <button type="button" role="menuitem" onclick={() => openUserModal(user, 'quota')}>
+                            Limit miejsca
+                          </button>
+                          <button type="button" role="menuitem" onclick={() => openUserModal(user, 'password')}>
+                            Nadpisz hasło
+                          </button>
+                          <button type="button" role="menuitem" class:user-action-danger={user.status} onclick={() => handleStatusToggle(user)} disabled={draft.isSaving}>
+                            {user.status ? 'Zablokuj konto' : 'Aktywuj konto'}
+                          </button>
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                </AdminListRow>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#snippet footer()}
+          <div class="user-footer">
+            <span class="meta-text">Łącznie w bieżącym widoku: {usersTotal}</span>
+          </div>
+        {/snippet}
+      </AdminCard>
+    </div>
   {/if}
 </section>
 
 {#if modalUser && modalDraft && modalMode}
-  <div class="dialog-backdrop" role="presentation" onclick={closeUserModal}></div>
-
-  <div class="dialog glass" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
-    <div class="dialog-head">
-      <div>
-        <span class="section-kicker">Użytkownik</span>
-        <h2 id="admin-modal-title">
-          {#if modalMode === 'identity'}
-            Rola i labelsy
-          {:else if modalMode === 'quota'}
-            Limit miejsca
-          {:else}
-            Nadpisanie hasła
-          {/if}
-        </h2>
-        <p>{modalUser.name || modalUser.email} · {modalUser.email}</p>
-      </div>
-
-      <button class="ghost-btn icon-btn" type="button" aria-label="Zamknij modal" onclick={closeUserModal}>
-        <X size={16} />
-      </button>
-    </div>
-
+  <AdminModal
+    label="Użytkownik"
+    title={modalMode === 'identity' ? 'Rola i labelsy' : modalMode === 'quota' ? 'Limit miejsca' : 'Nadpisanie hasła'}
+    description={`${modalUser.name || modalUser.email} · ${modalUser.email}`}
+    onclose={closeUserModal}
+  >
     {#if modalMode === 'identity'}
-      <div class="dialog-body">
-        <div class="field-grid compact-grid">
-          <label class="field">
-            <span>Rola aplikacyjna</span>
-            <input bind:value={modalDraft.role} type="text" placeholder="np. user, admin, manager" />
-          </label>
+      <div class="modal-grid">
+        <label class="field-group">
+          <span class="meta-text">Rola aplikacyjna</span>
+          <AdminInput bind:value={modalDraft.role} type="text" placeholder="np. user, admin, manager" />
+        </label>
 
-          <label class="field">
-            <span>Labelsy Appwrite</span>
-            <input bind:value={modalDraft.labelsText} type="text" placeholder="admin, beta, vip" />
-          </label>
-        </div>
-      </div>
-
-      <div class="dialog-actions">
-        <button class="ghost-btn compact" type="button" onclick={closeUserModal}>
-          Anuluj
-        </button>
-        <button class="primary-btn compact" type="button" onclick={() => handleIdentitySave(modalUser)} disabled={modalDraft.isSaving}>
-          <Save size={16} />
-          {modalDraft.isSaving ? 'Zapisywanie…' : 'Zapisz'}
-        </button>
+        <label class="field-group">
+          <span class="meta-text">Labelsy Appwrite</span>
+          <AdminInput bind:value={modalDraft.labelsText} type="text" placeholder="admin, beta, vip" />
+        </label>
       </div>
     {:else if modalMode === 'quota'}
-      <div class="dialog-body">
+      <div class="modal-grid">
         <div class="quota-summary">
-          <span>Aktualnie zajęte</span>
-          <strong>{formatBytes(modalUser.current_used_bytes)}</strong>
+          <span class="meta-text">Aktualnie zajęte</span>
+          <strong class="card-title">{formatBytes(modalUser.current_used_bytes)}</strong>
         </div>
 
-        <label class="toggle-row">
+        <label class="checkbox-row">
           <input bind:checked={modalDraft.quotaEnabled} type="checkbox" />
-          <span>Ustaw własny limit dla tego użytkownika</span>
+          <span class="body-text">Ustaw własny limit dla tego użytkownika</span>
         </label>
 
         {#if modalDraft.quotaEnabled}
-          <div class="field-inline">
-            <input bind:value={modalDraft.quotaValue} type="number" min="1" step="0.01" placeholder="np. 25" />
-            <select bind:value={modalDraft.quotaUnit}>
+          <div class="field-combo">
+            <AdminInput bind:value={modalDraft.quotaValue} type="number" min="1" step="0.01" placeholder="np. 25" />
+            <select bind:value={modalDraft.quotaUnit} class="form-select">
               <option value="MB">MB</option>
               <option value="GB">GB</option>
               <option value="TB">TB</option>
             </select>
           </div>
         {:else}
-          <p class="muted">Po wyłączeniu użytkownik dziedziczy limit serwisu.</p>
+          <p class="body-text">Po wyłączeniu użytkownik dziedziczy limit serwisu.</p>
         {/if}
       </div>
-
-      <div class="dialog-actions">
-        <button class="ghost-btn compact" type="button" onclick={closeUserModal}>
-          Anuluj
-        </button>
-        <button class="primary-btn compact" type="button" onclick={() => handleQuotaSave(modalUser)} disabled={modalDraft.isSaving}>
-          <Save size={16} />
-          {modalDraft.isSaving ? 'Zapisywanie…' : 'Zapisz limit'}
-        </button>
-      </div>
     {:else}
-      <div class="dialog-body">
-        <label class="field">
-          <span>Nowe hasło</span>
-          <input bind:value={modalDraft.password} type="text" placeholder="Min. 8 znaków" />
+      <div class="modal-grid">
+        <label class="field-group">
+          <span class="meta-text">Nowe hasło</span>
+          <AdminInput bind:value={modalDraft.password} type="text" placeholder="Min. 8 znaków" />
         </label>
-        <p class="muted">Po zmianie wszystkie aktywne sesje tego użytkownika zostaną wylogowane.</p>
-      </div>
-
-      <div class="dialog-actions">
-        <button class="ghost-btn compact" type="button" onclick={closeUserModal}>
-          Anuluj
-        </button>
-        <button class="primary-btn compact" type="button" onclick={() => handlePasswordReset(modalUser)} disabled={modalDraft.isResetting}>
-          <KeyRound size={16} />
-          {modalDraft.isResetting ? 'Zapisywanie…' : 'Nadpisz hasło'}
-        </button>
+        <p class="body-text">Po zmianie wszystkie aktywne sesje tego użytkownika zostaną wylogowane.</p>
       </div>
     {/if}
-  </div>
+
+    {#snippet footer()}
+      <AdminButton variant="ghost" onclick={closeUserModal}>
+        Anuluj
+      </AdminButton>
+
+      {#if modalMode === 'identity'}
+        <AdminButton variant="primary" onclick={() => handleIdentitySave(modalUser)} isLoading={modalDraft.isSaving}>
+          <Save size={16} />
+          Zapisz
+        </AdminButton>
+      {:else if modalMode === 'quota'}
+        <AdminButton variant="primary" onclick={() => handleQuotaSave(modalUser)} isLoading={modalDraft.isSaving}>
+          <Save size={16} />
+          Zapisz limit
+        </AdminButton>
+      {:else}
+        <AdminButton variant="primary" onclick={() => handlePasswordReset(modalUser)} isLoading={modalDraft.isResetting}>
+          <KeyRound size={16} />
+          Nadpisz hasło
+        </AdminButton>
+      {/if}
+    {/snippet}
+  </AdminModal>
 {/if}
 
 <style>
-  .admin-wrap {
+  .admin-page {
+    --admin-space-1: 8px;
+    --admin-space-2: 12px;
+    --admin-space-3: 16px;
+    --admin-space-4: 24px;
+    --admin-space-5: 32px;
+    --admin-text-page-size: 32px;
+    --admin-text-page-line-height: 1.1;
+    --admin-text-section-size: 20px;
+    --admin-text-section-line-height: 1.2;
+    --admin-text-card-size: 16px;
+    --admin-text-card-line-height: 1.25;
+    --admin-text-body-size: 14px;
+    --admin-text-body-line-height: 1.4;
+    --admin-text-meta-size: 12px;
+    --admin-text-meta-line-height: 1.3;
+    --admin-text-stat-size: 32px;
+    --admin-text-stat-line-height: 1;
+    --admin-radius-md: 16px;
+    --admin-radius-lg: 24px;
     width: 100%;
-    max-width: 1280px;
+    max-width: 1400px;
     margin: 0 auto;
-    padding: var(--space-4) var(--shell-px) calc(88px + env(safe-area-inset-bottom));
+    padding: 24px 24px calc(88px + env(safe-area-inset-bottom));
     display: grid;
-    gap: var(--space-4);
-  }
-
-  .page-header,
-  .section-head,
-  .usage-caption,
-  .preview-head,
-  .toggle-row,
-  .dialog-head,
-  .dialog-actions,
-  .user-main,
-  .user-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .page-header,
-  .section-head,
-  .dialog-head {
-    align-items: flex-start;
+    gap: 24px;
   }
 
   .page-header {
-    padding-bottom: var(--space-1);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
   }
 
-  .page-copy {
+  .page-header__copy {
     display: grid;
-    gap: 6px;
+    gap: 8px;
   }
 
-  .eyebrow,
-  .section-kicker {
+  .page-header__eyebrow {
     display: inline-flex;
     width: fit-content;
-    padding: 5px 10px;
-    border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-bg-overlay) 82%, transparent);
+    padding: 8px 12px;
+    border-radius: 999px;
     border: 1px solid color-mix(in oklab, var(--color-glass-border) 70%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 80%, transparent);
     color: var(--color-text-secondary);
-    font-size: 11px;
+    font-size: var(--admin-text-meta-size);
+    line-height: var(--admin-text-meta-line-height);
+    font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
-  h1,
-  h2,
-  h3 {
+  .page-title {
     color: var(--color-text-primary);
+    font-size: var(--admin-text-page-size);
+    line-height: var(--admin-text-page-line-height);
+    font-weight: 700;
     letter-spacing: -0.03em;
   }
 
-  h1 {
-    font-size: clamp(1.6rem, 4vw, 2.2rem);
-    line-height: 1.02;
-  }
-
-  h2 {
-    font-size: clamp(1.05rem, 3vw, 1.35rem);
-    line-height: 1.1;
-  }
-
-  h3 {
-    font-size: 1rem;
-  }
-
-  .page-copy p,
-  .muted,
-  .empty-text {
+  .page-body,
+  .body-text {
     color: var(--color-text-secondary);
-    font-size: var(--text-sm);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
+  }
+
+  .meta-text {
+    color: var(--color-text-secondary);
+    font-size: var(--admin-text-meta-size);
+    line-height: var(--admin-text-meta-line-height);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .card-title {
+    color: var(--color-text-primary);
+    font-size: var(--admin-text-card-size);
+    line-height: var(--admin-text-card-line-height);
+    font-weight: 700;
+  }
+
+  .numeric-stat {
+    color: var(--color-text-primary);
+    font-size: var(--admin-text-stat-size);
+    line-height: var(--admin-text-stat-line-height);
+    font-weight: 700;
+    letter-spacing: -0.03em;
   }
 
   .banner {
-    border-radius: var(--radius-md);
+    border-radius: var(--admin-radius-md);
+    padding: 12px 16px;
     border: 1px solid transparent;
-    padding: 10px 12px;
-    font-size: var(--text-sm);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
   }
 
-  .banner-error {
+  .banner--error {
     border-color: color-mix(in oklab, var(--color-danger) 28%, transparent);
     background: color-mix(in oklab, var(--color-danger) 12%, transparent);
-    color: color-mix(in oklab, var(--color-danger) 88%, #fff);
+    color: color-mix(in oklab, var(--color-danger) 90%, white);
   }
 
-  .banner-success {
+  .banner--success {
     border-color: color-mix(in oklab, var(--color-success) 28%, transparent);
     background: color-mix(in oklab, var(--color-success) 12%, transparent);
-    color: color-mix(in oklab, var(--color-success) 90%, #fff);
+    color: color-mix(in oklab, var(--color-success) 90%, white);
   }
 
-  .state-wrap {
-    min-height: 42dvh;
+  .page-state {
+    min-height: 320px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .spin,
-  .spin-inline,
-  .is-spinning {
-    animation: spin 900ms linear infinite;
+  :global(.page-state__spinner) {
+    animation: admin-page-spin 900ms linear infinite;
   }
 
-  @keyframes spin {
+  @keyframes admin-page-spin {
     to {
       transform: rotate(360deg);
     }
   }
 
-  .top-grid,
-  .field-grid,
-  .preview-grid,
-  .preview-list,
-  .micro-grid,
-  .user-list {
+  .dashboard-grid {
     display: grid;
-    gap: var(--space-3);
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 24px;
   }
 
-  .top-grid {
-    align-items: start;
+  :global(.dashboard-card) {
+    grid-column: span 12;
   }
 
-  .card,
-  .dialog {
-    border-radius: calc(var(--radius-lg) + 2px);
-    border-color: color-mix(in oklab, var(--color-glass-border) 92%, rgba(255, 255, 255, 0.04));
-    background:
-      linear-gradient(180deg, color-mix(in oklab, var(--color-bg-elevated) 72%, transparent), color-mix(in oklab, var(--color-bg-surface) 84%, transparent));
-    backdrop-filter: blur(calc(var(--color-glass-blur) * 0.8)) saturate(135%);
-    -webkit-backdrop-filter: blur(calc(var(--color-glass-blur) * 0.8)) saturate(135%);
-    box-shadow:
-      0 12px 32px rgba(0, 0, 0, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  }
-
-  .card {
-    padding: var(--space-4);
-    display: grid;
-    gap: var(--space-4);
-  }
-
-  .surface-id {
-    padding: 7px 10px;
-    border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-bg-overlay) 78%, transparent);
-    border: 1px solid var(--color-border-subtle);
+  .service-id {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 80%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 72%, transparent);
     color: var(--color-text-secondary);
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--admin-text-meta-size);
+    line-height: var(--admin-text-meta-line-height);
   }
 
-  .usage-panel,
-  .settings-shell,
-  .micro-card,
-  .preview-item,
-  .user-row,
-  .menu-panel,
+  .service-layout,
+  .service-usage,
+  .metric-grid,
+  .settings-block,
+  .form-grid,
+  .field-group,
+  .field-combo,
+  .activity-stack,
+  .activity-list,
+  .user-table,
+  .user-table__body,
+  .user-identity,
+  .storage-stack,
+  .modal-grid {
+    display: grid;
+    gap: 24px;
+  }
+
+  .service-usage,
+  .metric-card,
+  .settings-block,
   .quota-summary {
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in oklab, var(--color-border-subtle) 90%, transparent);
-    background: color-mix(in oklab, var(--color-bg-overlay) 62%, transparent);
+    padding: 24px;
+    border-radius: var(--admin-radius-lg);
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 82%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 64%, transparent);
   }
 
-  .usage-panel,
-  .settings-shell,
-  .preview-item,
-  .user-row,
-  .quota-summary {
-    padding: var(--space-3);
+  .service-usage__header,
+  .service-usage__meta,
+  .block-header,
+  .activity-section__header,
+  .activity-section__title,
+  .sub-state,
+  .storage-stack__meta,
+  .user-footer,
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
   }
 
-  .settings-shell {
+  .service-usage__headline,
+  .block-header__copy,
+  .action-anchor,
+  .activity-row__meta--stack,
+  .role-stack {
     display: grid;
-    gap: var(--space-3);
+    gap: 12px;
   }
 
-  .section-head-tight {
-    gap: var(--space-2);
+  .service-usage__headline {
+    grid-auto-flow: column;
+    justify-content: flex-start;
+    align-items: center;
   }
 
-  .usage-caption strong {
-    font-size: 1.2rem;
-  }
-
-  .usage-caption p {
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-  }
-
-  .usage-caption span {
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-  }
-
-  .usage-bar-track {
-    height: 10px;
-    border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-bg-surface) 92%, transparent);
-    overflow: hidden;
-  }
-
-  .compact-track {
-    height: 8px;
-  }
-
-  .usage-bar-fill {
-    height: 100%;
-    border-radius: var(--radius-full);
-    background: linear-gradient(90deg, var(--color-accent), color-mix(in oklab, var(--color-accent) 70%, #fff));
-  }
-
-  .micro-grid {
+  .metric-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .micro-card {
-    padding: var(--space-3);
+  .metric-card {
     display: grid;
-    gap: 6px;
+    gap: 12px;
   }
 
-  .micro-card span,
-  .field span,
-  .preview-head span {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    color: var(--color-text-secondary);
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .micro-card strong {
-    font-size: 1rem;
+  .field-group {
+    gap: 12px;
   }
 
-  .field-grid {
-    grid-template-columns: 1fr;
+  .field-combo {
+    grid-template-columns: minmax(0, 1fr) 120px;
+    gap: 12px;
   }
 
-  .compact-grid {
-    gap: var(--space-3);
-  }
-
-  .field {
-    display: grid;
-    gap: 6px;
-  }
-
-  .field input,
-  .field select,
-  .field-inline input,
-  .field-inline select,
-  .search-bar input {
-    height: 42px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-default);
-    background: color-mix(in oklab, var(--color-bg-elevated) 88%, transparent);
+  .form-select {
+    width: 100%;
+    min-height: 48px;
+    padding: 0 16px;
+    border-radius: var(--admin-radius-md);
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 88%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 74%, transparent);
     color: var(--color-text-primary);
-    padding: 0 14px;
-    font-size: var(--text-sm);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
     outline: none;
   }
 
-  .field-inline {
-    display: grid;
-    grid-template-columns: 1fr 110px;
-    gap: var(--space-2);
+  .form-select:hover,
+  .form-select:focus-visible {
+    border-color: color-mix(in oklab, var(--color-accent) 36%, var(--color-glass-border));
   }
 
-  .primary-btn,
-  .ghost-btn,
-  .text-link {
-    min-height: 40px;
-    border-radius: var(--radius-md);
-    padding: 0 14px;
-    border: 1px solid var(--color-border-default);
+  .link-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    width: fit-content;
-    max-width: 100%;
-    font-size: var(--text-sm);
-    font-weight: 600;
-  }
-
-  .primary-btn {
-    background: color-mix(in oklab, var(--color-accent) 88%, white 12%);
-    color: var(--color-text-on-accent);
-  }
-
-  .ghost-btn,
-  .text-link {
-    background: color-mix(in oklab, var(--color-bg-overlay) 78%, transparent);
-    color: var(--color-text-primary);
-  }
-
-  .compact {
-    min-height: 38px;
+    min-height: 40px;
     padding: 0 12px;
-  }
-
-  .icon-btn {
-    width: 38px;
-    padding: 0;
-    flex-shrink: 0;
-  }
-
-  .text-link {
+    border-radius: var(--admin-radius-md);
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 82%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 76%, transparent);
+    color: var(--color-text-primary);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
+    font-weight: 600;
     text-decoration: none;
   }
 
-  .preview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .preview-column {
+  .activity-section {
     display: grid;
-    gap: var(--space-3);
+    gap: 16px;
   }
 
-  .preview-head {
+  :global(.activity-row) {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+  }
+
+  .activity-row__icon {
     color: var(--color-text-secondary);
-  }
-
-  .preview-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .preview-copy {
-    min-width: 0;
-    display: grid;
-    gap: 4px;
-  }
-
-  .preview-time {
-    flex-shrink: 0;
-    text-align: right;
-  }
-
-  .search-bar {
-    display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) auto;
-    gap: var(--space-2);
-    align-items: center;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
-    padding: 0 10px;
-    background: color-mix(in oklab, var(--color-bg-overlay) 74%, transparent);
-  }
-
-  .search-bar input {
-    border: none;
-    background: transparent;
-    padding: 0;
-  }
-
-  .sub-state {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
+    justify-content: center;
   }
 
-  .user-list {
-    gap: var(--space-2);
-  }
-
-  .user-row {
-    display: grid;
-    gap: var(--space-3);
-    position: relative;
-  }
-
-  .pill,
-  .pill-group {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .pill {
-    width: fit-content;
-    padding: 5px 10px;
-    border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-bg-surface) 88%, transparent);
-    color: var(--color-text-primary);
-    font-size: 11px;
-    border: 1px solid var(--color-border-subtle);
-  }
-
-  .pill.is-success,
-  .status-completed {
-    background: color-mix(in oklab, var(--color-success) 16%, transparent);
-    color: var(--color-success);
-  }
-
-  .pill.is-danger,
-  .status-failed {
-    background: color-mix(in oklab, var(--color-danger) 16%, transparent);
-    color: var(--color-danger);
-  }
-
-  .pill.is-accent,
-  .status-pending {
-    background: color-mix(in oklab, var(--color-accent) 15%, transparent);
-    color: var(--color-text-primary);
-  }
-
-  .user-storage {
+  .activity-row__content {
+    min-width: 0;
     display: grid;
     gap: 8px;
   }
 
-  .menu-panel {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 8px);
-    z-index: 8;
-    min-width: 220px;
-    padding: 8px;
-    display: grid;
-    gap: 4px;
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.28);
+  .activity-row__meta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    text-align: right;
   }
 
-  .menu-panel button {
-    min-height: 38px;
+  .activity-row__meta--stack {
+    justify-items: end;
+    align-content: center;
+  }
+
+  .search-form {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) auto;
+    gap: 12px;
+    width: min(100%, 480px);
+  }
+
+  .empty-state {
+    color: var(--color-text-secondary);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
+  }
+
+  .user-table__head,
+  :global(.user-row) {
+    display: grid;
+    grid-template-columns: minmax(0, 2.8fr) minmax(120px, 1fr) minmax(180px, 1.4fr) minmax(240px, 2fr) 40px;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .user-table__head {
+    padding: 0 16px;
+    color: var(--color-text-secondary);
+    font-size: var(--admin-text-meta-size);
+    line-height: var(--admin-text-meta-line-height);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .user-table__actions-label {
+    text-align: center;
+  }
+
+  :global(.user-row) {
+    position: relative;
+  }
+
+  .user-cell {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+  }
+
+  .user-cell--actions {
+    justify-items: end;
+  }
+
+  .mobile-label {
+    display: none;
+    color: var(--color-text-secondary);
+    font-size: var(--admin-text-meta-size);
+    line-height: var(--admin-text-meta-line-height);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .action-anchor {
+    position: relative;
+    justify-items: end;
+  }
+
+  .action-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 12;
+    width: 220px;
+    padding: 8px;
+    border-radius: var(--admin-radius-md);
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 88%, transparent);
+    background: color-mix(in oklab, var(--color-bg-surface) 88%, transparent);
+    display: grid;
+    gap: 8px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  }
+
+  .action-menu button {
+    min-height: 40px;
+    padding: 0 12px;
     border: none;
+    border-radius: 12px;
     background: transparent;
     color: var(--color-text-primary);
-    border-radius: var(--radius-md);
-    padding: 0 10px;
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
     text-align: left;
-    font-size: var(--text-sm);
   }
 
-  .menu-panel button:hover {
-    background: color-mix(in oklab, var(--color-bg-overlay) 72%, transparent);
+  .action-menu button:hover {
+    background: color-mix(in oklab, var(--color-bg-overlay) 60%, transparent);
   }
 
-  .menu-danger {
+  .user-action-danger {
     color: var(--color-danger) !important;
   }
 
-  .dialog-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    background: color-mix(in oklab, #000 44%, transparent);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+  .storage-stack {
+    gap: 12px;
   }
 
-  .dialog {
-    position: fixed;
-    z-index: 81;
-    inset: auto 16px 16px;
-    width: auto;
-    max-width: 560px;
-    margin: 0 auto;
-    padding: var(--space-4);
-    display: grid;
-    gap: var(--space-4);
+  .quota-summary,
+  .checkbox-row {
+    padding: 16px;
+    border-radius: var(--admin-radius-md);
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 82%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 64%, transparent);
   }
 
-  .dialog-body {
-    display: grid;
-    gap: var(--space-3);
-  }
-
-  .dialog-head p {
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-  }
-
-  .dialog-actions {
-    justify-content: flex-end;
-  }
-
-  .quota-summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .toggle-row {
+  .checkbox-row {
     justify-content: flex-start;
   }
 
-  .toggle-row input {
+  .checkbox-row input {
     width: 16px;
     height: 16px;
-  }
-
-  .mono {
-    font-family: var(--font-mono);
   }
 
   .truncate {
@@ -1303,65 +1263,92 @@
     white-space: nowrap;
   }
 
-  @media (min-width: 860px) {
-    .top-grid {
-      grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+  @media (min-width: 1120px) {
+    :global(.dashboard-card--primary) {
+      grid-column: span 7;
     }
 
-    .preview-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    :global(.dashboard-card--secondary) {
+      grid-column: span 5;
     }
 
-    .field-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .user-row {
-      grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.9fr) auto;
-      align-items: center;
-    }
-
-    .dialog {
-      inset: 50% auto auto 50%;
-      width: min(560px, calc(100% - 32px));
-      transform: translate(-50%, -50%);
+    :global(.dashboard-card--full) {
+      grid-column: 1 / -1;
     }
   }
 
-  @media (max-width: 859px) {
-    .micro-grid {
+  @media (max-width: 1119px) {
+    .metric-grid,
+    .form-grid {
       grid-template-columns: 1fr;
     }
 
-    .section-head-stack,
-    .user-main {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .preview-item {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .preview-time {
-      text-align: left;
-    }
-
-    .search-bar {
-      grid-template-columns: 18px minmax(0, 1fr);
-    }
-
-    .search-bar .ghost-btn {
-      grid-column: 1 / -1;
+    .search-form {
       width: 100%;
     }
   }
 
+  @media (max-width: 959px) {
+    .admin-page {
+      --admin-text-page-size: 24px;
+      --admin-text-stat-size: 24px;
+    }
+
+    .page-header,
+    .service-usage__header,
+    .service-usage__meta,
+    .activity-section__header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .search-form {
+      grid-template-columns: 1fr;
+    }
+
+    .user-table__head {
+      display: none;
+    }
+
+    :global(.user-row) {
+      grid-template-columns: 1fr;
+    }
+
+    .mobile-label {
+      display: inline-flex;
+    }
+
+    .user-cell--actions {
+      justify-items: stretch;
+    }
+
+    .action-anchor {
+      justify-items: stretch;
+    }
+
+    .action-menu {
+      left: 0;
+      right: auto;
+      width: 100%;
+    }
+
+    :global(.activity-row) {
+      grid-template-columns: 16px minmax(0, 1fr);
+    }
+
+    .activity-row__meta {
+      grid-column: 2;
+      justify-content: flex-start;
+      text-align: left;
+    }
+
+    .activity-row__meta--stack {
+      justify-items: start;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .spin,
-    .spin-inline,
-    .is-spinning {
+    :global(.page-state__spinner) {
       animation: none;
     }
   }
