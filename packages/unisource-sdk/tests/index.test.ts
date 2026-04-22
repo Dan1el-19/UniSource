@@ -255,4 +255,26 @@ describe('unisource-sdk HTTP helpers', () => {
       UnisourceError
     );
   });
+
+  it('passes AbortSignal to trash and folders.get requests', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.signal).toBe(controller.signal);
+      return new Response(
+        JSON.stringify({ items: [], next_cursor: null, limit: 25 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new UnisourceClient({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'default',
+      getToken: async () => 'tok',
+    });
+
+    await client.myFiles.trash(undefined, controller.signal);
+    await client.folders.get('folder-1', controller.signal);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
