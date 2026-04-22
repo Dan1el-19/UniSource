@@ -107,8 +107,12 @@
       });
       service = response.service;
       syncServiceDrafts(response.service);
-      usage = await apiClient.admin.usage();
       success = 'Zapisano nowe limity serwisu.';
+      try {
+        usage = await apiClient.admin.usage();
+      } catch {
+        // usage tile shows stale data until next manual refresh — acceptable
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Nie udało się zapisać limitów serwisu.';
     } finally {
