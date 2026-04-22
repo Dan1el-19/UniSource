@@ -337,7 +337,7 @@
     justify-content: center;
   }
 
-  :global(.page-state__spinner) {
+  .service-page :global(.page-state__spinner) {
     animation: service-spin 900ms linear infinite;
   }
 
@@ -346,7 +346,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :global(.page-state__spinner) { animation: none; }
+    .service-page :global(.page-state__spinner) { animation: none; }
   }
 
   .service-grid {
@@ -355,20 +355,20 @@
     gap: 24px;
   }
 
-  :global(.service-grid__config) {
+  .service-grid :global(.service-grid__config) {
     grid-column: span 12;
   }
 
-  :global(.service-grid__usage) {
+  .service-grid :global(.service-grid__usage) {
     grid-column: span 12;
   }
 
   @media (min-width: 1024px) {
-    :global(.service-grid__config) {
+    .service-grid :global(.service-grid__config) {
       grid-column: span 7;
     }
 
-    :global(.service-grid__usage) {
+    .service-grid :global(.service-grid__usage) {
       grid-column: span 5;
     }
   }
