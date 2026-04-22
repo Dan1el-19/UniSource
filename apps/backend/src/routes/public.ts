@@ -12,12 +12,15 @@ import {
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
 import { getServiceConfig } from '../config/services';
+import { createSignedToken, verifySignedToken } from '../utils/signedTokens';
 
 type HonoEnv = { Bindings: CloudflareBindings };
 
 const DOWNLOAD_URL_TTL = 15 * 60;
+const PUBLIC_DOWNLOAD_SCOPE = 'public-download';
 
 const slugParam = z.object({ slug: z.string().trim().min(1) });
+const downloadTokenQuery = z.object({ token: z.string().trim().min(1) });
 
 function validationErrorHook(
   result: { success: boolean; error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> } },
@@ -52,6 +55,28 @@ async function generateDownloadUrl(
   const token = await createAppwriteFileToken(env, bucket, appwriteFileId, DOWNLOAD_URL_TTL);
   const downloadUrl = buildAppwriteFileDownloadUrl(env, bucket, appwriteFileId, token.secret);
   return { download_url: downloadUrl, url_expires_at: token.expires_at };
+}
+
+function getPublicDownloadSecret(env: CloudflareBindings): string {
+  return `${env.APPWRITE_API_KEY}:${env.APPWRITE_PROJECT_ID}:${PUBLIC_DOWNLOAD_SCOPE}`;
+}
+
+async function createPublicDownloadUrl(
+  c: { env: CloudflareBindings; req: { url: string } },
+  slug: string,
+  expiresAt: number
+): Promise<string> {
+  const token = await createSignedToken(getPublicDownloadSecret(c.env), { slug, exp: expiresAt });
+  const downloadUrl = new URL(c.req.url);
+  downloadUrl.pathname = `/public/${encodeURIComponent(slug)}/download`;
+  downloadUrl.search = '';
+  downloadUrl.searchParams.set('token', token);
+  return downloadUrl.toString();
+}
+
+function buildAttachmentDisposition(filename: string): string {
+  const fallback = filename.replace(/[^\x20-\x7E]+/g, '_').replace(/["\\]/g, '_') || 'download';
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 const publicRouter = new Hono<HonoEnv>();
@@ -95,21 +120,6 @@ publicRouter.get('/:slug', zValidator('param', slugParam, validationErrorHook), 
       file.bucket
     );
 
-    c.executionCtx.waitUntil(
-      Promise.all([
-        incrementDownloadCount(c.env.APP_DB, link.id),
-        logServiceEvent(c.env.APP_DB, {
-          serviceId: link.service_id,
-          userId: link.user_id,
-          action: 'share_link_accessed',
-          resourceType: 'file',
-          resourceId: link.file_id,
-          metadata: { slug, link_id: link.id },
-          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
-        }),
-      ])
-    );
-
     c.header('Cache-Control', 'no-store');
     return c.json({
       file_id: file.id,
@@ -117,7 +127,7 @@ publicRouter.get('/:slug', zValidator('param', slugParam, validationErrorHook), 
       size: file.size,
       mime_type: file.mime_type,
       requires_password: false,
-      download_url,
+      download_url: await createPublicDownloadUrl(c, slug, url_expires_at),
       url_expires_at,
       link_name: link.name,
       link_expires_at: link.expires_at,
@@ -167,6 +177,68 @@ publicRouter.post(
         file.bucket
       );
 
+      c.header('Cache-Control', 'no-store');
+      return c.json({
+        file_id: file.id,
+        filename: file.filename,
+        size: file.size,
+        mime_type: file.mime_type,
+        requires_password: false,
+        download_url: await createPublicDownloadUrl(c, slug, url_expires_at),
+        url_expires_at,
+        link_name: link.name,
+        link_expires_at: link.expires_at,
+      });
+    } catch {
+      return c.json({ error: 'Bad Gateway', message: 'Unable to generate download URL' }, 502);
+    }
+  }
+);
+
+publicRouter.get(
+  '/:slug/download',
+  zValidator('param', slugParam, validationErrorHook),
+  zValidator('query', downloadTokenQuery, validationErrorHook),
+  async (c) => {
+    const { slug } = c.req.valid('param');
+    const { token } = c.req.valid('query');
+    const payload = await verifySignedToken<{ slug: string; exp: number }>(getPublicDownloadSecret(c.env), token);
+
+    if (!payload || payload.slug !== slug) {
+      return c.json({ error: 'Unauthorized', message: 'Download session expired or invalid' }, 401);
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const link = await getShareLinkBySlug(c.env.APP_DB, slug);
+    if (!link || !link.is_active) {
+      return c.json({ error: 'Not Found', message: 'Share link not found or inactive' }, 404);
+    }
+    if (link.expires_at && link.expires_at < now) {
+      return c.json({ error: 'Gone', message: 'Share link has expired' }, 410);
+    }
+    if (link.max_downloads !== null && link.download_count >= link.max_downloads) {
+      return c.json({ error: 'Gone', message: 'Download limit reached' }, 410);
+    }
+
+    const file = await getFileRecord(c.env.APP_DB, link.file_id);
+    if (!file || file.is_trashed) {
+      return c.json({ error: 'Not Found', message: 'File not available' }, 404);
+    }
+
+    try {
+      const { download_url } = await generateDownloadUrl(
+        c.env,
+        link.service_id,
+        file.storage_destination,
+        file.storage_key,
+        file.bucket
+      );
+
+      const upstream = await fetch(download_url);
+      if (!upstream.ok || !upstream.body) {
+        return c.json({ error: 'Bad Gateway', message: 'Unable to stream download' }, 502);
+      }
+
       c.executionCtx.waitUntil(
         Promise.all([
           incrementDownloadCount(c.env.APP_DB, link.id),
@@ -182,17 +254,24 @@ publicRouter.post(
         ])
       );
 
-      c.header('Cache-Control', 'no-store');
-      return c.json({
-        file_id: file.id,
-        filename: file.filename,
-        size: file.size,
-        mime_type: file.mime_type,
-        requires_password: false,
-        download_url,
-        url_expires_at,
-        link_name: link.name,
-        link_expires_at: link.expires_at,
+      const headers = new Headers();
+      headers.set('Cache-Control', 'no-store');
+      headers.set('Content-Disposition', buildAttachmentDisposition(file.filename));
+      headers.set('Content-Type', upstream.headers.get('content-type') ?? file.mime_type);
+
+      const contentLength = upstream.headers.get('content-length');
+      if (contentLength) {
+        headers.set('Content-Length', contentLength);
+      }
+
+      const etag = upstream.headers.get('etag');
+      if (etag) {
+        headers.set('ETag', etag);
+      }
+
+      return new Response(upstream.body, {
+        status: 200,
+        headers,
       });
     } catch {
       return c.json({ error: 'Bad Gateway', message: 'Unable to generate download URL' }, 502);

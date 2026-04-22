@@ -12,7 +12,7 @@ import {
   type FileRecord,
 } from '../db/fileRecords';
 import { getFolderForUser } from '../db/folders';
-import { decrementServiceUsage, logServiceEvent } from '../db/services';
+import { logServiceEvent, releaseQuota } from '../db/services';
 import { deleteObject, generatePresignedGetUrl } from '../services/r2';
 import {
   buildAppwriteFileDownloadUrl,
@@ -261,8 +261,8 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
     await deactivateShareLinksForFile(c.env.APP_DB, id, serviceId);
     await deleteFileRecordPermanently(c.env.APP_DB, id, userId, serviceId);
 
-    // Decrement service quota usage after physical deletion
-    await decrementServiceUsage(c.env.APP_DB, serviceId, record.size);
+    // Release reserved storage after physical deletion.
+    await releaseQuota(c.env.APP_DB, serviceId, record.size, record.user_id);
 
     c.executionCtx.waitUntil(
       logServiceEvent(c.env.APP_DB, {

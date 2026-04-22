@@ -21,4 +21,5 @@ declare interface WorkerVariables {
   userId: string;
   serviceId: string;
   authType: 'appwrite' | 'apikey';
+  isAdmin: boolean;
 }

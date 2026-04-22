@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { deleteObject } from '../services/r2';
 import { deleteAppwriteFile, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
-import { decrementServiceUsage } from '../db/services';
+import { releaseQuota } from '../db/services';
 
 const ORPHANED_AGE_SECONDS = 3600; // 1 hour
 
@@ -43,7 +43,7 @@ export async function cleanupOrphanedUploads(
 
       // 2. Release the quota reserved during /init
       // Note: we wrapped this into D1 Batch or consecutive calls
-      await decrementServiceUsage(db, upload.service_id, upload.size);
+      await releaseQuota(db, upload.service_id, upload.size, upload.user_id);
 
       // 3. Mark as failed or delete from D1
       // We can just delete it to keep uploads table clean, or status='failed'.
