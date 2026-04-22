@@ -25,13 +25,20 @@
     return 'drive';
   });
 
-  const navItems = [
-    { id: 'drive',    label: 'Mój dysk',     href: '/drive',    icon: HardDrive },
-    { id: 'shared',   label: 'Udostępnione', href: '/shared',   icon: Share2 },
-    { id: 'trash',    label: 'Kosz',         href: '/trash',    icon: Trash2 },
-    { id: 'admin',    label: 'Admin',        href: '/admin',    icon: ShieldCheck },
-    { id: 'settings', label: 'Ustawienia',   href: '/settings', icon: Settings },
-  ] as const;
+  const navItems = $derived.by(() => {
+    const items = [
+      { id: 'drive', label: 'Mój dysk', href: '/drive', icon: HardDrive },
+      { id: 'shared', label: 'Udostępnione', href: '/shared', icon: Share2 },
+      { id: 'trash', label: 'Kosz', href: '/trash', icon: Trash2 },
+      { id: 'settings', label: 'Ustawienia', href: '/settings', icon: Settings },
+    ];
+
+    if (authState.isAdmin()) {
+      items.splice(3, 0, { id: 'admin', label: 'Admin', href: '/admin', icon: ShieldCheck });
+    }
+
+    return items;
+  });
 
   function toggleSidebar() {
     isCollapsed = !isCollapsed;

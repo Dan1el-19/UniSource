@@ -1,25 +1,35 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { HardDrive, Settings, Share2, Trash2 } from 'lucide-svelte';
+  import { HardDrive, Settings, Share2, ShieldCheck, Trash2 } from 'lucide-svelte';
+  import { authState } from '../../state/auth.svelte';
 
   const activeTab = $derived.by(() => {
     const path = page.url.pathname;
     if (path.startsWith('/shared')) return 'shared';
     if (path.startsWith('/trash')) return 'trash';
+    if (path.startsWith('/admin')) return 'admin';
     if (path.startsWith('/settings')) return 'settings';
     return 'drive';
   });
 
-  const items = [
-    { id: 'drive', label: 'Dysk', href: '/drive', icon: HardDrive },
-    { id: 'shared', label: 'Udostępnione', href: '/shared', icon: Share2 },
-    { id: 'trash', label: 'Kosz', href: '/trash', icon: Trash2 },
-    { id: 'settings', label: 'Ustawienia', href: '/settings', icon: Settings },
-  ] as const;
+  const items = $derived.by(() => {
+    const navItems = [
+      { id: 'drive', label: 'Dysk', href: '/drive', icon: HardDrive },
+      { id: 'shared', label: 'Udostępnione', href: '/shared', icon: Share2 },
+      { id: 'trash', label: 'Kosz', href: '/trash', icon: Trash2 },
+      { id: 'settings', label: 'Ustawienia', href: '/settings', icon: Settings },
+    ];
+
+    if (authState.isAdmin()) {
+      navItems.splice(3, 0, { id: 'admin', label: 'Admin', href: '/admin', icon: ShieldCheck });
+    }
+
+    return navItems;
+  });
 </script>
 
 <nav class="dock-wrap md:hidden pb-safe" aria-label="Nawigacja dolna">
-  <div class="dock-bar glass">
+  <div class="dock-bar glass" style="--dock-columns: {items.length};">
     {#each items as item (item.id)}
       {@const Icon = item.icon}
       <a
@@ -47,7 +57,7 @@
     min-height: 74px;
     border-radius: var(--radius-xl);
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--dock-columns, 4), minmax(0, 1fr));
     gap: 2px;
     padding: 8px;
   }

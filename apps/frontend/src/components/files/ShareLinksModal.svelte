@@ -3,16 +3,17 @@
   import { spring } from 'svelte/motion';
   import {
     Check,
+    Clock3,
     Copy,
+    ExternalLink,
     Eye,
     EyeOff,
     Link2,
     LoaderCircle,
     Lock,
     Plus,
+    Power,
     Share2,
-    ToggleLeft,
-    ToggleRight,
     Trash2,
     X,
   } from 'lucide-svelte';
@@ -31,14 +32,13 @@
 
   const shareBase = `${typeof window !== 'undefined' ? window.location.origin : ''}/s/`;
 
-  // State
   let links = $state<ShareLink[]>([]);
   let isLoading = $state(true);
   let loadError = $state<string | null>(null);
+  let actionError = $state<string | null>(null);
   let busyLinkId = $state<string | null>(null);
   let copiedLinkId = $state<string | null>(null);
 
-  // Create form
   let showCreateForm = $state(false);
   let createName = $state('');
   let createSlug = $state('');
@@ -49,7 +49,6 @@
   let isCreating = $state(false);
   let createError = $state<string | null>(null);
 
-  // Spring animation
   const scale = spring(0.95, { stiffness: 0.12, damping: 0.7 });
   const opacity = spring(0, { stiffness: 0.2, damping: 1 });
 
@@ -82,36 +81,47 @@
     setTimeout(() => onclose(), 140);
   }
 
+  function getLinkUrl(link: ShareLink) {
+    return `${shareBase}${link.slug}`;
+  }
+
   async function copyLink(link: ShareLink) {
-    const url = `${shareBase}${link.slug}`;
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(getLinkUrl(link));
       copiedLinkId = link.id;
-      setTimeout(() => { if (copiedLinkId === link.id) copiedLinkId = null; }, 1800);
+      setTimeout(() => {
+        if (copiedLinkId === link.id) copiedLinkId = null;
+      }, 1800);
     } catch {
-      // fallback: select text
+      actionError = 'Nie udało się skopiować linku do schowka.';
     }
   }
 
+  function openLink(link: ShareLink) {
+    window.open(getLinkUrl(link), '_blank', 'noopener,noreferrer');
+  }
+
   async function toggleActive(link: ShareLink) {
+    actionError = null;
     busyLinkId = link.id;
     try {
       const updated = await apiClient.shareLinks.update(link.id, { is_active: !link.is_active });
-      links = links.map((l) => (l.id === link.id ? updated.link : l));
-    } catch {
-      // silently ignore
+      links = links.map((item) => (item.id === link.id ? updated.link : item));
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'Nie udało się zmienić statusu linku.';
     } finally {
       busyLinkId = null;
     }
   }
 
   async function deleteLink(link: ShareLink) {
+    actionError = null;
     busyLinkId = link.id;
     try {
       await apiClient.shareLinks.delete(link.id);
-      links = links.filter((l) => l.id !== link.id);
-    } catch {
-      // silently ignore
+      links = links.filter((item) => item.id !== link.id);
+    } catch (err) {
+      actionError = err instanceof Error ? err.message : 'Nie udało się usunąć linku.';
     } finally {
       busyLinkId = null;
     }
@@ -119,14 +129,15 @@
 
   function dateToUnix(dateStr: string): number | undefined {
     if (!dateStr) return undefined;
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? undefined : Math.floor(d.getTime() / 1000);
+    const date = new Date(dateStr);
+    return Number.isNaN(date.getTime()) ? undefined : Math.floor(date.getTime() / 1000);
   }
 
   async function handleCreate() {
     if (isCreating) return;
     isCreating = true;
     createError = null;
+    actionError = null;
 
     try {
       const body: ShareLinkCreateRequest = {};
@@ -138,14 +149,13 @@
         if (ts) body.expires_at = ts;
       }
       if (createMaxDownloads.trim()) {
-        const n = parseInt(createMaxDownloads, 10);
-        if (!isNaN(n) && n > 0) body.max_downloads = n;
+        const count = parseInt(createMaxDownloads, 10);
+        if (!Number.isNaN(count) && count > 0) body.max_downloads = count;
       }
 
       const res = await apiClient.shareLinks.create(fileId, body);
       links = [res.link, ...links];
 
-      // Reset form
       createName = '';
       createSlug = '';
       createPassword = '';
@@ -160,8 +170,8 @@
   }
 
   function formatExpiry(ts: number | null) {
-    if (!ts) return null;
-    return new Date(ts * 1000).toLocaleDateString('pl-PL', { dateStyle: 'medium' });
+    if (!ts) return 'Bez terminu';
+    return new Date(ts * 1000).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' });
   }
 
   function slugPreview(slug: string) {
@@ -174,244 +184,289 @@
 <div
   class="modal-backdrop"
   role="presentation"
-  onclick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+  onclick={(e) => {
+    if (e.target === e.currentTarget) handleClose();
+  }}
 ></div>
 
 <div
   class="modal glass"
   role="dialog"
   aria-modal="true"
-  aria-label="Udostępnij plik"
+  aria-label="Linki udostępniania"
   tabindex="-1"
   style="transform: scale({$scale}); opacity: {$opacity};"
 >
-    <!-- Header -->
-    <div class="modal-header">
-      <div class="modal-title-row">
-        <div class="modal-icon"><Share2 size={18} /></div>
-        <div>
-          <h2 class="modal-title">Udostępnij plik</h2>
-          <p class="modal-sub">{filename}</p>
+  <div class="modal-header">
+    <div class="modal-title-row">
+      <div class="modal-icon"><Share2 size={18} /></div>
+      <div>
+        <h2 class="modal-title">Linki udostępniania</h2>
+        <p class="modal-sub">{filename}</p>
+      </div>
+    </div>
+    <button class="close-btn" type="button" onclick={handleClose} aria-label="Zamknij">
+      <X size={18} />
+    </button>
+  </div>
+
+  <div class="modal-body">
+    <section class="summary-panel glass-inner">
+      <div>
+        <span class="eyebrow">Public Share</span>
+        <h3>{filename}</h3>
+        <p>Każdy link ma własny slug, hasło, termin wygaśnięcia i limit pobrań.</p>
+      </div>
+      <div class="summary-stats">
+        <div class="summary-stat">
+          <strong>{links.length}</strong>
+          <span>linków łącznie</span>
+        </div>
+        <div class="summary-stat">
+          <strong>{links.filter((link) => link.has_password).length}</strong>
+          <span>chronionych hasłem</span>
         </div>
       </div>
-      <button class="close-btn" type="button" onclick={handleClose} aria-label="Zamknij">
-        <X size={18} />
-      </button>
-    </div>
+    </section>
 
-    <!-- Body -->
-    <div class="modal-body">
-      {#if loadError}
-        <div class="banner banner-error" role="alert">{loadError}</div>
-      {/if}
+    {#if loadError}
+      <div class="banner banner-error" role="alert">{loadError}</div>
+    {/if}
 
-      {#if isLoading}
-        <div class="loading-row">
-          <div class="spin"><LoaderCircle size={24} /></div>
-        </div>
-      {:else}
-        <!-- Existing links -->
-        {#if links.length > 0}
-          <div class="links-list">
-            {#each links as link (link.id)}
-              <div class="link-card glass-inner" class:is-inactive={!link.is_active}>
-                <div class="link-top">
-                  <div class="link-info">
-                    <div class="link-url-row">
-                      <Link2 size={13} />
-                      <span class="link-url">{shareBase}{link.slug}</span>
-                    </div>
-                    {#if link.name}
-                      <span class="link-name">„{link.name}"</span>
+    {#if actionError}
+      <div class="banner banner-error" role="alert">{actionError}</div>
+    {/if}
+
+    {#if isLoading}
+      <div class="loading-row">
+        <div class="spin"><LoaderCircle size={24} /></div>
+      </div>
+    {:else}
+      {#if links.length > 0}
+        <div class="links-stack">
+          {#each links as link (link.id)}
+            <article class="link-card glass-inner" class:is-inactive={!link.is_active}>
+              <div class="card-top">
+                <div class="card-copy">
+                  <div class="badge-row">
+                    <span class="status-pill {link.is_active ? 'is-active' : 'is-muted'}">
+                      <Power size={12} />
+                      {link.is_active ? 'Aktywny' : 'Nieaktywny'}
+                    </span>
+                    {#if link.has_password}
+                      <span class="status-pill"><Lock size={12} /> Hasło</span>
                     {/if}
                   </div>
-
-                  <div class="link-actions">
-                    <button
-                      class="icon-btn"
-                      class:is-copied={copiedLinkId === link.id}
-                      type="button"
-                      onclick={() => copyLink(link)}
-                      aria-label="Kopiuj link"
-                      disabled={busyLinkId === link.id}
-                    >
-                      {#if copiedLinkId === link.id}
-                        <Check size={15} />
-                      {:else}
-                        <Copy size={15} />
-                      {/if}
-                    </button>
-
-                    <button
-                      class="icon-btn"
-                      class:is-active-toggle={link.is_active}
-                      type="button"
-                      onclick={() => toggleActive(link)}
-                      aria-label={link.is_active ? 'Dezaktywuj' : 'Aktywuj'}
-                      disabled={busyLinkId === link.id}
-                    >
-                      {#if link.is_active}
-                        <ToggleRight size={15} />
-                      {:else}
-                        <ToggleLeft size={15} />
-                      {/if}
-                    </button>
-
-                    <button
-                      class="icon-btn is-danger"
-                      type="button"
-                      onclick={() => deleteLink(link)}
-                      aria-label="Usuń link"
-                      disabled={busyLinkId === link.id}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                  <h3 class="link-title">{link.name || 'Publiczny link do pliku'}</h3>
                 </div>
 
-                <div class="link-meta">
-                  {#if link.has_password}
-                    <span class="meta-badge"><Lock size={10} /> Hasło</span>
+                <button
+                  class="icon-btn"
+                  class:is-copied={copiedLinkId === link.id}
+                  type="button"
+                  onclick={() => copyLink(link)}
+                  aria-label="Kopiuj link"
+                  disabled={busyLinkId === link.id}
+                >
+                  {#if copiedLinkId === link.id}
+                    <Check size={15} />
+                  {:else}
+                    <Copy size={15} />
                   {/if}
-                  {#if link.expires_at}
-                    <span class="meta-badge">Wygasa {formatExpiry(link.expires_at)}</span>
-                  {/if}
-                  {#if link.max_downloads}
-                    <span class="meta-badge">{link.download_count}/{link.max_downloads} pobrań</span>
-                  {/if}
-                  {#if !link.is_active}
-                    <span class="meta-badge is-inactive-badge">Nieaktywny</span>
-                  {/if}
+                </button>
+              </div>
+
+              <div class="url-panel">
+                <span class="field-caption">Adres publiczny</span>
+                <div class="url-box">
+                  <Link2 size={14} />
+                  <input class="url-input" type="text" readonly value={getLinkUrl(link)} />
                 </div>
               </div>
-            {/each}
-          </div>
-        {:else if !showCreateForm}
-          <div class="empty-links">
-            <Share2 size={28} />
-            <p>Brak linków. Utwórz pierwszy link udostępniania.</p>
-          </div>
-        {/if}
 
-        <!-- Create form toggle -->
-        {#if !showCreateForm}
-          <button
-            class="add-btn"
-            type="button"
-            onclick={() => (showCreateForm = true)}
-          >
+              <div class="stat-grid">
+                <div class="stat-card">
+                  <span>Pobrania</span>
+                  <strong>
+                    {link.download_count}
+                    {#if link.max_downloads}
+                      / {link.max_downloads}
+                    {/if}
+                  </strong>
+                </div>
+
+                <div class="stat-card">
+                  <span>Wygasa</span>
+                  <strong>{formatExpiry(link.expires_at)}</strong>
+                </div>
+              </div>
+
+              <div class="card-actions">
+                <button class="secondary-btn" type="button" onclick={() => openLink(link)}>
+                  <ExternalLink size={15} />
+                  Otwórz
+                </button>
+                <button
+                  class="secondary-btn"
+                  type="button"
+                  onclick={() => toggleActive(link)}
+                  disabled={busyLinkId === link.id}
+                >
+                  <Power size={15} />
+                  {link.is_active ? 'Wyłącz' : 'Włącz'}
+                </button>
+                <button
+                  class="danger-btn"
+                  type="button"
+                  onclick={() => deleteLink(link)}
+                  disabled={busyLinkId === link.id}
+                >
+                  <Trash2 size={15} />
+                  Usuń
+                </button>
+              </div>
+            </article>
+          {/each}
+        </div>
+      {:else if !showCreateForm}
+        <div class="empty-links glass-inner">
+          <Share2 size={28} />
+          <p>Brak linków. Utwórz pierwszy link udostępniania.</p>
+        </div>
+      {/if}
+
+      {#if !showCreateForm}
+        <div class="composer-preview glass-inner">
+          <div>
+            <span class="eyebrow">Nowy link</span>
+            <h3>Skonfiguruj własny dostęp</h3>
+            <p>Slug, hasło, termin i limit pobrań ustawiasz ręcznie dla każdego odbiorcy.</p>
+          </div>
+          <button class="add-btn" type="button" onclick={() => (showCreateForm = true)}>
             <Plus size={16} />
             Nowy link
           </button>
-        {:else}
-          <div class="create-form glass-inner">
-            <h3 class="form-title">Nowy link udostępniania</h3>
+        </div>
+      {:else}
+        <div class="create-form glass-inner">
+          <div class="form-header">
+            <div>
+              <span class="eyebrow">Composer</span>
+              <h3 class="form-title">Nowy link udostępniania</h3>
+            </div>
+            <span class="form-note">Pełna konfiguracja bez presetów.</span>
+          </div>
 
-            {#if createError}
-              <div class="banner banner-error" role="alert">{createError}</div>
-            {/if}
+          {#if createError}
+            <div class="banner banner-error" role="alert">{createError}</div>
+          {/if}
 
-            <div class="field">
-              <label class="field-label" for="create-name">Nazwa linku <span class="optional">(opcjonalnie)</span></label>
+          <div class="field">
+            <label class="field-label" for="create-name">Nazwa linku <span class="optional">(opcjonalnie)</span></label>
+            <input
+              id="create-name"
+              class="field-input"
+              type="text"
+              placeholder="np. Dla klienta ABC"
+              maxlength="128"
+              bind:value={createName}
+            />
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="create-slug">
+              Własny slug <span class="optional">(opcjonalnie)</span>
+            </label>
+            <input
+              id="create-slug"
+              class="field-input"
+              type="text"
+              placeholder="moj-plik"
+              maxlength="64"
+              bind:value={createSlug}
+            />
+            <span class="field-hint">{slugPreview(createSlug)}</span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="create-password">
+              Hasło <span class="optional">(opcjonalnie)</span>
+            </label>
+            <div class="password-wrap">
               <input
-                id="create-name"
+                id="create-password"
                 class="field-input"
-                type="text"
-                placeholder="np. Dla klienta ABC"
-                maxlength="128"
-                bind:value={createName}
+                type={createShowPassword ? 'text' : 'password'}
+                placeholder="Zostaw puste, by udostępnić bez hasła"
+                bind:value={createPassword}
               />
+              <button
+                class="show-toggle"
+                type="button"
+                onclick={() => (createShowPassword = !createShowPassword)}
+                aria-label={createShowPassword ? 'Ukryj hasło' : 'Pokaż hasło'}
+              >
+                {#if createShowPassword}
+                  <EyeOff size={15} />
+                {:else}
+                  <Eye size={15} />
+                {/if}
+              </button>
             </div>
+          </div>
 
+          <div class="field-row">
             <div class="field">
-              <label class="field-label" for="create-slug">
-                Własny slug <span class="optional">(opcjonalnie)</span>
-              </label>
-              <input
-                id="create-slug"
-                class="field-input"
-                type="text"
-                placeholder="moj-plik"
-                maxlength="64"
-                bind:value={createSlug}
-              />
-              <span class="field-hint">{slugPreview(createSlug)}</span>
-            </div>
-
-            <div class="field">
-              <label class="field-label" for="create-password">
-                Hasło <span class="optional">(opcjonalnie)</span>
-              </label>
-              <div class="password-wrap">
-                <input
-                  id="create-password"
-                  class="field-input"
-                  type={createShowPassword ? 'text' : 'password'}
-                  placeholder="Zostaw puste, by bez hasła"
-                  bind:value={createPassword}
-                />
-                <button
-                  class="show-toggle"
-                  type="button"
-                  onclick={() => (createShowPassword = !createShowPassword)}
-                  aria-label={createShowPassword ? 'Ukryj hasło' : 'Pokaż hasło'}
-                >
-                  {#if createShowPassword}<EyeOff size={15} />{:else}<Eye size={15} />{/if}
-                </button>
-              </div>
-            </div>
-
-            <div class="field-row">
-              <div class="field">
-                <label class="field-label" for="create-expiry">Data wygaśnięcia</label>
+              <label class="field-label" for="create-expiry">Data wygaśnięcia</label>
+              <div class="field-inline">
+                <Clock3 size={15} />
                 <input
                   id="create-expiry"
-                  class="field-input"
+                  class="field-input is-inline"
                   type="date"
                   bind:value={createExpiry}
                   min={new Date().toISOString().split('T')[0]}
                 />
               </div>
-
-              <div class="field">
-                <label class="field-label" for="create-max-dl">Limit pobrań</label>
-                <input
-                  id="create-max-dl"
-                  class="field-input"
-                  type="number"
-                  min="1"
-                  placeholder="∞"
-                  bind:value={createMaxDownloads}
-                />
-              </div>
             </div>
 
-            <div class="form-actions">
-              <button
-                class="btn-secondary"
-                type="button"
-                onclick={() => { showCreateForm = false; createError = null; }}
-                disabled={isCreating}
-              >
-                Anuluj
-              </button>
-              <button
-                class="btn-primary"
-                type="button"
-                onclick={handleCreate}
-                disabled={isCreating}
-              >
-                {#if isCreating}
-                  <div class="spin-sm"><LoaderCircle size={14} /></div>
-                {/if}
-                Utwórz link
-              </button>
+            <div class="field">
+              <label class="field-label" for="create-max-dl">Limit pobrań</label>
+              <input
+                id="create-max-dl"
+                class="field-input"
+                type="number"
+                min="1"
+                placeholder="∞"
+                bind:value={createMaxDownloads}
+              />
             </div>
           </div>
-        {/if}
+
+          <div class="form-actions">
+            <button
+              class="btn-secondary"
+              type="button"
+              onclick={() => {
+                showCreateForm = false;
+                createError = null;
+              }}
+              disabled={isCreating}
+            >
+              Anuluj
+            </button>
+            <button class="btn-primary" type="button" onclick={handleCreate} disabled={isCreating}>
+              {#if isCreating}
+                <div class="spin-sm"><LoaderCircle size={14} /></div>
+              {/if}
+              Utwórz link
+            </button>
+          </div>
+        </div>
       {/if}
-    </div>
+    {/if}
   </div>
+</div>
 
 <style>
   .modal-backdrop {
@@ -429,8 +484,8 @@
     top: 50%;
     left: 50%;
     translate: -50% -50%;
-    width: min(520px, calc(100vw - 2 * var(--space-4)));
-    max-height: min(88dvh, 680px);
+    width: min(720px, calc(100vw - 2 * var(--space-3)));
+    max-height: min(92dvh, 780px);
     border-radius: var(--radius-xl);
     border-color: var(--color-glass-border);
     display: flex;
@@ -446,7 +501,7 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-4);
     border-bottom: 1px solid var(--color-border-subtle);
     flex-shrink: 0;
   }
@@ -459,8 +514,8 @@
   }
 
   .modal-icon {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: var(--radius-md);
     background: color-mix(in oklab, var(--color-accent-muted) 80%, transparent);
     border: 1px solid var(--color-border-default);
@@ -484,36 +539,136 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 240px;
+    max-width: 260px;
   }
 
-  .close-btn {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--color-text-secondary);
+  .close-btn,
+  .icon-btn,
+  .show-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
     transition: all var(--duration-fast) var(--ease-in-out);
   }
 
-  .close-btn:hover {
+  .close-btn,
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid transparent;
+  }
+
+  .close-btn:hover,
+  .icon-btn:hover:not(:disabled),
+  .show-toggle:hover {
     background: var(--color-accent-muted);
-    border-color: var(--color-border-default);
     color: var(--color-text-primary);
   }
 
   .modal-body {
     flex: 1;
     overflow-y: auto;
-    padding: var(--space-4) var(--space-5) var(--space-5);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .glass-inner {
+    background: color-mix(in oklab, var(--color-bg-elevated) 70%, transparent);
+    border: 1px solid var(--color-border-subtle);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .summary-panel,
+  .composer-preview,
+  .create-form,
+  .link-card {
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+  }
+
+  .summary-panel {
+    background:
+      radial-gradient(circle at top right, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent 36%),
+      color-mix(in oklab, var(--color-bg-elevated) 72%, transparent);
+  }
+
+  .summary-panel h3,
+  .link-title,
+  .form-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .summary-panel p,
+  .composer-preview p,
+  .form-note,
+  .summary-stat span,
+  .stat-card span,
+  .field-caption,
+  .empty-links {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    width: fit-content;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+  }
+
+  .summary-stats,
+  .links-stack,
+  .stat-grid,
+  .field-row {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .summary-stats,
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-stat,
+  .stat-card {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-subtle);
+    background: color-mix(in oklab, var(--color-bg-overlay) 82%, transparent);
+    padding: var(--space-3);
+    display: grid;
+    gap: 4px;
+  }
+
+  .summary-stat strong,
+  .stat-card strong {
+    color: var(--color-text-primary);
+    font-size: var(--text-base);
+  }
+
+  .banner {
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-size: var(--text-sm);
+    padding: 10px 12px;
+  }
+
+  .banner-error {
+    border-color: color-mix(in oklab, var(--color-danger) 30%, transparent);
+    background: color-mix(in oklab, var(--color-danger) 14%, transparent);
+    color: color-mix(in oklab, var(--color-danger) 90%, #fff);
   }
 
   .loading-row {
@@ -523,220 +678,123 @@
     padding: var(--space-6) 0;
   }
 
-  .spin {
+  .spin,
+  .spin-sm {
     animation: spin 900ms linear infinite;
-    color: var(--color-text-secondary);
   }
 
   .spin-sm {
-    animation: spin 900ms linear infinite;
     display: inline-flex;
   }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .banner {
-    border-radius: var(--radius-md);
-    border: 1px solid transparent;
-    font-size: var(--text-sm);
-    padding: 9px 12px;
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
-  .banner-error {
-    border-color: color-mix(in oklab, var(--color-danger) 30%, transparent);
-    background: color-mix(in oklab, var(--color-danger) 14%, transparent);
-    color: color-mix(in oklab, var(--color-danger) 90%, #fff);
-  }
-
-  .links-list {
+  .card-top,
+  .card-actions,
+  .form-header {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
   }
 
-  .link-card {
-    border-radius: var(--radius-md);
-    padding: var(--space-3);
+  .card-top {
+    align-items: flex-start;
+  }
+
+  .card-copy {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+  }
+
+  .badge-row {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    transition: opacity var(--duration-fast) var(--ease-in-out);
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    width: fit-content;
+    padding: 5px 10px;
+    border-radius: var(--radius-full);
+    background: color-mix(in oklab, var(--color-bg-overlay) 82%, transparent);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-secondary);
+    font-size: 11px;
+  }
+
+  .status-pill.is-active {
+    background: color-mix(in oklab, var(--color-success) 14%, transparent);
+    color: var(--color-success);
+  }
+
+  .status-pill.is-muted {
+    background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+    color: var(--color-danger);
   }
 
   .link-card.is-inactive {
-    opacity: 0.55;
+    opacity: 0.62;
   }
 
-  .glass-inner {
-    background: color-mix(in oklab, var(--color-bg-elevated) 68%, transparent);
-    border: 1px solid var(--color-border-subtle);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+  .url-panel {
+    display: grid;
+    gap: 6px;
   }
 
-  .link-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
+  .url-box {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
     gap: var(--space-2);
-  }
-
-  .link-info {
-    min-width: 0;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .link-url-row {
-    display: flex;
     align-items: center;
-    gap: 5px;
-    color: var(--color-text-secondary);
+    padding: 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-default);
+    background: color-mix(in oklab, var(--color-bg-surface) 86%, transparent);
   }
 
-  .link-url {
+  .url-input {
+    min-width: 0;
+    border: none;
+    background: transparent;
     font-size: var(--text-xs);
     font-family: var(--font-mono);
     color: var(--color-text-primary);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    outline: none;
   }
-
-  .link-name {
-    font-size: var(--text-xs);
-    color: var(--color-text-secondary);
-    font-style: italic;
-  }
-
-  .link-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-
-  .icon-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--color-text-secondary);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--duration-fast) var(--ease-in-out);
-  }
-
-  .icon-btn:hover:not(:disabled) {
-    background: var(--color-accent-muted);
-    border-color: var(--color-border-default);
-    color: var(--color-text-primary);
-  }
-
-  .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .icon-btn.is-copied {
     color: var(--color-success);
   }
 
-  .icon-btn.is-active-toggle {
-    color: var(--color-success);
-  }
-
-  .icon-btn.is-danger:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--color-danger) 14%, transparent);
-    border-color: color-mix(in oklab, var(--color-danger) 24%, transparent);
-    color: var(--color-danger);
-  }
-
-  .link-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-  }
-
-  .meta-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    height: 20px;
-    padding: 0 7px;
-    border-radius: var(--radius-full);
-    font-size: 10px;
-    font-weight: 500;
-    background: color-mix(in oklab, var(--color-bg-overlay) 80%, transparent);
-    border: 1px solid var(--color-border-subtle);
-    color: var(--color-text-secondary);
-  }
-
-  .meta-badge.is-inactive-badge {
-    background: color-mix(in oklab, var(--color-danger) 12%, transparent);
-    border-color: color-mix(in oklab, var(--color-danger) 20%, transparent);
-    color: var(--color-danger);
+  .composer-preview {
+    align-items: flex-start;
   }
 
   .empty-links {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-5) 0 var(--space-2);
-    color: var(--color-text-secondary);
-    text-align: center;
-    font-size: var(--text-sm);
-  }
-
-  .add-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: 40px;
-    padding: 0 var(--space-4);
-    border-radius: var(--radius-md);
-    border: 1px dashed var(--color-border-default);
-    background: transparent;
-    color: var(--color-text-secondary);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    transition: all var(--duration-fast) var(--ease-in-out);
-    width: 100%;
-    justify-content: center;
-  }
-
-  .add-btn:hover {
-    background: var(--color-accent-muted);
-    border-color: var(--color-border-strong);
-    color: var(--color-text-primary);
-  }
-
-  .create-form {
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .form-title {
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    flex: 1;
-  }
-
-  .field-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-3);
+    justify-items: center;
+    text-align: center;
+    gap: var(--space-2);
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .field,
+  .field-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .field-label {
@@ -751,7 +809,7 @@
   }
 
   .field-input {
-    height: 38px;
+    height: 42px;
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border-default);
     background: var(--color-bg-elevated);
@@ -761,8 +819,6 @@
     outline: none;
     width: 100%;
     box-sizing: border-box;
-    transition: border-color var(--duration-fast) var(--ease-in-out),
-                box-shadow var(--duration-fast) var(--ease-in-out);
   }
 
   .field-input:focus {
@@ -770,8 +826,24 @@
     box-shadow: 0 0 0 3px var(--color-accent-muted);
   }
 
+  .field-inline {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-default);
+    background: var(--color-bg-elevated);
+    padding-inline: var(--space-3);
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .field-input.is-inline {
+    border: none;
+    background: transparent;
+    padding-left: 0;
+    box-shadow: none;
+  }
+
   .field-hint {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--color-text-tertiary);
     font-family: var(--font-mono);
   }
@@ -789,70 +861,102 @@
     right: 8px;
     top: 50%;
     transform: translateY(-50%);
-    background: transparent;
     border: none;
-    color: var(--color-text-secondary);
-    display: flex;
-    align-items: center;
     padding: 4px;
-    border-radius: var(--radius-sm);
   }
 
-  .show-toggle:hover { color: var(--color-text-primary); }
-
-  .form-actions {
+  .form-actions,
+  .card-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--space-2);
-    justify-content: flex-end;
-    padding-top: var(--space-1);
   }
 
+  .secondary-btn,
+  .danger-btn,
+  .add-btn,
   .btn-primary,
   .btn-secondary {
-    height: 38px;
-    padding: 0 var(--space-4);
+    min-height: 40px;
     border-radius: var(--radius-md);
-    font-size: var(--text-sm);
-    font-weight: 600;
+    border: 1px solid var(--color-border-default);
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-2);
-    cursor: pointer;
+    padding: 0 var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
     transition: opacity var(--duration-fast) var(--ease-in-out);
   }
 
-  .btn-primary {
-    background: var(--color-accent);
-    color: var(--color-text-on-accent);
-    border: 1px solid var(--color-border-default);
-  }
-
-  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
-  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-
+  .secondary-btn,
   .btn-secondary {
     background: transparent;
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-border-default);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--color-accent-muted);
     color: var(--color-text-primary);
   }
 
-  .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+  .danger-btn {
+    background: color-mix(in oklab, var(--color-danger) 10%, transparent);
+    border-color: color-mix(in oklab, var(--color-danger) 24%, transparent);
+    color: var(--color-danger);
+  }
 
-  @media (max-width: 480px) {
+  .add-btn,
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-text-on-accent);
+  }
+
+  .secondary-btn,
+  .danger-btn,
+  .btn-secondary,
+  .btn-primary {
+    flex: 1;
+  }
+
+  .secondary-btn:disabled,
+  .danger-btn:disabled,
+  .add-btn:disabled,
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .icon-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  @media (min-width: 720px) {
+    .summary-stats,
+    .stat-grid,
     .field-row {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .modal {
+      width: min(100vw - 12px, 720px);
+      max-height: 96dvh;
     }
 
-    .modal-sub { max-width: 160px; }
+    .modal-header,
+    .modal-body {
+      padding-inline: var(--space-3);
+    }
+
+    .card-actions {
+      flex-direction: column;
+    }
+
+    .modal-sub {
+      max-width: 180px;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .modal { transition-duration: 0.01ms; }
-    .spin, .spin-sm { animation: none; }
+    .spin,
+    .spin-sm {
+      animation: none;
+    }
   }
 </style>
