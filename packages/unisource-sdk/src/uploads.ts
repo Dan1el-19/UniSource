@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString, positiveInt, uploadDestinationSchema, FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from './primitives';
+import { nonEmptyString, positiveInt, uploadDestinationSchema, uploadStatusSchema, FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from './primitives';
 
 // ─── Init: R2 ────────────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ export const uploadRecordSchema = z.object({
   size: positiveInt,
   mime_type: nonEmptyString,
   destination: uploadDestinationSchema,
-  status: z.enum(['pending', 'completed', 'failed']),
+  status: uploadStatusSchema,
   expires_at: positiveInt,
   created_at: positiveInt,
   updated_at: positiveInt,
