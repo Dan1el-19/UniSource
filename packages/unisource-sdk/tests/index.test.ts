@@ -7,6 +7,7 @@ import {
   unlockPublicFile,
   UnisourceClient,
   UnisourceError,
+  UnisourceNetworkError,
   uploadAppwriteInitResponseSchema,
   uploadRecordDetailResponseSchema,
   uploadRecordSchema,
@@ -317,5 +318,17 @@ describe('unisource-sdk HTTP helpers', () => {
     await client.myFiles.trash(undefined, controller.signal);
     await client.folders.get('folder-1', controller.signal);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws UnisourceNetworkError on network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+
+    const client = new UnisourceClient({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'default',
+      getToken: async () => 'tok',
+    });
+
+    await expect(client.myFiles.list()).rejects.toBeInstanceOf(UnisourceNetworkError);
   });
 });
