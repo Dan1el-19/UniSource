@@ -134,6 +134,7 @@ export {
   shareLinkListResponseSchema,
   shareLinkCreateResponseSchema,
   shareLinkUpdateResponseSchema,
+  shareLinkDeleteResponseSchema,
   publicFileAccessResponseSchema,
   publicFileLockedResponseSchema,
 } from './shareLinks';
@@ -144,6 +145,7 @@ export type {
   ShareLinkListResponse,
   ShareLinkCreateResponse,
   ShareLinkUpdateResponse,
+  ShareLinkDeleteResponse,
   PublicFileAccessResponse,
   PublicFileLockedResponse,
 } from './shareLinks';

@@ -11,6 +11,7 @@ import {
   uploadRecordDetailResponseSchema,
   uploadRecordSchema,
   uploadR2InitRequestSchema,
+  shareLinkUpdateRequestSchema,
 } from '../src';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -143,6 +144,12 @@ describe('unisource-sdk schemas', () => {
 
     // Empty object should FAIL
     expect(adminServiceUpdateRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('shareLinkUpdateRequestSchema rejects empty object', () => {
+    expect(shareLinkUpdateRequestSchema.safeParse({}).success).toBe(false);
+    expect(shareLinkUpdateRequestSchema.safeParse({ is_active: false }).success).toBe(true);
+    expect(shareLinkUpdateRequestSchema.safeParse({ name: null }).success).toBe(true);
   });
 });
 

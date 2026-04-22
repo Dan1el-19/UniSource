@@ -54,6 +54,7 @@ import type {
   PublicFileLockedResponse,
   ShareLinkUpdateRequest,
   ShareLinkUpdateResponse,
+  ShareLinkDeleteResponse,
 } from './shareLinks';
 
 // ─── SDK Error classes ────────────────────────────────────────────────────────
@@ -371,7 +372,7 @@ export class UnisourceClient {
       apiRequest(this.config, 'PATCH', `/share-links/${linkId}`, { body, signal }),
 
     /** Permanently delete a share link */
-    delete: (linkId: string, signal?: AbortSignal): Promise<{ success: true; id: string }> =>
+    delete: (linkId: string, signal?: AbortSignal): Promise<ShareLinkDeleteResponse> =>
       apiRequest(this.config, 'DELETE', `/share-links/${linkId}`, { signal }),
   };
 }
