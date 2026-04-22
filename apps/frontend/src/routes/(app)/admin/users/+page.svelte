@@ -205,13 +205,19 @@
   async function handleQuotaSave(user: AdminUser) {
     const draft = userDrafts[user.id];
     if (!draft) return;
+    clearMessages();
+    let limitBytes: number | null;
+    try {
+      limitBytes = draft.quotaEnabled
+        ? parseLimitDraft(draft.quotaValue, draft.quotaUnit)
+        : null;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Nieprawidłowa wartość limitu.';
+      return;
+    }
     await updateUser(
       user.id,
-      {
-        max_storage_bytes: draft.quotaEnabled
-          ? parseLimitDraft(draft.quotaValue, draft.quotaUnit)
-          : null,
-      },
+      { max_storage_bytes: limitBytes },
       `Zapisano limit miejsca dla ${user.email}.`,
       { closeModal: true }
     );
@@ -460,7 +466,7 @@
       <div class="modal-grid">
         <label class="field-group">
           <span class="meta-text">Nowe hasło</span>
-          <AdminInput bind:value={modalDraft.password} type="text" placeholder="Min. 8 znaków" />
+          <AdminInput bind:value={modalDraft.password} type="password" placeholder="Min. 8 znaków" />
         </label>
         <p class="body-text">Po zmianie wszystkie aktywne sesje tego użytkownika zostaną wylogowane.</p>
       </div>
