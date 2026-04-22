@@ -1,17 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import {
-    Activity,
-    HardDrive,
-    KeyRound,
-    LoaderCircle,
-    RefreshCw,
-    Save,
-    Search,
-    ShieldCheck,
-    Upload,
-    Users,
-  } from 'lucide-svelte';
+  import { Activity, ArrowRight, HardDrive, KeyRound, LoaderCircle, MoreHorizontal, RefreshCw, Save, Search, Upload, X } from 'lucide-svelte';
   import type {
     AdminUser,
     AuditLogListResponse,
@@ -23,6 +12,7 @@
   import { authState } from '../../../state/auth.svelte';
 
   type ByteUnit = 'MB' | 'GB' | 'TB';
+  type AdminModalMode = 'identity' | 'quota' | 'password' | null;
 
   const BYTE_FACTORS: Record<ByteUnit, number> = {
     MB: 1024 ** 2,
@@ -79,6 +69,10 @@
   let serviceStorageDraft = $state<LimitDraft>({ value: '', unit: 'GB' });
   let serviceFileDraft = $state<LimitDraft>({ value: '', unit: 'MB' });
 
+  let activeMenuUserId = $state<string | null>(null);
+  let modalMode = $state<AdminModalMode>(null);
+  let modalUserId = $state<string | null>(null);
+
   function formatBytes(bytes: number | null | undefined) {
     if (!bytes) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -98,6 +92,7 @@
     const exactUnits: ByteUnit[] = ['TB', 'GB', 'MB'];
     const exactUnit = exactUnits.find((unit) => bytes % BYTE_FACTORS[unit] === 0);
     const unit = exactUnit ?? preferredUnit;
+
     return {
       value: String(Math.max(1, Math.round((bytes / BYTE_FACTORS[unit]) * 100) / 100)),
       unit,
@@ -113,7 +108,10 @@
   }
 
   function createUserDraft(user: AdminUser): UserDraft {
-    const quotaDraft = user.max_storage_bytes ? bytesToDraft(user.max_storage_bytes, 'GB') : { value: '', unit: 'GB' as ByteUnit };
+    const quotaDraft = user.max_storage_bytes
+      ? bytesToDraft(user.max_storage_bytes, 'GB')
+      : { value: '', unit: 'GB' as ByteUnit };
+
     return {
       role: user.role,
       labelsText: user.labels.join(', '),
@@ -128,11 +126,13 @@
 
   function hydrateDrafts(items: AdminUser[]) {
     const nextDrafts: Record<string, UserDraft> = {};
+
     for (const user of items) {
       nextDrafts[user.id] = userDrafts[user.id] ?? createUserDraft(user);
       nextDrafts[user.id].role = user.role;
       nextDrafts[user.id].labelsText = user.labels.join(', ');
       nextDrafts[user.id].quotaEnabled = user.max_storage_bytes !== null;
+
       if (user.max_storage_bytes !== null) {
         const quotaDraft = bytesToDraft(user.max_storage_bytes, nextDrafts[user.id].quotaUnit);
         nextDrafts[user.id].quotaValue = quotaDraft.value;
@@ -141,6 +141,7 @@
         nextDrafts[user.id].quotaValue = '';
       }
     }
+
     userDrafts = nextDrafts;
   }
 
@@ -151,12 +152,14 @@
 
   async function loadUsers() {
     isLoadingUsers = true;
+
     try {
       const response = await apiClient.admin.listUsers({
         search: search.trim() || undefined,
         limit: 24,
         offset: 0,
       });
+
       users = response.items;
       usersTotal = response.total;
       hydrateDrafts(response.items);
@@ -169,8 +172,8 @@
     const [svcRes, usageRes, auditRes, uploadsRes] = await Promise.all([
       apiClient.admin.serviceDetail(),
       apiClient.admin.usage(),
-      apiClient.admin.auditLog({ limit: 10 }),
-      apiClient.admin.listUploads({ limit: 8 }),
+      apiClient.admin.auditLog({ limit: 6 }),
+      apiClient.admin.listUploads({ limit: 6 }),
     ]);
 
     service = svcRes.service;
@@ -183,6 +186,7 @@
   async function refreshAll() {
     isRefreshing = true;
     error = null;
+
     try {
       await Promise.all([loadDashboard(), loadUsers()]);
     } catch (err) {
@@ -198,8 +202,35 @@
     success = null;
   }
 
+  function closeUserModal() {
+    modalMode = null;
+    modalUserId = null;
+  }
+
+  function toggleUserMenu(userId: string) {
+    activeMenuUserId = activeMenuUserId === userId ? null : userId;
+  }
+
+  function openUserModal(user: AdminUser, mode: Exclude<AdminModalMode, null>) {
+    activeMenuUserId = null;
+    modalUserId = user.id;
+    modalMode = mode;
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return;
+
+    if (modalMode) {
+      closeUserModal();
+      return;
+    }
+
+    activeMenuUserId = null;
+  }
+
   async function handleServiceSave() {
     if (!service) return;
+
     clearMessages();
     isSavingService = true;
 
@@ -208,6 +239,7 @@
         max_storage_bytes: parseLimitDraft(serviceStorageDraft),
         max_file_size_bytes: parseLimitDraft(serviceFileDraft),
       });
+
       service = response.service;
       syncServiceDrafts(response.service);
       usage = await apiClient.admin.usage();
@@ -219,7 +251,12 @@
     }
   }
 
-  async function updateUser(userId: string, changes: Parameters<typeof apiClient.admin.updateUser>[1], message: string) {
+  async function updateUser(
+    userId: string,
+    changes: Parameters<typeof apiClient.admin.updateUser>[1],
+    message: string,
+    options?: { closeModal?: boolean }
+  ) {
     clearMessages();
     userDrafts[userId].isSaving = true;
 
@@ -229,6 +266,10 @@
       hydrateDrafts(users);
       usage = await apiClient.admin.usage();
       success = message;
+
+      if (options?.closeModal) {
+        closeUserModal();
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Nie udało się zaktualizować użytkownika.';
     } finally {
@@ -236,7 +277,7 @@
     }
   }
 
-  async function handleUserSave(user: AdminUser) {
+  async function handleIdentitySave(user: AdminUser) {
     const draft = userDrafts[user.id];
     if (!draft) return;
 
@@ -245,15 +286,31 @@
       {
         role: draft.role.trim() || 'user',
         labels: normalizeLabelInput(draft.labelsText),
+      },
+      `Zapisano rolę i labelsy użytkownika ${user.email}.`,
+      { closeModal: true }
+    );
+  }
+
+  async function handleQuotaSave(user: AdminUser) {
+    const draft = userDrafts[user.id];
+    if (!draft) return;
+
+    await updateUser(
+      user.id,
+      {
         max_storage_bytes: draft.quotaEnabled
           ? parseLimitDraft({ value: draft.quotaValue, unit: draft.quotaUnit })
           : null,
       },
-      `Zapisano ustawienia użytkownika ${user.email}.`
+      `Zapisano limit miejsca dla ${user.email}.`,
+      { closeModal: true }
     );
   }
 
   async function handleStatusToggle(user: AdminUser) {
+    activeMenuUserId = null;
+
     await updateUser(
       user.id,
       { status: !user.status },
@@ -275,10 +332,22 @@
       await apiClient.admin.resetUserPassword(user.id, { password: draft.password.trim() });
       draft.password = '';
       success = `Nadpisano hasło użytkownika ${user.email} i wylogowano jego sesje.`;
+      closeUserModal();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Nie udało się nadpisać hasła.';
     } finally {
       draft.isResetting = false;
+    }
+  }
+
+  async function handleSearchSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    error = null;
+
+    try {
+      await loadUsers();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Nie udało się pobrać listy użytkowników.';
     }
   }
 
@@ -308,32 +377,44 @@
     };
   });
 
+  $effect(() => {
+    if (modalUserId && !users.some((user) => user.id === modalUserId)) {
+      closeUserModal();
+    }
+
+    if (activeMenuUserId && !users.some((user) => user.id === activeMenuUserId)) {
+      activeMenuUserId = null;
+    }
+  });
+
   const usageColor = $derived.by(() => {
     if (!usage) return 'var(--color-success)';
     if (usage.used_percent >= 85) return 'var(--color-danger)';
     if (usage.used_percent >= 65) return 'var(--color-warning)';
     return 'var(--color-success)';
   });
+
+  const auditPreview = $derived(auditLog.slice(0, 3));
+  const uploadPreview = $derived(uploads.slice(0, 3));
+  const modalUser = $derived(modalUserId ? users.find((user) => user.id === modalUserId) ?? null : null);
+  const modalDraft = $derived(modalUserId ? userDrafts[modalUserId] ?? null : null);
 </script>
 
+<svelte:window onkeydown={handleWindowKeydown} />
+
 <section class="admin-wrap">
-  <header class="hero glass">
-    <div class="hero-copy">
-      <span class="hero-kicker">Admin access</span>
-      <div class="hero-title-row">
-        <div class="hero-icon"><ShieldCheck size={22} /></div>
-        <div>
-          <h1>Panel Administratora</h1>
-          <p>Limity serwisu, użytkownicy Appwrite Auth i monitoring w jednym miejscu.</p>
-        </div>
-      </div>
+  <div class="page-header">
+    <div class="page-copy">
+      <span class="eyebrow">Admin</span>
+      <h1>Panel administracyjny</h1>
+      <p>Lżejszy, bardziej czytelny układ do limitów, użytkowników i szybkiego podglądu zdarzeń.</p>
     </div>
 
-    <button class="ghost-btn" type="button" onclick={refreshAll} disabled={isRefreshing || isLoading}>
+    <button class="ghost-btn compact" type="button" onclick={refreshAll} disabled={isRefreshing || isLoading}>
       <RefreshCw size={16} class={isRefreshing ? 'is-spinning' : ''} />
       {isRefreshing ? 'Odświeżanie…' : 'Odśwież'}
     </button>
-  </header>
+  </div>
 
   {#if error}
     <div class="banner banner-error" role="alert">{error}</div>
@@ -348,149 +429,159 @@
       <div class="spin"><LoaderCircle size={36} /></div>
     </div>
   {:else if service && usage}
-    <div class="metrics-grid">
-      <article class="card glass accent-card">
-        <div class="card-head">
-          <HardDrive size={18} />
-          <span>Serwis</span>
-        </div>
-        <strong>{service.name}</strong>
-        <span class="muted mono">{service.id}</span>
-        <div class="usage-bar-track">
-          <div class="usage-bar-fill" style="width: {Math.min(usage.used_percent, 100)}%; background: {usageColor};"></div>
-        </div>
-        <div class="metric-row">
-          <span>{usage.used_percent.toFixed(1)}%</span>
-          <span>{formatBytes(usage.current_used_bytes)} / {formatBytes(usage.max_storage_bytes)}</span>
-        </div>
-      </article>
-
-      <article class="card glass">
-        <div class="card-head">
-          <Users size={18} />
-          <span>Użytkownicy</span>
-        </div>
-        <strong>{usersTotal}</strong>
-        <span class="muted">Łącznie w bieżącym widoku serwisu</span>
-      </article>
-
-      <article class="card glass">
-        <div class="card-head">
-          <Upload size={18} />
-          <span>Uploady</span>
-        </div>
-        <strong>{uploads.length}</strong>
-        <span class="muted">Ostatnie operacje uploadu</span>
-      </article>
-    </div>
-
-    <div class="content-grid">
-      <section class="card glass">
+    <div class="top-grid">
+      <section class="card liquid-card overview-card">
         <div class="section-head">
           <div>
-            <h2>Ustawienia serwisu</h2>
-            <p>Bez sztywnych progów. Wpisujesz własne wartości i jednostki.</p>
+            <span class="section-kicker">Serwis</span>
+            <h2>{service.name}</h2>
+          </div>
+          <span class="surface-id mono">{service.id}</span>
+        </div>
+
+        <div class="usage-panel">
+          <div class="usage-caption">
+            <div>
+              <strong>{usage.used_percent.toFixed(1)}%</strong>
+              <p>Zajętego miejsca</p>
+            </div>
+            <span>{formatBytes(usage.current_used_bytes)} / {formatBytes(usage.max_storage_bytes)}</span>
+          </div>
+
+          <div class="usage-bar-track">
+            <div class="usage-bar-fill" style="width: {Math.min(usage.used_percent, 100)}%; background: {usageColor};"></div>
           </div>
         </div>
 
-        <div class="field-grid">
-          <label class="field">
-            <span>Limit storage</span>
-            <div class="field-inline">
-              <input bind:value={serviceStorageDraft.value} type="number" min="1" step="0.01" />
-              <select bind:value={serviceStorageDraft.unit}>
-                <option value="MB">MB</option>
-                <option value="GB">GB</option>
-                <option value="TB">TB</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="field">
-            <span>Maksymalny rozmiar pliku</span>
-            <div class="field-inline">
-              <input bind:value={serviceFileDraft.value} type="number" min="1" step="0.01" />
-              <select bind:value={serviceFileDraft.unit}>
-                <option value="MB">MB</option>
-                <option value="GB">GB</option>
-                <option value="TB">TB</option>
-              </select>
-            </div>
-          </label>
+        <div class="micro-grid">
+          <article class="micro-card">
+            <span>Maks. plik</span>
+            <strong>{formatBytes(service.max_file_size_bytes)}</strong>
+          </article>
+          <article class="micro-card">
+            <span>Użytkownicy</span>
+            <strong>{usersTotal}</strong>
+          </article>
+          <article class="micro-card">
+            <span>Podgląd zdarzeń</span>
+            <strong>{auditLog.length}</strong>
+          </article>
         </div>
 
-        <button class="primary-btn" type="button" onclick={handleServiceSave} disabled={isSavingService}>
-          <Save size={16} />
-          {isSavingService ? 'Zapisywanie…' : 'Zapisz limity serwisu'}
-        </button>
+        <div class="settings-shell">
+          <div class="section-head section-head-tight">
+            <div>
+              <h3>Limity serwisu</h3>
+              <p>Własne wartości i jednostki, bez sztywnych progów.</p>
+            </div>
+          </div>
+
+          <div class="field-grid compact-grid">
+            <label class="field">
+              <span>Limit storage</span>
+              <div class="field-inline">
+                <input bind:value={serviceStorageDraft.value} type="number" min="1" step="0.01" />
+                <select bind:value={serviceStorageDraft.unit}>
+                  <option value="MB">MB</option>
+                  <option value="GB">GB</option>
+                  <option value="TB">TB</option>
+                </select>
+              </div>
+            </label>
+
+            <label class="field">
+              <span>Maksymalny rozmiar pliku</span>
+              <div class="field-inline">
+                <input bind:value={serviceFileDraft.value} type="number" min="1" step="0.01" />
+                <select bind:value={serviceFileDraft.unit}>
+                  <option value="MB">MB</option>
+                  <option value="GB">GB</option>
+                  <option value="TB">TB</option>
+                </select>
+              </div>
+            </label>
+          </div>
+
+          <button class="primary-btn compact" type="button" onclick={handleServiceSave} disabled={isSavingService}>
+            <Save size={16} />
+            {isSavingService ? 'Zapisywanie…' : 'Zapisz limity'}
+          </button>
+        </div>
       </section>
 
-      <section class="card glass">
+      <section class="card liquid-card activity-card">
         <div class="section-head">
           <div>
-            <h2>Feed operacyjny</h2>
-            <p>Najnowsze zdarzenia i uploady w układzie mobilnym, bez ciasnych tabel.</p>
+            <span class="section-kicker">Feed</span>
+            <h2>Ostatnie zdarzenia</h2>
+            <p>Krótki podgląd. Pełny widok przeniesiony na osobną podstronę.</p>
           </div>
+
+          <a class="text-link" href="/admin/log">
+            Pełny log
+            <ArrowRight size={15} />
+          </a>
         </div>
 
-        <div class="feed-block">
-          <div class="feed-head">
-            <Activity size={16} />
-            <span>Audit log</span>
-          </div>
-          {#if auditLog.length === 0}
-            <p class="empty-text">Brak zdarzeń.</p>
-          {:else}
-            <div class="feed-list">
-              {#each auditLog as event (event.id)}
-                <article class="feed-item">
-                  <span class="pill">{actionLabels[event.action] ?? event.action}</span>
-                  <strong>{event.resource_type}</strong>
-                  <span class="muted mono">{event.user_id}</span>
-                  <span class="muted">{formatDate(event.created_at)}</span>
-                </article>
-              {/each}
+        <div class="preview-grid">
+          <div class="preview-column">
+            <div class="preview-head">
+              <Activity size={15} />
+              <span>Audit log</span>
             </div>
-          {/if}
-        </div>
 
-        <div class="feed-block">
-          <div class="feed-head">
-            <Upload size={16} />
-            <span>Ostatnie uploady</span>
+            {#if auditPreview.length === 0}
+              <p class="empty-text">Brak zdarzeń.</p>
+            {:else}
+              <div class="preview-list">
+                {#each auditPreview as event (event.id)}
+                  <article class="preview-item">
+                    <div class="preview-copy">
+                      <strong>{actionLabels[event.action] ?? event.action}</strong>
+                      <span class="muted truncate">{event.resource_type}</span>
+                    </div>
+                    <span class="muted preview-time">{formatDate(event.created_at)}</span>
+                  </article>
+                {/each}
+              </div>
+            {/if}
           </div>
-          {#if uploads.length === 0}
-            <p class="empty-text">Brak uploadów.</p>
-          {:else}
-            <div class="feed-list">
-              {#each uploads as upload (upload.id)}
-                <article class="feed-item">
-                  <strong class="truncate">{upload.filename}</strong>
-                  <span class="muted">{formatBytes(upload.size)}</span>
-                  <span class="pill status-{upload.status}">{uploadStatusLabels[upload.status] ?? upload.status}</span>
-                  <span class="muted">{formatDate(upload.created_at)}</span>
-                </article>
-              {/each}
+
+          <div class="preview-column">
+            <div class="preview-head">
+              <Upload size={15} />
+              <span>Uploady</span>
             </div>
-          {/if}
+
+            {#if uploadPreview.length === 0}
+              <p class="empty-text">Brak uploadów.</p>
+            {:else}
+              <div class="preview-list">
+                {#each uploadPreview as upload (upload.id)}
+                  <article class="preview-item">
+                    <div class="preview-copy">
+                      <strong class="truncate">{upload.filename}</strong>
+                      <span class="muted">{formatBytes(upload.size)}</span>
+                    </div>
+                    <span class="pill status-{upload.status}">{uploadStatusLabels[upload.status] ?? upload.status}</span>
+                  </article>
+                {/each}
+              </div>
+            {/if}
+          </div>
         </div>
       </section>
     </div>
 
-    <section class="card glass user-section">
+    <section class="card liquid-card user-section">
       <div class="section-head section-head-stack">
         <div>
-          <h2>Zarządzanie użytkownikami</h2>
-          <p>Role, labelsy Appwrite, limity per-user, blokada kont i nadpisanie hasła.</p>
+          <span class="section-kicker">Użytkownicy</span>
+          <h2>Prosta lista z akcjami</h2>
+          <p>Role, labelsy, limity i hasło są dostępne z menu, bez przeładowania ekranu formularzami.</p>
         </div>
 
-        <form
-          class="search-bar"
-          onsubmit={(event) => {
-            event.preventDefault();
-            loadUsers();
-          }}
-        >
+        <form class="search-bar" onsubmit={handleSearchSubmit}>
           <Search size={16} />
           <input bind:value={search} type="search" placeholder="Szukaj po emailu lub nazwie" />
           <button class="ghost-btn compact" type="submit" disabled={isLoadingUsers}>
@@ -504,91 +595,79 @@
       {:else if users.length === 0}
         <p class="empty-text">Brak użytkowników dla bieżącego filtra.</p>
       {:else}
-        <div class="user-grid">
+        <div class="user-list">
           {#each users as user (user.id)}
             {@const draft = userDrafts[user.id]}
-            <article class="user-card">
-              <div class="user-top">
+            <article class="user-row">
+              <div class="user-main">
                 <div>
                   <h3>{user.name || user.email}</h3>
                   <p class="muted">{user.email}</p>
                 </div>
+
                 <div class="pill-group">
                   <span class="pill {user.status ? 'is-success' : 'is-danger'}">{user.status ? 'Aktywny' : 'Zablokowany'}</span>
+                  <span class="pill">{user.role}</span>
                   {#if user.labels.includes('admin')}
                     <span class="pill is-accent">admin</span>
                   {/if}
                 </div>
               </div>
 
-              <div class="usage-panel">
+              <div class="user-storage">
                 <div class="usage-caption">
                   <span>Zajęte miejsce</span>
                   <strong>{formatBytes(user.current_used_bytes)}</strong>
                 </div>
-                <div class="usage-bar-track">
+
+                <div class="usage-bar-track compact-track">
                   <div
                     class="usage-bar-fill"
                     style="width: {Math.min((user.current_used_bytes / Math.max(user.effective_max_storage_bytes, 1)) * 100, 100)}%;"
                   ></div>
                 </div>
-                <span class="muted">
-                  Efektywny limit: {formatBytes(user.effective_max_storage_bytes)}
+
+                <p class="muted">
+                  Limit efektywny: {formatBytes(user.effective_max_storage_bytes)}
                   {#if user.max_storage_bytes === null}
-                    <span> · dziedziczy limit serwisu</span>
+                    · dziedziczy z serwisu
                   {/if}
-                </span>
+                </p>
               </div>
 
-              <div class="field-grid dense">
-                <label class="field">
-                  <span>Rola aplikacyjna</span>
-                  <input bind:value={draft.role} type="text" placeholder="np. user, admin, manager" />
-                </label>
+              <div class="user-actions">
+                <button
+                  class="ghost-btn icon-btn"
+                  type="button"
+                  aria-label="Opcje dla {user.email}"
+                  aria-expanded={activeMenuUserId === user.id}
+                  onclick={() => toggleUserMenu(user.id)}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
 
-                <label class="field">
-                  <span>Labelsy Appwrite</span>
-                  <input bind:value={draft.labelsText} type="text" placeholder="admin, beta, vip" />
-                </label>
-              </div>
-
-              <div class="quota-box">
-                <label class="toggle-row">
-                  <input bind:checked={draft.quotaEnabled} type="checkbox" />
-                  <span>Ustaw własny limit dla tego użytkownika</span>
-                </label>
-
-                {#if draft.quotaEnabled}
-                  <div class="field-inline">
-                    <input bind:value={draft.quotaValue} type="number" min="1" step="0.01" placeholder="np. 25" />
-                    <select bind:value={draft.quotaUnit}>
-                      <option value="MB">MB</option>
-                      <option value="GB">GB</option>
-                      <option value="TB">TB</option>
-                    </select>
+                {#if activeMenuUserId === user.id}
+                  <div class="menu-panel glass" role="menu">
+                    <button type="button" role="menuitem" onclick={() => openUserModal(user, 'identity')}>
+                      Rola i labelsy
+                    </button>
+                    <button type="button" role="menuitem" onclick={() => openUserModal(user, 'quota')}>
+                      Limit miejsca
+                    </button>
+                    <button type="button" role="menuitem" onclick={() => openUserModal(user, 'password')}>
+                      Nadpisz hasło
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      class={user.status ? 'menu-danger' : ''}
+                      onclick={() => handleStatusToggle(user)}
+                      disabled={draft.isSaving}
+                    >
+                      {user.status ? 'Zablokuj konto' : 'Aktywuj konto'}
+                    </button>
                   </div>
                 {/if}
-              </div>
-
-              <div class="password-box">
-                <label class="field">
-                  <span>Nowe hasło</span>
-                  <input bind:value={draft.password} type="text" placeholder="Min. 8 znaków" />
-                </label>
-                <button class="ghost-btn compact" type="button" onclick={() => handlePasswordReset(user)} disabled={draft.isResetting}>
-                  <KeyRound size={15} />
-                  {draft.isResetting ? 'Zapisywanie…' : 'Nadpisz hasło'}
-                </button>
-              </div>
-
-              <div class="card-actions">
-                <button class="ghost-btn" type="button" onclick={() => handleStatusToggle(user)} disabled={draft.isSaving}>
-                  {user.status ? 'Zablokuj konto' : 'Aktywuj konto'}
-                </button>
-                <button class="primary-btn compact" type="button" onclick={() => handleUserSave(user)} disabled={draft.isSaving}>
-                  <Save size={15} />
-                  {draft.isSaving ? 'Zapisywanie…' : 'Zapisz użytkownika'}
-                </button>
               </div>
             </article>
           {/each}
@@ -598,69 +677,187 @@
   {/if}
 </section>
 
+{#if modalUser && modalDraft && modalMode}
+  <div class="dialog-backdrop" role="presentation" onclick={closeUserModal}></div>
+
+  <div class="dialog glass" role="dialog" aria-modal="true" aria-labelledby="admin-modal-title">
+    <div class="dialog-head">
+      <div>
+        <span class="section-kicker">Użytkownik</span>
+        <h2 id="admin-modal-title">
+          {#if modalMode === 'identity'}
+            Rola i labelsy
+          {:else if modalMode === 'quota'}
+            Limit miejsca
+          {:else}
+            Nadpisanie hasła
+          {/if}
+        </h2>
+        <p>{modalUser.name || modalUser.email} · {modalUser.email}</p>
+      </div>
+
+      <button class="ghost-btn icon-btn" type="button" aria-label="Zamknij modal" onclick={closeUserModal}>
+        <X size={16} />
+      </button>
+    </div>
+
+    {#if modalMode === 'identity'}
+      <div class="dialog-body">
+        <div class="field-grid compact-grid">
+          <label class="field">
+            <span>Rola aplikacyjna</span>
+            <input bind:value={modalDraft.role} type="text" placeholder="np. user, admin, manager" />
+          </label>
+
+          <label class="field">
+            <span>Labelsy Appwrite</span>
+            <input bind:value={modalDraft.labelsText} type="text" placeholder="admin, beta, vip" />
+          </label>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="ghost-btn compact" type="button" onclick={closeUserModal}>
+          Anuluj
+        </button>
+        <button class="primary-btn compact" type="button" onclick={() => handleIdentitySave(modalUser)} disabled={modalDraft.isSaving}>
+          <Save size={16} />
+          {modalDraft.isSaving ? 'Zapisywanie…' : 'Zapisz'}
+        </button>
+      </div>
+    {:else if modalMode === 'quota'}
+      <div class="dialog-body">
+        <div class="quota-summary">
+          <span>Aktualnie zajęte</span>
+          <strong>{formatBytes(modalUser.current_used_bytes)}</strong>
+        </div>
+
+        <label class="toggle-row">
+          <input bind:checked={modalDraft.quotaEnabled} type="checkbox" />
+          <span>Ustaw własny limit dla tego użytkownika</span>
+        </label>
+
+        {#if modalDraft.quotaEnabled}
+          <div class="field-inline">
+            <input bind:value={modalDraft.quotaValue} type="number" min="1" step="0.01" placeholder="np. 25" />
+            <select bind:value={modalDraft.quotaUnit}>
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+              <option value="TB">TB</option>
+            </select>
+          </div>
+        {:else}
+          <p class="muted">Po wyłączeniu użytkownik dziedziczy limit serwisu.</p>
+        {/if}
+      </div>
+
+      <div class="dialog-actions">
+        <button class="ghost-btn compact" type="button" onclick={closeUserModal}>
+          Anuluj
+        </button>
+        <button class="primary-btn compact" type="button" onclick={() => handleQuotaSave(modalUser)} disabled={modalDraft.isSaving}>
+          <Save size={16} />
+          {modalDraft.isSaving ? 'Zapisywanie…' : 'Zapisz limit'}
+        </button>
+      </div>
+    {:else}
+      <div class="dialog-body">
+        <label class="field">
+          <span>Nowe hasło</span>
+          <input bind:value={modalDraft.password} type="text" placeholder="Min. 8 znaków" />
+        </label>
+        <p class="muted">Po zmianie wszystkie aktywne sesje tego użytkownika zostaną wylogowane.</p>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="ghost-btn compact" type="button" onclick={closeUserModal}>
+          Anuluj
+        </button>
+        <button class="primary-btn compact" type="button" onclick={() => handlePasswordReset(modalUser)} disabled={modalDraft.isResetting}>
+          <KeyRound size={16} />
+          {modalDraft.isResetting ? 'Zapisywanie…' : 'Nadpisz hasło'}
+        </button>
+      </div>
+    {/if}
+  </div>
+{/if}
+
 <style>
   .admin-wrap {
     width: 100%;
-    max-width: 1320px;
+    max-width: 1280px;
     margin: 0 auto;
     padding: var(--space-4) var(--shell-px) calc(88px + env(safe-area-inset-bottom));
     display: grid;
     gap: var(--space-4);
   }
 
-  .hero,
-  .card {
-    border-color: var(--color-glass-border);
+  .page-header,
+  .section-head,
+  .usage-caption,
+  .preview-head,
+  .toggle-row,
+  .dialog-head,
+  .dialog-actions,
+  .user-main,
+  .user-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
   }
 
-  .hero {
-    border-radius: calc(var(--radius-xl) + 4px);
-    padding: var(--space-5);
+  .page-header,
+  .section-head,
+  .dialog-head {
+    align-items: flex-start;
+  }
+
+  .page-header {
+    padding-bottom: var(--space-1);
+  }
+
+  .page-copy {
     display: grid;
-    gap: var(--space-4);
-    background:
-      radial-gradient(circle at top right, color-mix(in oklab, var(--color-accent) 15%, transparent), transparent 36%),
-      linear-gradient(180deg, color-mix(in oklab, var(--color-bg-elevated) 90%, transparent), color-mix(in oklab, var(--color-bg-surface) 86%, transparent));
+    gap: 6px;
   }
 
-  .hero-kicker {
+  .eyebrow,
+  .section-kicker {
     display: inline-flex;
     width: fit-content;
-    padding: 4px 10px;
+    padding: 5px 10px;
     border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-accent-muted) 78%, transparent);
-    color: var(--color-text-primary);
+    background: color-mix(in oklab, var(--color-bg-overlay) 82%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 70%, transparent);
+    color: var(--color-text-secondary);
     font-size: 11px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
-  .hero-title-row {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-  }
-
-  .hero-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 18px;
-    border: 1px solid var(--color-border-default);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: color-mix(in oklab, var(--color-bg-overlay) 82%, transparent);
-    flex-shrink: 0;
+  h1,
+  h2,
+  h3 {
+    color: var(--color-text-primary);
+    letter-spacing: -0.03em;
   }
 
   h1 {
-    font-size: clamp(1.7rem, 5vw, 2.5rem);
-    line-height: 1;
-    letter-spacing: -0.04em;
-    color: var(--color-text-primary);
+    font-size: clamp(1.6rem, 4vw, 2.2rem);
+    line-height: 1.02;
   }
 
-  .hero p,
+  h2 {
+    font-size: clamp(1.05rem, 3vw, 1.35rem);
+    line-height: 1.1;
+  }
+
+  h3 {
+    font-size: 1rem;
+  }
+
+  .page-copy p,
   .muted,
   .empty-text {
     color: var(--color-text-secondary);
@@ -675,19 +872,19 @@
   }
 
   .banner-error {
-    border-color: color-mix(in oklab, var(--color-danger) 30%, transparent);
-    background: color-mix(in oklab, var(--color-danger) 14%, transparent);
-    color: color-mix(in oklab, var(--color-danger) 90%, #fff);
+    border-color: color-mix(in oklab, var(--color-danger) 28%, transparent);
+    background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+    color: color-mix(in oklab, var(--color-danger) 88%, #fff);
   }
 
   .banner-success {
-    border-color: color-mix(in oklab, var(--color-success) 30%, transparent);
-    background: color-mix(in oklab, var(--color-success) 14%, transparent);
-    color: color-mix(in oklab, var(--color-success) 95%, #fff);
+    border-color: color-mix(in oklab, var(--color-success) 28%, transparent);
+    background: color-mix(in oklab, var(--color-success) 12%, transparent);
+    color: color-mix(in oklab, var(--color-success) 90%, #fff);
   }
 
   .state-wrap {
-    min-height: 44dvh;
+    min-height: 42dvh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -705,81 +902,143 @@
     }
   }
 
-  .metrics-grid,
-  .content-grid,
-  .user-grid,
-  .field-grid {
-    display: grid;
-    gap: var(--space-4);
-  }
-
-  .metrics-grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  }
-
-  .content-grid {
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  }
-
-  .card,
-  .user-card {
-    border-radius: calc(var(--radius-lg) + 2px);
-    padding: var(--space-4);
+  .top-grid,
+  .field-grid,
+  .preview-grid,
+  .preview-list,
+  .micro-grid,
+  .user-list {
     display: grid;
     gap: var(--space-3);
   }
 
-  .accent-card {
-    background:
-      linear-gradient(145deg, color-mix(in oklab, var(--color-bg-elevated) 92%, transparent), color-mix(in oklab, var(--color-bg-surface) 84%, transparent)),
-      radial-gradient(circle at top right, color-mix(in oklab, var(--color-accent) 20%, transparent), transparent 40%);
+  .top-grid {
+    align-items: start;
   }
 
-  .card-head,
-  .section-head,
-  .feed-head,
-  .metric-row,
-  .toggle-row,
-  .card-actions,
-  .password-box,
-  .user-top,
-  .usage-caption {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  .card,
+  .dialog {
+    border-radius: calc(var(--radius-lg) + 2px);
+    border-color: color-mix(in oklab, var(--color-glass-border) 92%, rgba(255, 255, 255, 0.04));
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--color-bg-elevated) 72%, transparent), color-mix(in oklab, var(--color-bg-surface) 84%, transparent));
+    backdrop-filter: blur(calc(var(--color-glass-blur) * 0.8)) saturate(135%);
+    -webkit-backdrop-filter: blur(calc(var(--color-glass-blur) * 0.8)) saturate(135%);
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .card {
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .surface-id {
+    padding: 7px 10px;
+    border-radius: var(--radius-full);
+    background: color-mix(in oklab, var(--color-bg-overlay) 78%, transparent);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+  }
+
+  .usage-panel,
+  .settings-shell,
+  .micro-card,
+  .preview-item,
+  .user-row,
+  .menu-panel,
+  .quota-summary {
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in oklab, var(--color-border-subtle) 90%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 62%, transparent);
+  }
+
+  .usage-panel,
+  .settings-shell,
+  .preview-item,
+  .user-row,
+  .quota-summary {
+    padding: var(--space-3);
+  }
+
+  .settings-shell {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .section-head-tight {
     gap: var(--space-2);
   }
 
-  .section-head {
-    align-items: flex-start;
+  .usage-caption strong {
+    font-size: 1.2rem;
   }
 
-  .section-head-stack {
-    flex-direction: column;
-    align-items: stretch;
+  .usage-caption p {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+
+  .usage-caption span {
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+
+  .usage-bar-track {
+    height: 10px;
+    border-radius: var(--radius-full);
+    background: color-mix(in oklab, var(--color-bg-surface) 92%, transparent);
+    overflow: hidden;
+  }
+
+  .compact-track {
+    height: 8px;
+  }
+
+  .usage-bar-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: linear-gradient(90deg, var(--color-accent), color-mix(in oklab, var(--color-accent) 70%, #fff));
+  }
+
+  .micro-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .micro-card {
+    padding: var(--space-3);
+    display: grid;
+    gap: 6px;
+  }
+
+  .micro-card span,
+  .field span,
+  .preview-head span {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+  }
+
+  .micro-card strong {
+    font-size: 1rem;
   }
 
   .field-grid {
     grid-template-columns: 1fr;
   }
 
-  .field-grid.dense {
+  .compact-grid {
     gap: var(--space-3);
   }
 
   .field {
     display: grid;
     gap: 6px;
-  }
-
-  .field span,
-  .feed-head span,
-  .card-head span {
-    font-size: var(--text-xs);
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    color: var(--color-text-secondary);
   }
 
   .field input,
@@ -790,7 +1049,7 @@
     height: 42px;
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border-default);
-    background: var(--color-bg-elevated);
+    background: color-mix(in oklab, var(--color-bg-elevated) 88%, transparent);
     color: var(--color-text-primary);
     padding: 0 14px;
     font-size: var(--text-sm);
@@ -803,58 +1062,113 @@
     gap: var(--space-2);
   }
 
-  .usage-panel,
-  .quota-box,
-  .feed-item {
-    border-radius: var(--radius-md);
-    border: 1px solid var(--color-border-subtle);
-    background: color-mix(in oklab, var(--color-bg-surface) 82%, transparent);
-    padding: var(--space-3);
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .usage-bar-track {
-    height: 10px;
-    border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-bg-overlay) 84%, transparent);
-    overflow: hidden;
-  }
-
-  .usage-bar-fill {
-    height: 100%;
-    border-radius: var(--radius-full);
-    background: linear-gradient(90deg, var(--color-accent), color-mix(in oklab, var(--color-accent) 65%, #fff));
-  }
-
   .primary-btn,
-  .ghost-btn {
-    min-height: 42px;
+  .ghost-btn,
+  .text-link {
+    min-height: 40px;
     border-radius: var(--radius-md);
-    padding: 0 16px;
+    padding: 0 14px;
     border: 1px solid var(--color-border-default);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
+    width: fit-content;
+    max-width: 100%;
     font-size: var(--text-sm);
     font-weight: 600;
   }
 
   .primary-btn {
-    background: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 88%, white 12%);
     color: var(--color-text-on-accent);
   }
 
-  .ghost-btn {
-    background: transparent;
+  .ghost-btn,
+  .text-link {
+    background: color-mix(in oklab, var(--color-bg-overlay) 78%, transparent);
     color: var(--color-text-primary);
   }
 
-  .primary-btn.compact,
-  .ghost-btn.compact {
+  .compact {
     min-height: 38px;
     padding: 0 12px;
+  }
+
+  .icon-btn {
+    width: 38px;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .text-link {
+    text-decoration: none;
+  }
+
+  .preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-column {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .preview-head {
+    color: var(--color-text-secondary);
+  }
+
+  .preview-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .preview-copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .preview-time {
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .search-bar {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    align-items: center;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    padding: 0 10px;
+    background: color-mix(in oklab, var(--color-bg-overlay) 74%, transparent);
+  }
+
+  .search-bar input {
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .sub-state {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+
+  .user-list {
+    gap: var(--space-2);
+  }
+
+  .user-row {
+    display: grid;
+    gap: var(--space-3);
+    position: relative;
   }
 
   .pill,
@@ -868,7 +1182,7 @@
     width: fit-content;
     padding: 5px 10px;
     border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-bg-overlay) 85%, transparent);
+    background: color-mix(in oklab, var(--color-bg-surface) 88%, transparent);
     color: var(--color-text-primary);
     font-size: 11px;
     border: 1px solid var(--color-border-subtle);
@@ -892,33 +1206,91 @@
     color: var(--color-text-primary);
   }
 
-  .user-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  }
-
-  .search-bar {
+  .user-storage {
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) auto;
-    gap: var(--space-2);
-    align-items: center;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-lg);
-    padding: 0 10px;
-    background: color-mix(in oklab, var(--color-bg-surface) 84%, transparent);
+    gap: 8px;
   }
 
-  .search-bar input {
+  .menu-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 8;
+    min-width: 220px;
+    padding: 8px;
+    display: grid;
+    gap: 4px;
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.28);
+  }
+
+  .menu-panel button {
+    min-height: 38px;
     border: none;
     background: transparent;
-    padding: 0;
+    color: var(--color-text-primary);
+    border-radius: var(--radius-md);
+    padding: 0 10px;
+    text-align: left;
+    font-size: var(--text-sm);
   }
 
-  .sub-state {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
+  .menu-panel button:hover {
+    background: color-mix(in oklab, var(--color-bg-overlay) 72%, transparent);
+  }
+
+  .menu-danger {
+    color: var(--color-danger) !important;
+  }
+
+  .dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    background: color-mix(in oklab, #000 44%, transparent);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .dialog {
+    position: fixed;
+    z-index: 81;
+    inset: auto 16px 16px;
+    width: auto;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .dialog-body {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .dialog-head p {
     color: var(--color-text-secondary);
     font-size: var(--text-sm);
+  }
+
+  .dialog-actions {
+    justify-content: flex-end;
+  }
+
+  .quota-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .toggle-row {
+    justify-content: flex-start;
+  }
+
+  .toggle-row input {
+    width: 16px;
+    height: 16px;
   }
 
   .mono {
@@ -931,20 +1303,58 @@
     white-space: nowrap;
   }
 
-  @media (min-width: 900px) {
-    .hero {
-      grid-template-columns: 1fr auto;
-      align-items: end;
+  @media (min-width: 860px) {
+    .top-grid {
+      grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
     }
 
-    .section-head-stack {
-      flex-direction: row;
-      align-items: flex-start;
-      justify-content: space-between;
+    .preview-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .field-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .user-row {
+      grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.9fr) auto;
+      align-items: center;
+    }
+
+    .dialog {
+      inset: 50% auto auto 50%;
+      width: min(560px, calc(100% - 32px));
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @media (max-width: 859px) {
+    .micro-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .section-head-stack,
+    .user-main {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .preview-item {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .preview-time {
+      text-align: left;
+    }
+
+    .search-bar {
+      grid-template-columns: 18px minmax(0, 1fr);
+    }
+
+    .search-bar .ghost-btn {
+      grid-column: 1 / -1;
+      width: 100%;
     }
   }
 
