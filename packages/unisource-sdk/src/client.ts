@@ -170,8 +170,15 @@ import type {
 import type {
   ServiceDetailResponse,
   ServiceUsageResponse,
+  AdminServiceUpdateRequest,
+  AdminServiceUpdateResponse,
   AuditLogListQuery,
   AuditLogListResponse,
+  AdminUserListResponse,
+  AdminUserUpdateRequest,
+  AdminUserUpdateResponse,
+  AdminUserPasswordResetRequest,
+  AdminUserPasswordResetResponse,
 } from './services';
 
 import type {
@@ -302,6 +309,10 @@ export class UnisourceClient {
     serviceDetail: (signal?: AbortSignal): Promise<ServiceDetailResponse> =>
       apiRequest(this.config, 'GET', '/admin/service', { signal }),
 
+    /** Update custom service-wide limits */
+    updateService: (body: AdminServiceUpdateRequest, signal?: AbortSignal): Promise<AdminServiceUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', '/admin/service', { body, signal }),
+
     /** Get real-time storage usage for the service */
     usage: (signal?: AbortSignal): Promise<ServiceUsageResponse> =>
       apiRequest(this.config, 'GET', '/admin/service/usage', { signal }),
@@ -325,6 +336,28 @@ export class UnisourceClient {
     /** List audit log events for this service */
     auditLog: (query?: AuditLogListQuery, signal?: AbortSignal): Promise<AuditLogListResponse> =>
       apiRequest(this.config, 'GET', '/admin/audit-log', { query, signal }),
+
+    /** List Appwrite users together with service-specific metadata */
+    listUsers: (
+      query?: { search?: string; offset?: number; limit?: number },
+      signal?: AbortSignal
+    ): Promise<AdminUserListResponse> => apiRequest(this.config, 'GET', '/admin/users', { query, signal }),
+
+    /** Update Appwrite user properties and service-specific quota/role */
+    updateUser: (
+      userId: string,
+      body: AdminUserUpdateRequest,
+      signal?: AbortSignal
+    ): Promise<AdminUserUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/admin/users/${userId}`, { body, signal }),
+
+    /** Overwrite a user's password and revoke active sessions */
+    resetUserPassword: (
+      userId: string,
+      body: AdminUserPasswordResetRequest,
+      signal?: AbortSignal
+    ): Promise<AdminUserPasswordResetResponse> =>
+      apiRequest(this.config, 'POST', `/admin/users/${userId}/password`, { body, signal }),
   };
 
   // ─── Share Links ──────────────────────────────────────────────────────────────

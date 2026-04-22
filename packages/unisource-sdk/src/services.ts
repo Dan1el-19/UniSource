@@ -19,6 +19,15 @@ export const serviceDetailResponseSchema = z.object({
 });
 export type ServiceDetailResponse = z.infer<typeof serviceDetailResponseSchema>;
 
+export const adminServiceUpdateRequestSchema = z.object({
+  max_storage_bytes: positiveInt,
+  max_file_size_bytes: positiveInt,
+});
+export type AdminServiceUpdateRequest = z.infer<typeof adminServiceUpdateRequestSchema>;
+
+export const adminServiceUpdateResponseSchema = serviceDetailResponseSchema;
+export type AdminServiceUpdateResponse = z.infer<typeof adminServiceUpdateResponseSchema>;
+
 // ─── Service usage summary ────────────────────────────────────────────────────
 
 export const serviceUsageResponseSchema = z.object({
@@ -68,3 +77,53 @@ export const auditLogListResponseSchema = z.object({
   limit: positiveInt,
 });
 export type AuditLogListResponse = z.infer<typeof auditLogListResponseSchema>;
+
+export const adminUserSchema = z.object({
+  id: nonEmptyString,
+  name: z.string(),
+  email: z.string().email(),
+  status: z.boolean(),
+  labels: z.array(z.string()),
+  role: nonEmptyString,
+  has_service_access: z.boolean(),
+  max_storage_bytes: positiveInt.nullable(),
+  effective_max_storage_bytes: positiveInt,
+  current_used_bytes: z.number().int().nonnegative(),
+  registration: unixTimestamp,
+  email_verification: z.boolean(),
+});
+export type AdminUser = z.infer<typeof adminUserSchema>;
+
+export const adminUserListResponseSchema = z.object({
+  items: z.array(adminUserSchema),
+  total: z.number().int().nonnegative(),
+  offset: z.number().int().nonnegative(),
+  limit: positiveInt,
+});
+export type AdminUserListResponse = z.infer<typeof adminUserListResponseSchema>;
+
+export const adminUserUpdateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(128).optional(),
+  email: z.string().trim().email().optional(),
+  status: z.boolean().optional(),
+  labels: z.array(z.string().trim().min(1)).max(32).optional(),
+  role: z.string().trim().min(1).max(64).optional(),
+  max_storage_bytes: positiveInt.nullable().optional(),
+});
+export type AdminUserUpdateRequest = z.infer<typeof adminUserUpdateRequestSchema>;
+
+export const adminUserUpdateResponseSchema = z.object({
+  user: adminUserSchema,
+});
+export type AdminUserUpdateResponse = z.infer<typeof adminUserUpdateResponseSchema>;
+
+export const adminUserPasswordResetRequestSchema = z.object({
+  password: z.string().min(8).max(256),
+});
+export type AdminUserPasswordResetRequest = z.infer<typeof adminUserPasswordResetRequestSchema>;
+
+export const adminUserPasswordResetResponseSchema = z.object({
+  success: z.literal(true),
+  user_id: nonEmptyString,
+});
+export type AdminUserPasswordResetResponse = z.infer<typeof adminUserPasswordResetResponseSchema>;

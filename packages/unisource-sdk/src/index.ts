@@ -94,20 +94,36 @@ export type {
 export {
   serviceSchema,
   serviceDetailResponseSchema,
+  adminServiceUpdateRequestSchema,
+  adminServiceUpdateResponseSchema,
   serviceUsageResponseSchema,
   auditEventActionSchema,
   auditEventSchema,
   auditLogListQuerySchema,
   auditLogListResponseSchema,
+  adminUserSchema,
+  adminUserListResponseSchema,
+  adminUserUpdateRequestSchema,
+  adminUserUpdateResponseSchema,
+  adminUserPasswordResetRequestSchema,
+  adminUserPasswordResetResponseSchema,
 } from './services';
 export type {
   Service,
   ServiceDetailResponse,
+  AdminServiceUpdateRequest,
+  AdminServiceUpdateResponse,
   ServiceUsageResponse,
   AuditEventAction,
   AuditEvent,
   AuditLogListQuery,
   AuditLogListResponse,
+  AdminUser,
+  AdminUserListResponse,
+  AdminUserUpdateRequest,
+  AdminUserUpdateResponse,
+  AdminUserPasswordResetRequest,
+  AdminUserPasswordResetResponse,
 } from './services';
 
 // ─── Share Links ──────────────────────────────────────────────────────────────
