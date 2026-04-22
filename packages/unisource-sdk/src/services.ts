@@ -19,10 +19,15 @@ export const serviceDetailResponseSchema = z.object({
 });
 export type ServiceDetailResponse = z.infer<typeof serviceDetailResponseSchema>;
 
-export const adminServiceUpdateRequestSchema = z.object({
-  max_storage_bytes: positiveInt,
-  max_file_size_bytes: positiveInt,
-});
+export const adminServiceUpdateRequestSchema = z
+  .object({
+    max_storage_bytes: positiveInt.optional(),
+    max_file_size_bytes: positiveInt.optional(),
+  })
+  .refine(
+    (v) => v.max_storage_bytes !== undefined || v.max_file_size_bytes !== undefined,
+    { message: 'At least one of max_storage_bytes or max_file_size_bytes must be provided' }
+  );
 export type AdminServiceUpdateRequest = z.infer<typeof adminServiceUpdateRequestSchema>;
 
 export const adminServiceUpdateResponseSchema = serviceDetailResponseSchema;
