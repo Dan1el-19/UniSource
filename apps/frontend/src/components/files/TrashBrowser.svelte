@@ -41,6 +41,10 @@
     return ts;
   }
 
+  function getItemSummary(item: TrashItem) {
+    return item.kind === 'folder' ? 'Folder' : formatBytes(item.data.size);
+  }
+
   async function loadTrash() {
     isLoading = true;
     error = null;
@@ -48,11 +52,11 @@
     try {
       const [filesPayload, foldersPayload] = await Promise.all([
         apiClient.myFiles.trash({ limit: 100 }),
-        apiClient.folders.list({ trashed: true } as any, undefined),
+        apiClient.folders.list({ trashed: true, limit: 100 }),
       ]);
 
       const fileItems: TrashItem[] = filesPayload.items.map((f) => ({ kind: 'file', data: f }));
-      const folderItems: TrashItem[] = (foldersPayload.items as Folder[])
+      const folderItems: TrashItem[] = foldersPayload.items
         .filter((f) => f.is_trashed)
         .map((f) => ({ kind: 'folder', data: f }));
 
@@ -178,7 +182,7 @@
           <div class="meta">
             <h3>{getItemName(item)}</h3>
             <p>
-              {item.kind === 'folder' ? 'Folder' : formatBytes((item.data as FileRecord).size)}
+              {getItemSummary(item)}
               · usunięto {new Date(getDeletedAt(item) * 1000).toLocaleDateString('pl-PL')}
             </p>
           </div>

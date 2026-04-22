@@ -53,13 +53,17 @@ const listQuerySchema = z
     cursor: z.string().optional(),
     parent_id: z.string().optional(),
     trashed: z.string().optional(),
+    is_trashed: z.string().optional(),
   })
-  .transform((v) => ({
-    limit: v.limit !== undefined ? Number(v.limit) : FILES_DEFAULT_LIMIT,
-    cursor: v.cursor?.trim() || undefined,
-    parent_id: v.parent_id?.trim() || undefined,
-    trashed_only: v.trashed === 'true',
-  }))
+  .transform((v) => {
+    const trashed = v.trashed ?? v.is_trashed;
+    return {
+      limit: v.limit !== undefined ? Number(v.limit) : FILES_DEFAULT_LIMIT,
+      cursor: v.cursor?.trim() || undefined,
+      parent_id: v.parent_id?.trim() || undefined,
+      trashed_only: trashed === 'true',
+    };
+  })
   .superRefine((v, ctx) => {
     if (!Number.isInteger(v.limit) || v.limit < 1 || v.limit > FILES_MAX_LIMIT) {
       ctx.addIssue({

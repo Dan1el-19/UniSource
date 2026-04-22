@@ -1,11 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fileRecordSchema,
+  folderListQuerySchema,
+  getPublicFileInfo,
+  unlockPublicFile,
+  UnisourceClient,
+  UnisourceError,
   uploadAppwriteInitResponseSchema,
+  uploadRecordDetailResponseSchema,
   uploadR2InitRequestSchema,
 } from '../src';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('unisource-sdk schemas', () => {
   it('exposes importable built package entrypoint', async () => {
@@ -14,7 +24,8 @@ describe('unisource-sdk schemas', () => {
 
     const mod = await import(distEntry);
     expect(mod.uploadDestinationSchema).toBeDefined();
-    expect(mod.fileRecordFullSchema).toBeDefined();
+    expect(mod.fileRecordSchema).toBeDefined();
+    expect(mod.getPublicFileInfo).toBeDefined();
   });
 
   it('accepts valid R2 init request payload', () => {
@@ -54,19 +65,176 @@ describe('unisource-sdk schemas', () => {
 
   it('accepts valid file record', () => {
     const parsed = fileRecordSchema.safeParse({
-      id: 'upload-id',
+      id: 'file-id',
+      service_id: 'default',
+      user_id: 'user-1',
+      folder_id: null,
+      upload_id: 'upload-id',
       filename: 'obrazek.png',
       size: 50_000,
       mime_type: 'image/png',
-      destination: 'r2',
-      storage_key: 'uploads/2026/04/18/upload-id.png',
-      bucket: 'unisource',
-      status: 'completed',
-      expires_at: 1_900_000_000,
+      storage_destination: 'r2',
+      is_trashed: false,
+      trashed_at: null,
       created_at: 1_800_000_000,
       updated_at: 1_800_000_010,
     });
 
     expect(parsed.success).toBe(true);
+  });
+
+  it('accepts folder trash query with canonical and deprecated aliases', () => {
+    expect(folderListQuerySchema.parse({ trashed: true })).toMatchObject({ trashed: true });
+    expect(folderListQuerySchema.parse({ is_trashed: true })).toMatchObject({ is_trashed: true });
+  });
+
+  it('accepts valid upload detail response payload', () => {
+    const parsed = uploadRecordDetailResponseSchema.safeParse({
+      upload: {
+        id: 'upload-id',
+        service_id: 'default',
+        user_id: null,
+        filename: 'raport.pdf',
+        size: 1024,
+        mime_type: 'application/pdf',
+        destination: 'r2',
+        status: 'completed',
+        expires_at: 1_900_000_000,
+        created_at: 1_800_000_000,
+        updated_at: 1_800_000_010,
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+});
+
+describe('unisource-sdk HTTP helpers', () => {
+  it('calls public share endpoints without auth headers', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          file_id: 'file-1',
+          filename: 'share.pdf',
+          size: 2048,
+          mime_type: 'application/pdf',
+          requires_password: false,
+          download_url: 'https://example.com/share.pdf',
+          url_expires_at: 1_900_000_000,
+          link_name: null,
+          link_expires_at: null,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getPublicFileInfo('https://api.example.com', 'share slug');
+    await unlockPublicFile('https://api.example.com', 'share slug', 'sekret');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://api.example.com/public/share%20slug',
+      expect.objectContaining({ method: 'GET', headers: {} })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://api.example.com/public/share%20slug/unlock',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'sekret' }),
+      })
+    );
+  });
+
+  it('exposes admin methods for /files endpoints', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/files/upload-1') && init?.method === 'DELETE') {
+        return new Response(
+          JSON.stringify({ success: true, id: 'upload-1', permanent: true }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (url.endsWith('/files/upload-1')) {
+        return new Response(
+          JSON.stringify({
+            upload: {
+              id: 'upload-1',
+              service_id: 'default',
+              user_id: null,
+              filename: 'raport.pdf',
+              size: 1024,
+              mime_type: 'application/pdf',
+              destination: 'r2',
+              status: 'completed',
+              expires_at: 1_900_000_000,
+              created_at: 1_800_000_000,
+              updated_at: 1_800_000_010,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (url.endsWith('/files/upload-1/download-url')) {
+        return new Response(
+          JSON.stringify({
+            upload_id: 'upload-1',
+            destination: 'r2',
+            download_url: 'https://example.com/download.pdf',
+            expires_at: 1_900_000_000,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new UnisourceClient({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'default',
+      getToken: async () => 'jwt-token',
+    });
+
+    const detail = await client.admin.getUpload('upload-1');
+    const download = await client.admin.downloadUploadUrl('upload-1');
+    const deletion = await client.admin.deleteUpload('upload-1');
+
+    expect(detail.upload.id).toBe('upload-1');
+    expect(download.download_url).toContain('download.pdf');
+    expect(deletion).toMatchObject({ success: true, id: 'upload-1', permanent: true });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://api.example.com/files/upload-1',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          'X-Service-ID': 'default',
+          Authorization: 'Bearer jwt-token',
+        }),
+      })
+    );
+  });
+
+  it('throws typed errors for failed public requests', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ error: 'Unauthorized', message: 'Incorrect password' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
+
+    await expect(unlockPublicFile('https://api.example.com', 'share', 'bad-pass')).rejects.toBeInstanceOf(
+      UnisourceError
+    );
   });
 });

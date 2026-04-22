@@ -16,7 +16,7 @@
     Trash2,
     X,
   } from 'lucide-svelte';
-  import type { ShareLink } from '@unisource/sdk';
+  import type { ShareLink, ShareLinkCreateRequest } from '@unisource/sdk';
   import { apiClient } from '../../lib/api';
 
   let {
@@ -129,7 +129,7 @@
     createError = null;
 
     try {
-      const body: Record<string, unknown> = {};
+      const body: ShareLinkCreateRequest = {};
       if (createName.trim()) body.name = createName.trim();
       if (createSlug.trim()) body.slug = createSlug.trim();
       if (createPassword.trim()) body.password = createPassword.trim();
@@ -142,7 +142,7 @@
         if (!isNaN(n) && n > 0) body.max_downloads = n;
       }
 
-      const res = await apiClient.shareLinks.create(fileId, body as any);
+      const res = await apiClient.shareLinks.create(fileId, body);
       links = [res.link, ...links];
 
       // Reset form

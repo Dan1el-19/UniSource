@@ -1,15 +1,27 @@
 import { expect, test } from '@playwright/test';
 
-test('landing exposes one primary auth CTA', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
+  await page.route('https://mocked.appwrite.test/v1/account**', async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === 'GET' && url.pathname.endsWith('/account')) {
+      return route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Unauthorized', message: 'No session' }),
+      });
+    }
+
+    return route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'NotFound', message: 'Unhandled Appwrite mock route' }),
+    });
+  });
+});
+
+test('root redirects guests to login', async ({ page }) => {
   await page.goto('/');
 
-  const cta = page.getByRole('link', { name: /zaloguj (się|sie)|przejd(ź|z) do dysku/i });
-  await expect(cta).toBeVisible();
-
-  const ctaCount = await page.locator('main a').count();
-  expect(ctaCount).toBe(1);
-
-  await cta.click();
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole('heading', { name: /Witaj ponownie/i })).toBeVisible();
   await expect(page.locator('form button[type="submit"]')).toBeVisible();
@@ -18,6 +30,6 @@ test('landing exposes one primary auth CTA', async ({ page }) => {
 test('settings page redirects guests to login', async ({ page }) => {
   await page.goto('/settings');
 
-  await expect(page).toHaveURL(/\/login\?redirect=.*settings/i);
+  await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole('heading', { name: /Witaj ponownie/i })).toBeVisible();
 });

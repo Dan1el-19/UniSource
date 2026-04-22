@@ -1,4 +1,4 @@
-import type { ApiError } from './primitives';
+import type { ApiError, UploadStatus } from './primitives';
 
 // ─── SDK Error classes ────────────────────────────────────────────────────────
 
@@ -91,6 +91,43 @@ async function apiRequest<T>(
   return response.json() as Promise<T>;
 }
 
+async function publicApiRequest<T>(
+  baseUrl: string,
+  method: string,
+  path: string,
+  options: { body?: unknown; signal?: AbortSignal } = {}
+): Promise<T> {
+  const url = new URL(path, baseUrl);
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method,
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: options.signal,
+    });
+  } catch (err) {
+    throw new UnisourceNetworkError('Network request failed', err);
+  }
+
+  if (!response.ok) {
+    let body: ApiError;
+    try {
+      body = (await response.json()) as ApiError;
+    } catch {
+      body = { error: 'Unknown', message: response.statusText };
+    }
+    throw new UnisourceError(body.message, response.status, body);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 // ─── Client class ─────────────────────────────────────────────────────────────
 
 import type {
@@ -102,6 +139,7 @@ import type {
   UploadCompleteResponse,
   UploadFailResponse,
   UploadsListResponse,
+  UploadRecordDetailResponse,
 } from './uploads';
 
 import type {
@@ -140,9 +178,31 @@ import type {
   ShareLinkCreateRequest,
   ShareLinkCreateResponse,
   ShareLinkListResponse,
+  PublicFileAccessResponse,
+  PublicFileLockedResponse,
   ShareLinkUpdateRequest,
   ShareLinkUpdateResponse,
 } from './shareLinks';
+
+export async function getPublicFileInfo(
+  baseUrl: string,
+  slug: string,
+  signal?: AbortSignal
+): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
+  return publicApiRequest(baseUrl, 'GET', `/public/${encodeURIComponent(slug)}`, { signal });
+}
+
+export async function unlockPublicFile(
+  baseUrl: string,
+  slug: string,
+  password: string,
+  signal?: AbortSignal
+): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
+  return publicApiRequest(baseUrl, 'POST', `/public/${encodeURIComponent(slug)}/unlock`, {
+    body: { password },
+    signal,
+  });
+}
 
 export class UnisourceClient {
   private config: UnisourceClientConfig;
@@ -247,8 +307,20 @@ export class UnisourceClient {
       apiRequest(this.config, 'GET', '/admin/service/usage', { signal }),
 
     /** List all uploads (pending/completed/failed) for this service */
-    listUploads: (query?: { status?: string; cursor?: string; limit?: number }, signal?: AbortSignal): Promise<UploadsListResponse> =>
+    listUploads: (query?: { status?: UploadStatus; cursor?: string; limit?: number }, signal?: AbortSignal): Promise<UploadsListResponse> =>
       apiRequest(this.config, 'GET', '/files', { query, signal }),
+
+    /** Get a single upload for this service */
+    getUpload: (id: string, signal?: AbortSignal): Promise<UploadRecordDetailResponse> =>
+      apiRequest(this.config, 'GET', `/files/${id}`, { signal }),
+
+    /** Get a time-limited download URL for an upload owned by this service */
+    downloadUploadUrl: (id: string, signal?: AbortSignal): Promise<FileDownloadUrlResponse> =>
+      apiRequest(this.config, 'GET', `/files/${id}/download-url`, { signal }),
+
+    /** Permanently delete an upload owned by this service */
+    deleteUpload: (id: string, signal?: AbortSignal): Promise<FileDeleteResponse> =>
+      apiRequest(this.config, 'DELETE', `/files/${id}`, { signal }),
 
     /** List audit log events for this service */
     auditLog: (query?: AuditLogListQuery, signal?: AbortSignal): Promise<AuditLogListResponse> =>
