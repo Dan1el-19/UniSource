@@ -12,6 +12,7 @@ import {
   uploadRecordSchema,
   uploadR2InitRequestSchema,
   shareLinkUpdateRequestSchema,
+  FILES_MAX_LIMIT,
 } from '../src';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -89,6 +90,20 @@ describe('unisource-sdk schemas', () => {
   it('accepts folder trash query with canonical and deprecated aliases', () => {
     expect(folderListQuerySchema.parse({ trashed: true })).toMatchObject({ trashed: true });
     expect(folderListQuerySchema.parse({ is_trashed: true })).toMatchObject({ is_trashed: true });
+  });
+
+  it('folderListQuerySchema rejects when both trashed and is_trashed provided', () => {
+    expect(
+      folderListQuerySchema.safeParse({ trashed: true, is_trashed: false }).success
+    ).toBe(false);
+    // Każde z osobna jest OK
+    expect(folderListQuerySchema.safeParse({ trashed: true }).success).toBe(true);
+    expect(folderListQuerySchema.safeParse({ is_trashed: true }).success).toBe(true);
+  });
+
+  it('folderListQuerySchema rejects limit above FILES_MAX_LIMIT', () => {
+    expect(folderListQuerySchema.safeParse({ limit: FILES_MAX_LIMIT + 1 }).success).toBe(false);
+    expect(folderListQuerySchema.safeParse({ limit: FILES_MAX_LIMIT }).success).toBe(true);
   });
 
   it('accepts valid upload detail response payload', () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString, positiveInt } from './primitives';
+import { nonEmptyString, positiveInt, FILES_MAX_LIMIT } from './primitives';
 
 // ─── Folder record ────────────────────────────────────────────────────────────
 
@@ -19,13 +19,18 @@ export type Folder = z.infer<typeof folderSchema>;
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export const folderListQuerySchema = z.object({
-  parent_id: nonEmptyString.nullable().optional(),
-  trashed: z.boolean().optional(),
-  is_trashed: z.boolean().optional(),
-  cursor: nonEmptyString.optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-});
+export const folderListQuerySchema = z
+  .object({
+    parent_id: nonEmptyString.nullable().optional(),
+    trashed: z.boolean().optional(),
+    is_trashed: z.boolean().optional(),
+    cursor: nonEmptyString.optional(),
+    limit: z.number().int().min(1).max(FILES_MAX_LIMIT).optional(),
+  })
+  .refine(
+    (v) => !(v.trashed !== undefined && v.is_trashed !== undefined),
+    { message: 'Use either trashed or is_trashed, not both' }
+  );
 export type FolderListQuery = z.infer<typeof folderListQuerySchema>;
 
 export const folderListResponseSchema = z.object({
