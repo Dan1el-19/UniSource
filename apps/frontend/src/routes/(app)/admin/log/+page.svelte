@@ -4,6 +4,10 @@
   import type { AuditLogListResponse, UploadsListResponse } from '@unisource/sdk';
   import { apiClient } from '$lib/api';
   import { authState } from '../../../../state/auth.svelte';
+  import AdminBadge from '$components/admin/AdminBadge.svelte';
+  import AdminButton from '$components/admin/AdminButton.svelte';
+  import AdminCard from '$components/admin/AdminCard.svelte';
+  import AdminListRow from '$components/admin/AdminListRow.svelte';
 
   const actionLabels: Record<string, string> = {
     upload_completed: 'Upload zakończony',
@@ -34,7 +38,10 @@
   }
 
   function formatDate(ts: number) {
-    return new Date(ts * 1000).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' });
+    return new Date(ts * 1000).toLocaleString('pl-PL', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
   }
 
   async function loadFeed() {
@@ -84,184 +91,212 @@
   });
 </script>
 
-<section class="log-wrap">
-  <div class="page-header">
-    <div class="page-copy">
-      <a class="ghost-btn compact" href="/admin">
+<section class="admin-log">
+  <header class="page-header">
+    <div class="page-header__copy">
+      <a class="back-link" href="/admin">
         <ArrowLeft size={16} />
         Wróć do panelu
       </a>
-      <div>
-        <span class="section-kicker">Feed</span>
-        <h1>Pełny log administracyjny</h1>
-        <p>Szerszy widok ostatnich zdarzeń i uploadów, poza głównym ekranem admina.</p>
-      </div>
+      <span class="page-header__eyebrow">Feed</span>
+      <h1 class="page-title">Pełny log administracyjny</h1>
+      <p class="page-body">Rozszerzony widok zdarzeń i uploadów poza głównym dashboardem.</p>
     </div>
 
-    <button class="ghost-btn compact" type="button" onclick={loadFeed} disabled={isRefreshing || isLoading}>
-      <RefreshCw size={16} class={isRefreshing ? 'is-spinning' : ''} />
-      {isRefreshing ? 'Odświeżanie…' : 'Odśwież'}
-    </button>
-  </div>
+    <AdminButton variant="secondary" size="sm" onclick={loadFeed} isLoading={isRefreshing} disabled={isLoading}>
+      <RefreshCw size={16} />
+      Odśwież
+    </AdminButton>
+  </header>
 
   {#if error}
-    <div class="banner banner-error" role="alert">{error}</div>
+    <div class="banner banner--error" role="alert">{error}</div>
   {/if}
 
   {#if !sessionReady || isLoading}
-    <div class="state-wrap">
-      <div class="spin"><LoaderCircle size={36} /></div>
+    <div class="page-state">
+      <LoaderCircle size={32} class="page-state__spinner" />
     </div>
   {:else}
     <div class="log-grid">
-      <section class="card glass">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Audit log</span>
-            <h2>Zdarzenia</h2>
-          </div>
-        </div>
-
-        {#if auditLog.length === 0}
-          <p class="empty-text">Brak zdarzeń.</p>
-        {:else}
-          <div class="list-wrap">
+      <AdminCard
+        className="log-card"
+        label="Audit log"
+        title="Zdarzenia"
+        description="Wyrównana lista zdarzeń z jednolitą wysokością i stałym rozstawem metadanych."
+      >
+        <div class="log-list">
+          {#if auditLog.length === 0}
+            <p class="empty-state">Brak zdarzeń.</p>
+          {:else}
             {#each auditLog as event (event.id)}
-              <article class="feed-item">
-                <div class="item-main">
-                  <div class="item-label">
-                    <Activity size={15} />
-                    <strong>{actionLabels[event.action] ?? event.action}</strong>
-                  </div>
-                  <span class="muted">{event.resource_type}</span>
-                  <span class="muted mono truncate">{event.user_id}</span>
+              <AdminListRow as="article" className="log-row">
+                <span class="log-row__icon">
+                  <Activity size={16} />
+                </span>
+                <div class="log-row__content">
+                  <strong class="body-text">{actionLabels[event.action] ?? event.action}</strong>
+                  <span class="meta-text truncate">{event.resource_type}</span>
+                  <span class="body-text truncate">{event.user_id}</span>
                 </div>
-                <span class="muted">{formatDate(event.created_at)}</span>
-              </article>
+                <span class="meta-text log-row__meta">{formatDate(event.created_at)}</span>
+              </AdminListRow>
             {/each}
-          </div>
-        {/if}
-      </section>
-
-      <section class="card glass">
-        <div class="section-head">
-          <div>
-            <span class="section-kicker">Uploady</span>
-            <h2>Ostatnie operacje</h2>
-          </div>
+          {/if}
         </div>
+      </AdminCard>
 
-        {#if uploads.length === 0}
-          <p class="empty-text">Brak uploadów.</p>
-        {:else}
-          <div class="list-wrap">
+      <AdminCard
+        className="log-card"
+        label="Uploady"
+        title="Ostatnie operacje"
+        description="Ten sam system wierszy, badge’y statusu i czytelny podział na treść oraz metadane."
+      >
+        <div class="log-list">
+          {#if uploads.length === 0}
+            <p class="empty-state">Brak uploadów.</p>
+          {:else}
             {#each uploads as upload (upload.id)}
-              <article class="feed-item">
-                <div class="item-main">
-                  <div class="item-label">
-                    <Upload size={15} />
-                    <strong class="truncate">{upload.filename}</strong>
-                  </div>
-                  <span class="muted">{formatBytes(upload.size)}</span>
-                  <span class="pill status-{upload.status}">{uploadStatusLabels[upload.status] ?? upload.status}</span>
+              <AdminListRow as="article" className="log-row">
+                <span class="log-row__icon">
+                  <Upload size={16} />
+                </span>
+                <div class="log-row__content">
+                  <strong class="body-text truncate">{upload.filename}</strong>
+                  <span class="meta-text">{formatBytes(upload.size)}</span>
                 </div>
-                <span class="muted">{formatDate(upload.created_at)}</span>
-              </article>
+                <div class="log-row__meta log-row__meta--stack">
+                  <AdminBadge tone={upload.status === 'completed' ? 'success' : upload.status === 'failed' ? 'danger' : 'accent'}>
+                    {uploadStatusLabels[upload.status] ?? upload.status}
+                  </AdminBadge>
+                  <span class="meta-text">{formatDate(upload.created_at)}</span>
+                </div>
+              </AdminListRow>
             {/each}
-          </div>
-        {/if}
-      </section>
+          {/if}
+        </div>
+      </AdminCard>
     </div>
   {/if}
 </section>
 
 <style>
-  .log-wrap {
+  .admin-log {
+    --admin-space-1: 8px;
+    --admin-space-2: 12px;
+    --admin-space-3: 16px;
+    --admin-space-4: 24px;
+    --admin-space-5: 32px;
+    --admin-text-page-size: 32px;
+    --admin-text-page-line-height: 1.1;
+    --admin-text-section-size: 20px;
+    --admin-text-section-line-height: 1.2;
+    --admin-text-card-size: 16px;
+    --admin-text-card-line-height: 1.25;
+    --admin-text-body-size: 14px;
+    --admin-text-body-line-height: 1.4;
+    --admin-text-meta-size: 12px;
+    --admin-text-meta-line-height: 1.3;
+    --admin-radius-md: 16px;
+    --admin-radius-lg: 24px;
     width: 100%;
-    max-width: 1240px;
+    max-width: 1400px;
     margin: 0 auto;
-    padding: var(--space-4) var(--shell-px) calc(88px + env(safe-area-inset-bottom));
+    padding: 24px 24px calc(88px + env(safe-area-inset-bottom));
     display: grid;
-    gap: var(--space-4);
+    gap: 24px;
   }
 
-  .page-header,
-  .section-head,
-  .feed-item,
-  .item-label {
+  .page-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .page-header,
-  .section-head {
     align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
   }
 
-  .page-copy {
+  .page-header__copy {
     display: grid;
-    gap: var(--space-3);
+    gap: 8px;
   }
 
-  .section-kicker {
+  .page-header__eyebrow {
     display: inline-flex;
     width: fit-content;
-    padding: 5px 10px;
-    border-radius: var(--radius-full);
-    background: color-mix(in oklab, var(--color-bg-overlay) 82%, transparent);
+    padding: 8px 12px;
+    border-radius: 999px;
     border: 1px solid color-mix(in oklab, var(--color-glass-border) 70%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 80%, transparent);
     color: var(--color-text-secondary);
-    font-size: 11px;
+    font-size: var(--admin-text-meta-size);
+    line-height: var(--admin-text-meta-line-height);
+    font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
-  h1,
-  h2 {
+  .page-title {
     color: var(--color-text-primary);
+    font-size: var(--admin-text-page-size);
+    line-height: var(--admin-text-page-line-height);
+    font-weight: 700;
     letter-spacing: -0.03em;
   }
 
-  h1 {
-    font-size: clamp(1.5rem, 4vw, 2.1rem);
-    line-height: 1.04;
-  }
-
-  h2 {
-    font-size: clamp(1rem, 3vw, 1.3rem);
-    line-height: 1.1;
-  }
-
-  .page-copy p,
-  .muted,
-  .empty-text {
+  .page-body,
+  .body-text {
     color: var(--color-text-secondary);
-    font-size: var(--text-sm);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
+  }
+
+  .meta-text {
+    color: var(--color-text-secondary);
+    font-size: var(--admin-text-meta-size);
+    line-height: var(--admin-text-meta-line-height);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .back-link {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: var(--admin-radius-md);
+    border: 1px solid color-mix(in oklab, var(--color-glass-border) 82%, transparent);
+    background: color-mix(in oklab, var(--color-bg-overlay) 76%, transparent);
+    color: var(--color-text-primary);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
+    font-weight: 600;
+    text-decoration: none;
   }
 
   .banner {
-    border-radius: var(--radius-md);
-    padding: 10px 12px;
+    border-radius: var(--admin-radius-md);
+    padding: 12px 16px;
     border: 1px solid color-mix(in oklab, var(--color-danger) 28%, transparent);
     background: color-mix(in oklab, var(--color-danger) 12%, transparent);
-    color: color-mix(in oklab, var(--color-danger) 88%, #fff);
+    color: color-mix(in oklab, var(--color-danger) 90%, white);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
   }
 
-  .state-wrap {
-    min-height: 42dvh;
+  .page-state {
+    min-height: 320px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .spin,
-  .is-spinning {
-    animation: spin 900ms linear infinite;
+  :global(.page-state__spinner) {
+    animation: admin-log-spin 900ms linear infinite;
   }
 
-  @keyframes spin {
+  @keyframes admin-log-spin {
     to {
       transform: rotate(360deg);
     }
@@ -269,93 +304,54 @@
 
   .log-grid {
     display: grid;
-    gap: var(--space-4);
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 24px;
   }
 
-  .card {
-    border-radius: calc(var(--radius-lg) + 2px);
-    border-color: color-mix(in oklab, var(--color-glass-border) 92%, rgba(255, 255, 255, 0.04));
-    background:
-      linear-gradient(180deg, color-mix(in oklab, var(--color-bg-elevated) 72%, transparent), color-mix(in oklab, var(--color-bg-surface) 84%, transparent));
-    backdrop-filter: blur(calc(var(--color-glass-blur) * 0.8)) saturate(135%);
-    -webkit-backdrop-filter: blur(calc(var(--color-glass-blur) * 0.8)) saturate(135%);
-    box-shadow:
-      0 12px 32px rgba(0, 0, 0, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    padding: var(--space-4);
+  :global(.log-card) {
+    grid-column: span 12;
+  }
+
+  .log-list {
     display: grid;
-    gap: var(--space-4);
+    gap: 16px;
   }
 
-  .list-wrap {
-    display: grid;
-    gap: var(--space-2);
+  :global(.log-row) {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
   }
 
-  .feed-item {
-    padding: var(--space-3);
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in oklab, var(--color-border-subtle) 90%, transparent);
-    background: color-mix(in oklab, var(--color-bg-overlay) 62%, transparent);
-  }
-
-  .item-main {
-    min-width: 0;
-    display: grid;
-    gap: 6px;
-  }
-
-  .item-label {
-    justify-content: flex-start;
-  }
-
-  .pill {
-    width: fit-content;
-    padding: 5px 10px;
-    border-radius: var(--radius-full);
-    font-size: 11px;
-    border: 1px solid var(--color-border-subtle);
-  }
-
-  .status-completed {
-    background: color-mix(in oklab, var(--color-success) 16%, transparent);
-    color: var(--color-success);
-  }
-
-  .status-failed {
-    background: color-mix(in oklab, var(--color-danger) 16%, transparent);
-    color: var(--color-danger);
-  }
-
-  .status-pending {
-    background: color-mix(in oklab, var(--color-accent) 15%, transparent);
-    color: var(--color-text-primary);
-  }
-
-  .ghost-btn {
-    min-height: 40px;
-    border-radius: var(--radius-md);
-    padding: 0 14px;
-    border: 1px solid var(--color-border-default);
+  .log-row__icon {
+    color: var(--color-text-secondary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .log-row__content {
+    min-width: 0;
+    display: grid;
     gap: 8px;
-    width: fit-content;
-    max-width: 100%;
-    background: color-mix(in oklab, var(--color-bg-overlay) 78%, transparent);
-    color: var(--color-text-primary);
-    font-size: var(--text-sm);
-    font-weight: 600;
   }
 
-  .compact {
-    min-height: 38px;
-    padding: 0 12px;
+  .log-row__meta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    text-align: right;
   }
 
-  .mono {
-    font-family: var(--font-mono);
+  .log-row__meta--stack {
+    display: grid;
+    gap: 12px;
+    justify-items: end;
+    align-content: center;
+  }
+
+  .empty-state {
+    color: var(--color-text-secondary);
+    font-size: var(--admin-text-body-size);
+    line-height: var(--admin-text-body-line-height);
   }
 
   .truncate {
@@ -364,24 +360,39 @@
     white-space: nowrap;
   }
 
-  @media (min-width: 920px) {
-    .log-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      align-items: start;
+  @media (min-width: 1120px) {
+    :global(.log-card) {
+      grid-column: span 6;
     }
   }
 
-  @media (max-width: 919px) {
-    .page-header,
-    .feed-item {
+  @media (max-width: 959px) {
+    .admin-log {
+      --admin-text-page-size: 24px;
+    }
+
+    .page-header {
       flex-direction: column;
       align-items: stretch;
+    }
+
+    :global(.log-row) {
+      grid-template-columns: 16px minmax(0, 1fr);
+    }
+
+    .log-row__meta {
+      grid-column: 2;
+      justify-content: flex-start;
+      text-align: left;
+    }
+
+    .log-row__meta--stack {
+      justify-items: start;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .spin,
-    .is-spinning {
+    :global(.page-state__spinner) {
       animation: none;
     }
   }
