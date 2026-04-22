@@ -7,6 +7,10 @@ class AuthState {
   error = $state<string | null>(null);
   private sessionCheckPromise: Promise<Models.User<Models.Preferences> | null> | null = null;
 
+  isAdmin(user: Models.User<Models.Preferences> | null = this.user) {
+    return Array.isArray(user?.labels) && user.labels.includes('admin');
+  }
+
   async checkSession(force = false) {
     if (this.sessionCheckPromise && !force) {
       return this.sessionCheckPromise;
