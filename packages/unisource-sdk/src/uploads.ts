@@ -89,3 +89,8 @@ export const uploadsListResponseSchema = z.object({
   limit: positiveInt,
 });
 export type UploadsListResponse = z.infer<typeof uploadsListResponseSchema>;
+
+export const uploadRecordDetailResponseSchema = z.object({
+  upload: uploadRecordSchema,
+});
+export type UploadRecordDetailResponse = z.infer<typeof uploadRecordDetailResponseSchema>;

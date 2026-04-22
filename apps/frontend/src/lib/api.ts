@@ -1,9 +1,10 @@
+import { env as publicEnv } from '$env/dynamic/public';
 import type { Folder, PublicFileAccessResponse, PublicFileLockedResponse } from '@unisource/sdk';
-import { UnisourceClient } from '@unisource/sdk';
+import { UnisourceClient, getPublicFileInfo as getPublicFileInfoFromSdk, unlockPublicFile as unlockPublicFileFromSdk } from '@unisource/sdk';
 import { account } from './appwrite';
 
-const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
-const serviceId = import.meta.env.PUBLIC_SERVICE_ID || 'usrc';
+const apiUrl = publicEnv.PUBLIC_API_URL || 'http://localhost:8787';
+const serviceId = publicEnv.PUBLIC_SERVICE_ID || 'usrc';
 
 export async function getAccessToken() {
   try {
@@ -46,21 +47,13 @@ export async function downloadFileById(fileId: string, preferredFileName?: strin
   setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 }
 
-const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
+const publicApiUrl = publicEnv.PUBLIC_API_URL || 'http://localhost:8787';
 
 export async function getPublicFileInfo(slug: string): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
-  const res = await fetch(`${PUBLIC_API_URL}/public/${encodeURIComponent(slug)}`, {
-    headers: { 'Cache-Control': 'no-store' },
-  });
-  return res.json() as Promise<PublicFileAccessResponse | PublicFileLockedResponse>;
+  return getPublicFileInfoFromSdk(publicApiUrl, slug);
 }
 
 export async function unlockPublicFile(slug: string, password: string): Promise<PublicFileAccessResponse | PublicFileLockedResponse> {
-  const res = await fetch(`${PUBLIC_API_URL}/public/${encodeURIComponent(slug)}/unlock`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    body: JSON.stringify({ password }),
-  });
-  return res.json() as Promise<PublicFileAccessResponse | PublicFileLockedResponse>;
+  return unlockPublicFileFromSdk(publicApiUrl, slug, password);
 }
 

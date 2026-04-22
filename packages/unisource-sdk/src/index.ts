@@ -23,6 +23,7 @@ export {
   uploadFailResponseSchema,
   uploadRecordSchema,
   uploadsListResponseSchema,
+  uploadRecordDetailResponseSchema,
 } from './uploads';
 export type {
   UploadR2InitRequest,
@@ -34,6 +35,7 @@ export type {
   UploadFailResponse,
   UploadRecord,
   UploadsListResponse,
+  UploadRecordDetailResponse,
 } from './uploads';
 
 // ─── File Records ─────────────────────────────────────────────────────────────
@@ -131,5 +133,11 @@ export type {
 } from './shareLinks';
 
 // ─── HTTP Client ─────────────────────────────────────────────────────────────
-export { UnisourceClient, UnisourceError, UnisourceNetworkError } from './client';
+export {
+  UnisourceClient,
+  UnisourceError,
+  UnisourceNetworkError,
+  getPublicFileInfo,
+  unlockPublicFile,
+} from './client';
 export type { UnisourceClientConfig } from './client';

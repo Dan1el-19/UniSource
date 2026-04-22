@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Lock, Download, FileText, AlertTriangle, Eye, EyeOff } from 'lucide-svelte';
   import { unlockPublicFile } from '$lib/api';
-  import type { PublicFileAccessResponse, PublicFileLockedResponse } from '@unisource/sdk';
+  import { UnisourceError, UnisourceNetworkError, type PublicFileAccessResponse, type PublicFileLockedResponse } from '@unisource/sdk';
   import type { PublicPageData } from './+page.server';
 
   let { data } = $props<{ data: PublicPageData }>();
@@ -38,13 +38,19 @@
     try {
       const result = await unlockPublicFile(data.slug, passwordInput);
       if (result.requires_password === false) {
-        unlockedInfo = result as PublicFileAccessResponse;
+        unlockedInfo = result;
         passwordInput = '';
       } else {
         unlockError = 'Nieprawidłowe hasło';
       }
-    } catch {
-      unlockError = 'Błąd sieci. Spróbuj ponownie.';
+    } catch (error) {
+      if (error instanceof UnisourceError) {
+        unlockError = error.body.message;
+      } else if (error instanceof UnisourceNetworkError) {
+        unlockError = 'Błąd sieci. Spróbuj ponownie.';
+      } else {
+        unlockError = 'Nie udało się odblokować pliku.';
+      }
     } finally {
       isUnlocking = false;
     }

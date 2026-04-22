@@ -1,46 +1,40 @@
-# Astro Starter Kit: Basics
+# UniSource Frontend
 
-```sh
-pnpm create astro@latest -- --template basics
+SvelteKit application for the UniSource user interface. The frontend consumes the private backend API and shared contracts from `@unisource/sdk`.
+
+## Local development
+
+From the monorepo root:
+
+```bash
+pnpm install
+pnpm --filter ./apps/frontend dev -- --host 127.0.0.1 --port 4321
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+The app expects the backend API at `http://localhost:8787` by default.
 
-## 🚀 Project Structure
+## Environment
 
-Inside of your Astro project, you'll see the following folders and files:
+Copy [`.env.example`](/A:/Projects/UniSource/apps/frontend/.env.example) to `.env.local` and fill in the values you need:
 
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
+```bash
+PUBLIC_API_URL=http://127.0.0.1:8787
+PUBLIC_SERVICE_ID=usrc
+PUBLIC_APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+PUBLIC_APPWRITE_PROJECT=...
 ```
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+## Useful commands
 
-## 🧞 Commands
+```bash
+pnpm --filter ./apps/frontend typecheck
+pnpm --filter ./apps/frontend e2e
+pnpm --filter ./apps/frontend build
+```
 
-All commands are run from the root of the project, from a terminal:
+## Integration notes
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `pnpm install`             | Installs dependencies                            |
-| `pnpm dev`             | Starts local dev server at `localhost:4321`      |
-| `pnpm build`           | Build your production site to `./dist/`          |
-| `pnpm preview`         | Preview your build locally, before deploying     |
-| `pnpm astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `pnpm astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+- Auth is handled with Appwrite JWTs created in the browser.
+- Protected app routes (`/drive`, `/trash`, `/admin`, `/settings`) use `UnisourceClient` from `@unisource/sdk`.
+- Public share pages under `/s/[slug]` use SDK helper functions for unauthenticated backend access.
+- Drive uploads support both R2 and Appwrite; the target folder is sent at upload init time.

@@ -1,5 +1,5 @@
 import { Storage } from 'appwrite';
-import { UnisourceError, UnisourceNetworkError, type FileRecord, type UploadAppwriteInitResponse } from '@unisource/sdk';
+import { UnisourceError, UnisourceNetworkError, type UploadAppwriteInitResponse } from '@unisource/sdk';
 import { apiClient } from '../lib/api';
 import { client as appwriteClient } from '../lib/appwrite';
 
@@ -17,12 +17,6 @@ export function getStorageProvider(): StorageProvider {
 
 export function setStorageProvider(provider: StorageProvider): void {
   localStorage.setItem(PROVIDER_KEY, provider);
-}
-
-function wait(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 class UploadUiState {
@@ -113,20 +107,6 @@ class UploadUiState {
     );
   }
 
-  private async moveCompletedUploadToFolder(uploadId: string, folderId: string) {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const rootFiles = await apiClient.myFiles.list({ folder_id: null, limit: 100 });
-      const uploadedFile = rootFiles.items.find((file: FileRecord) => file.upload_id === uploadId);
-
-      if (uploadedFile) {
-        await apiClient.myFiles.move(uploadedFile.id, { folder_id: folderId });
-        return;
-      }
-
-      await wait(180);
-    }
-  }
-
   async uploadFiles(files: File[] | FileList, targetFolderId: string | null) {
     const queue = Array.from(files);
     if (queue.length === 0) {
@@ -154,6 +134,7 @@ class UploadUiState {
             filename: file.name,
             size: file.size,
             mime_type: file.type || 'application/octet-stream',
+            folder_id: targetFolderId ?? undefined,
           });
 
           uploadId = init.upload_id;
@@ -169,15 +150,12 @@ class UploadUiState {
           this.progress = 94;
 
           await apiClient.upload.complete({ upload_id: init.upload_id });
-
-          if (targetFolderId) {
-            await this.moveCompletedUploadToFolder(init.upload_id, targetFolderId);
-          }
         } else {
           const init = await apiClient.upload.r2Init({
             filename: file.name,
             size: file.size,
             mime_type: file.type || 'application/octet-stream',
+            folder_id: targetFolderId ?? undefined,
           });
 
           uploadId = init.upload_id;
@@ -193,10 +171,6 @@ class UploadUiState {
           this.progress = 94;
 
           await apiClient.upload.complete({ upload_id: init.upload_id });
-
-          if (targetFolderId) {
-            await this.moveCompletedUploadToFolder(init.upload_id, targetFolderId);
-          }
         }
 
         this.progress = 100;

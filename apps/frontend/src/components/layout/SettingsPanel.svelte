@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { env as publicEnv } from '$env/dynamic/public';
   import { onMount } from 'svelte';
   import Button from '../ui/Button.svelte';
   import { authState } from '../../state/auth.svelte';
   import { getStorageProvider, setStorageProvider, type StorageProvider } from '../../state/upload.svelte';
 
-  const apiUrl = import.meta.env.PUBLIC_API_URL || 'http://localhost:8787';
-  const serviceId = import.meta.env.PUBLIC_SERVICE_ID || 'usrc';
+  const apiUrl = publicEnv.PUBLIC_API_URL || 'http://localhost:8787';
+  const serviceId = publicEnv.PUBLIC_SERVICE_ID || 'usrc';
 
   let theme = $state<'dark' | 'light'>('dark');
   let storageProvider = $state<StorageProvider>('r2');

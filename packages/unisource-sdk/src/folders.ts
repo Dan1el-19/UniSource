@@ -21,6 +21,7 @@ export type Folder = z.infer<typeof folderSchema>;
 
 export const folderListQuerySchema = z.object({
   parent_id: nonEmptyString.nullable().optional(),
+  trashed: z.boolean().optional(),
   is_trashed: z.boolean().optional(),
   cursor: nonEmptyString.optional(),
   limit: z.number().int().min(1).max(100).optional(),

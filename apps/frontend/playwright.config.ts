@@ -2,7 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 const host = '127.0.0.1';
 const port = 4321;
+const apiPort = 46789;
 const baseURL = `http://${host}:${port}`;
+const apiBaseUrl = `http://${host}:${apiPort}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -20,7 +22,7 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command: `pnpm dev --host ${host} --port ${port}`,
+    command: `powershell -NoProfile -Command "$env:PUBLIC_API_URL='${apiBaseUrl}'; $env:PUBLIC_SERVICE_ID='usrc'; $env:PUBLIC_APPWRITE_ENDPOINT='https://mocked.appwrite.test/v1'; $env:PUBLIC_APPWRITE_PROJECT='mocked-project'; pnpm dev --host ${host} --port ${port}"`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
