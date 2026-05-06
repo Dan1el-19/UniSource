@@ -230,7 +230,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    opacity: 0;
+    opacity: 1;
     transition:
       opacity var(--duration-fast) linear,
       background-color var(--duration-fast) var(--ease-in-out),

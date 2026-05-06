@@ -343,7 +343,7 @@
                   </div>
                 </div>
 
-                <div class="user-cell">
+                <div class="user-cell user-cell--role">
                   {#if user.labels.includes('admin')}
                     <AdminBadge tone="accent">Admin</AdminBadge>
                   {:else}
@@ -833,21 +833,52 @@
     }
 
     .users-page :global(.user-row) {
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr auto auto;
+      grid-template-rows: auto auto;
+      align-items: center;
+      gap: 4px 10px;
+    }
+
+    .user-cell--identity {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .user-cell--role {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: center;
     }
 
     .user-cell--actions {
-      justify-items: stretch;
+      grid-column: 3;
+      grid-row: 1;
+      justify-items: initial;
+    }
+
+    .user-cell--storage {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+
+    .user-cell--storage .storage-stack :global(.admin-progress) {
+      display: none;
+    }
+
+    .user-cell--storage .storage-stack__meta {
+      flex-direction: row;
+      align-items: center;
+      gap: 4px;
     }
 
     .action-anchor {
-      justify-items: stretch;
+      justify-items: initial;
     }
 
     .action-menu {
-      left: 0;
-      right: auto;
-      width: 100%;
+      left: auto;
+      right: 0;
+      width: 220px;
     }
   }
 </style>
