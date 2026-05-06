@@ -589,6 +589,7 @@
   @media (prefers-reduced-motion: reduce) {
     .users-page :global(.page-state__spinner) { animation: none; }
     .row-action-btn :global(button) { transition-duration: 0.01ms; }
+    .action-menu { animation: none; }
   }
 
   .sub-state {
@@ -686,6 +687,17 @@
     gap: 8px;
   }
 
+  @keyframes menu-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
   .action-anchor {
     position: relative;
   }
@@ -720,6 +732,8 @@
     display: grid;
     gap: 2px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+    transform-origin: top right;
+    animation: menu-enter var(--duration-fast, 120ms) var(--ease-in-out, cubic-bezier(0.4, 0, 0.2, 1)) both;
   }
 
   .action-menu button {
