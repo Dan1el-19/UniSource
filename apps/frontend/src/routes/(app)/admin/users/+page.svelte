@@ -1,7 +1,7 @@
 <!-- apps/frontend/src/routes/(app)/admin/users/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { KeyRound, LoaderCircle, MoreHorizontal, RefreshCw, Save } from 'lucide-svelte';
+  import { KeyRound, LoaderCircle, MoreVertical, RefreshCw, Save } from 'lucide-svelte';
   import type { AdminUser } from '@unisource/sdk';
   import { apiClient } from '$lib/api';
   import { authState } from '../../../../state/auth.svelte';
@@ -363,16 +363,18 @@
 
                 <div class="user-cell user-cell--actions">
                   <div class="action-anchor" data-user-action-anchor>
-                    <AdminButton
-                      variant="ghost"
-                      size="sm"
-                      iconOnly={true}
-                      onclick={() => toggleUserMenu(user.id)}
-                      aria-expanded={activeMenuUserId === user.id}
-                      aria-label={`Opcje dla ${user.email}`}
-                    >
-                      <MoreHorizontal size={16} />
-                    </AdminButton>
+                    <div class="row-action-btn">
+                      <AdminButton
+                        variant="ghost"
+                        size="sm"
+                        iconOnly={true}
+                        onclick={() => toggleUserMenu(user.id)}
+                        aria-expanded={activeMenuUserId === user.id}
+                        aria-label={`Opcje dla ${user.email}`}
+                      >
+                        <MoreVertical size={16} />
+                      </AdminButton>
+                    </div>
 
                     {#if activeMenuUserId === user.id}
                       <div class="action-menu glass" role="menu">
@@ -586,6 +588,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .users-page :global(.page-state__spinner) { animation: none; }
+    .row-action-btn :global(button) { transition-duration: 0.01ms; }
   }
 
   .sub-state {
@@ -687,11 +690,28 @@
     position: relative;
   }
 
+  .row-action-btn :global(button) {
+    opacity: 0;
+    transition: opacity var(--duration-fast) linear;
+  }
+
+  .users-page :global(.user-row:hover .row-action-btn button),
+  .users-page :global(.user-row:focus-within .row-action-btn button),
+  .action-anchor:focus-within .row-action-btn :global(button) {
+    opacity: 1;
+  }
+
+  @media (max-width: 959px) {
+    .row-action-btn :global(button) {
+      opacity: 1;
+    }
+  }
+
   .action-menu {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    z-index: 12;
+    z-index: 50;
     width: 220px;
     padding: 8px;
     border-radius: var(--admin-radius-md);
