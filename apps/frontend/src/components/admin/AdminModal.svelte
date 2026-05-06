@@ -53,6 +53,28 @@
 </div>
 
 <style>
+  @keyframes admin-modal-enter-mobile {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes admin-modal-enter-desktop {
+    from {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% + 8px)) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+
   .admin-modal__backdrop {
     position: fixed;
     inset: 0;
@@ -80,6 +102,7 @@
     box-shadow:
       0 12px 32px rgba(0, 0, 0, 0.2),
       inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    animation: admin-modal-enter-mobile var(--duration-enter, 250ms) var(--ease-spring, cubic-bezier(0.33, 1, 0.68, 1)) both;
   }
 
   .admin-modal__header,
@@ -134,6 +157,7 @@
       inset: 50% auto auto 50%;
       width: min(560px, calc(100% - 48px));
       transform: translate(-50%, -50%);
+      animation-name: admin-modal-enter-desktop;
     }
   }
 
@@ -142,6 +166,12 @@
     .admin-modal__footer {
       flex-direction: column;
       align-items: stretch;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .admin-modal {
+      animation: none;
     }
   }
 </style>
