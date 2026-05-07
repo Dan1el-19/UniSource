@@ -13,6 +13,7 @@ import admin from './routes/admin';
 import shareLinkRouter from './routes/shareLinks';
 import publicRouter from './routes/public';
 import mainStorage from './routes/mainStorage';
+import releasesRouter from './routes/releases';
 
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
@@ -56,6 +57,11 @@ app.route('/', shareLinkRouter);
 // MAIN_STORAGE management — requires plus or admin role
 app.use('/main/*', authMiddleware);
 app.route('/main', mainStorage);
+
+// Release management — admin-only per service
+app.use('/releases/*', authMiddleware);
+app.use('/releases/*', requireAdminMiddleware);
+app.route('/releases', releasesRouter);
 
 // Public share access — no auth required
 app.route('/public', publicRouter);

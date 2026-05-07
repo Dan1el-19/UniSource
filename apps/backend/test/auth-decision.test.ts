@@ -18,6 +18,14 @@ describe('resolveAuthDecision', () => {
     expect(decision.apiKeyToken).toBe('service-api-key');
   });
 
+  it('keeps API key fallback for releases routes', () => {
+    const decision = resolveAuthDecision('/releases/upload/init', 'Bearer service-api-key', null);
+
+    expect(decision.routeMode).toBe('dual');
+    expect(decision.jwtToken).toBeNull();
+    expect(decision.apiKeyToken).toBe('service-api-key');
+  });
+
   it('accepts an explicit Appwrite JWT header on dual-auth routes', () => {
     const decision = resolveAuthDecision('/upload/r2/init', 'Bearer service-api-key', 'jwt.header.payload');
 
