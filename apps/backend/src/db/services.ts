@@ -5,7 +5,7 @@ interface AuditEventRow {
   id: string;
   service_id: string;
   user_id: string;
-  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded' | 'share_link_accessed';
+  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded' | 'share_link_accessed' | 'quota_reconciled';
   resource_type: 'file' | 'folder' | 'service';
   resource_id: string;
   metadata: string | null;
@@ -317,7 +317,7 @@ export async function releaseQuota(
 export interface LogEventInput {
   serviceId: string;
   userId: string;
-  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded' | 'share_link_accessed';
+  action: 'upload_completed' | 'file_deleted' | 'folder_deleted' | 'quota_exceeded' | 'share_link_accessed' | 'quota_reconciled';
   resourceType: 'file' | 'folder' | 'service';
   resourceId: string;
   metadata?: Record<string, any>;
