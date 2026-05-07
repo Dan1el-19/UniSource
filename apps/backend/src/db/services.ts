@@ -39,6 +39,7 @@ export interface ServiceRecord {
   default_bucket: string;
   max_storage_bytes: number;
   current_used_bytes: number;
+  main_used_bytes: number;
   max_file_size_bytes: number;
   created_at: number;
 }
@@ -312,6 +313,33 @@ export async function releaseQuota(
   if (userId) {
     await decrementUserStorageUsage(db, serviceId, userId, bytes);
   }
+}
+
+export async function reserveMainStorageQuota(
+  db: D1Database,
+  serviceId: string,
+  bytes: number
+): Promise<{ ok: boolean }> {
+  const result = await db
+    .prepare(
+      `UPDATE services
+       SET main_used_bytes = main_used_bytes + ?
+       WHERE id = ? AND (main_used_bytes + ?) <= max_storage_bytes`
+    )
+    .bind(bytes, serviceId, bytes)
+    .run();
+  return { ok: (result.meta.changes ?? 0) > 0 };
+}
+
+export async function releaseMainStorageQuota(
+  db: D1Database,
+  serviceId: string,
+  bytes: number
+): Promise<void> {
+  await db
+    .prepare('UPDATE services SET main_used_bytes = MAX(0, main_used_bytes - ?) WHERE id = ?')
+    .bind(bytes, serviceId)
+    .run();
 }
 
 export interface ReconcileQuotaResult {
