@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 
@@ -12,6 +12,10 @@ export interface PresignedDownloadResult {
   presigned_url: string;
   storage_key: string;
   expires_at: number;
+}
+
+export interface R2ObjectMeta {
+  size: number;
 }
 
 function createS3Client(env: CloudflareBindings): S3Client {
@@ -75,4 +79,22 @@ export async function deleteObject(
   });
 
   await client.send(command);
+}
+
+export async function headObject(
+  env: CloudflareBindings,
+  bucket: string,
+  key: string
+): Promise<R2ObjectMeta | null> {
+  const client = createS3Client(env);
+  try {
+    const result = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return { size: result.ContentLength ?? 0 };
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e.name === 'NoSuchKey' || e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) {
+      return null;
+    }
+    throw err;
+  }
 }

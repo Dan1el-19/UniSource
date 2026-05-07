@@ -1,0 +1,137 @@
+import { Hono } from 'hono';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { UploadRecord } from '../src/db/files';
+
+// Module mocks — must be declared before imports of the mocked modules
+vi.mock('../src/services/r2', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/services/r2')>();
+  return {
+    ...actual,
+    headObject: vi.fn(),
+    generatePresignedPutUrl: vi.fn().mockResolvedValue({
+      presigned_url: 'https://example.com/put',
+      storage_key: 'key',
+      expires_at: 9999999999,
+    }),
+    generatePresignedGetUrl: vi.fn(),
+    deleteObject: vi.fn(),
+  };
+});
+
+vi.mock('../src/services/appwrite', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/services/appwrite')>();
+  return {
+    ...actual,
+    getAppwriteFileMeta: vi.fn(),
+  };
+});
+
+vi.mock('../src/db/files', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/files')>();
+  return {
+    ...actual,
+    getUpload: vi.fn(),
+    getUploadForUser: vi.fn(),
+    completeUpload: vi.fn(),
+    failUpload: vi.fn(),
+    createUpload: vi.fn().mockResolvedValue({}),
+  };
+});
+
+vi.mock('../src/db/fileRecords', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/fileRecords')>();
+  return { ...actual, createFileRecord: vi.fn() };
+});
+
+vi.mock('../src/db/services', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/services')>();
+  return {
+    ...actual,
+    releaseQuota: vi.fn(),
+    logServiceEvent: vi.fn(),
+    reserveQuota: vi.fn().mockResolvedValue({ ok: true }),
+    ensureServiceUser: vi.fn(),
+  };
+});
+
+import { headObject } from '../src/services/r2';
+import { getAppwriteFileMeta } from '../src/services/appwrite';
+import { getUpload, failUpload, completeUpload } from '../src/db/files';
+import upload from '../src/routes/upload';
+import publicRouter from '../src/routes/public';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const pendingR2Record: UploadRecord = {
+  id: 'upload-123',
+  service_id: 'usrc',
+  user_id: null,
+  folder_id: null,
+  filename: 'test.pdf',
+  size: 1024,
+  mime_type: 'application/pdf',
+  destination: 'r2',
+  storage_key: 'usrc/uploads/2026/01/01/upload-123.pdf',
+  bucket: 'unisource',
+  status: 'pending',
+  presigned_url: null,
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  created_at: Math.floor(Date.now() / 1000),
+  updated_at: Math.floor(Date.now() / 1000),
+};
+
+function mockD1(changes = 1): D1Database {
+  return {
+    prepare: (_sql: string) => ({
+      bind: (..._args: unknown[]) => ({
+        first: () => Promise.resolve(null),
+        run: () => Promise.resolve({ meta: { changes }, results: [] }),
+        all: () => Promise.resolve({ results: [] }),
+      }),
+    }),
+  } as unknown as D1Database;
+}
+
+const baseEnv = {
+  usrc_d1: mockD1(),
+  R2_ACCOUNT_ID: 'acc',
+  R2_ACCESS_KEY_ID: 'key',
+  R2_SECRET_ACCESS_KEY: 'secret',
+  APPWRITE_ENDPOINT: 'https://aw.test/v1',
+  APPWRITE_PROJECT_ID: 'proj',
+  APPWRITE_BUCKET_ID: 'bucket',
+  APPWRITE_API_KEY: 'ak',
+  USRC_API_KEY: 'test-api-key',
+  BLOKSERWIS_API_KEY: 'blok-api-key',
+} as unknown as CloudflareBindings;
+
+function buildUploadApp(userId = 'system', serviceId = 'usrc') {
+  const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+  app.use('*', async (c, next) => {
+    c.set('userId', userId as WorkerVariables['userId']);
+    c.set('serviceId', serviceId as WorkerVariables['serviceId']);
+    c.set('authType', 'apikey' as WorkerVariables['authType']);
+    c.set('isAdmin', true as WorkerVariables['isAdmin']);
+    await next();
+  });
+  app.route('/upload', upload);
+  return app;
+}
+
+function buildPublicApp() {
+  const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+  app.route('/public', publicRouter);
+  return app;
+}
+
+// ---------------------------------------------------------------------------
+// Task 1: headObject
+// ---------------------------------------------------------------------------
+
+describe('headObject — R2 service', () => {
+  it('is exported from services/r2', () => {
+    expect(headObject).toBeDefined();
+  });
+});
