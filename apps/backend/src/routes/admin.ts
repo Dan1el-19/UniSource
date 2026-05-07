@@ -9,6 +9,8 @@ import {
   listAuditEvents,
   listServiceUsersByService,
   listUserStorageUsageByService,
+  reconcileQuota,
+  logServiceEvent,
   updateServiceDetails,
   upsertServiceUserSettings,
 } from '../db/services';
@@ -350,5 +352,28 @@ admin.post(
     });
   }
 );
+
+admin.post('/quota/reconcile', async (c) => {
+  const serviceId = c.get('serviceId');
+  const dryRun = c.req.query('dry_run') === 'true';
+
+  const result = await reconcileQuota(c.env.APP_DB, serviceId, dryRun);
+
+  if (!dryRun && (result.service_drift_bytes !== 0 || result.users_fixed > 0)) {
+    c.executionCtx.waitUntil(
+      logServiceEvent(c.env.APP_DB, {
+        serviceId,
+        userId: c.get('userId'),
+        action: 'quota_reconciled',
+        resourceType: 'service',
+        resourceId: serviceId,
+        metadata: result,
+        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+      })
+    );
+  }
+
+  return c.json(result);
+});
 
 export default admin;
