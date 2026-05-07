@@ -314,6 +314,91 @@ export async function releaseQuota(
   }
 }
 
+export interface ReconcileQuotaResult {
+  service_drift_bytes: number;
+  service_corrected: boolean;
+  users_fixed: number;
+  dry_run: boolean;
+}
+
+export async function reconcileQuota(
+  db: D1Database,
+  serviceId: string,
+  dryRun = false
+): Promise<ReconcileQuotaResult> {
+  const serviceUsageRow = await db
+    .prepare('SELECT COALESCE(SUM(size), 0) AS used_bytes FROM files WHERE service_id = ? AND is_trashed = 0')
+    .bind(serviceId)
+    .first<{ used_bytes: number | null }>();
+  const realServiceBytes = Number(serviceUsageRow?.used_bytes ?? 0);
+
+  const userUsageRows = await db
+    .prepare(
+      'SELECT user_id, COALESCE(SUM(size), 0) AS used_bytes FROM files WHERE service_id = ? AND is_trashed = 0 GROUP BY user_id'
+    )
+    .bind(serviceId)
+    .all<UserUsageRow>();
+
+  const serviceRow = await db
+    .prepare('SELECT current_used_bytes FROM services WHERE id = ?')
+    .bind(serviceId)
+    .first<{ current_used_bytes: number }>();
+  const storedServiceBytes = Number(serviceRow?.current_used_bytes ?? 0);
+
+  const storedUserRows = await db
+    .prepare('SELECT user_id, current_used_bytes FROM service_users WHERE service_id = ?')
+    .bind(serviceId)
+    .all<{ user_id: string; current_used_bytes: number }>();
+  const storedUserMap: Record<string, number> = {};
+  for (const row of storedUserRows.results ?? []) {
+    storedUserMap[row.user_id] = Number(row.current_used_bytes);
+  }
+
+  const serviceDrift = realServiceBytes - storedServiceBytes;
+
+  if (serviceDrift !== 0 && !dryRun) {
+    await db
+      .prepare('UPDATE services SET current_used_bytes = ? WHERE id = ?')
+      .bind(realServiceBytes, serviceId)
+      .run();
+  }
+
+  let usersFixed = 0;
+  for (const { user_id, used_bytes } of userUsageRows.results ?? []) {
+    const realBytes = Number(used_bytes ?? 0);
+    const storedBytes = storedUserMap[user_id] ?? 0;
+    if (realBytes !== storedBytes) {
+      if (!dryRun) {
+        await db
+          .prepare('UPDATE service_users SET current_used_bytes = ? WHERE service_id = ? AND user_id = ?')
+          .bind(realBytes, serviceId, user_id)
+          .run();
+      }
+      usersFixed++;
+    }
+  }
+
+  const seenUsers = new Set((userUsageRows.results ?? []).map(r => r.user_id));
+  for (const [user_id, storedBytes] of Object.entries(storedUserMap)) {
+    if (!seenUsers.has(user_id) && storedBytes !== 0) {
+      if (!dryRun) {
+        await db
+          .prepare('UPDATE service_users SET current_used_bytes = ? WHERE service_id = ? AND user_id = ?')
+          .bind(0, serviceId, user_id)
+          .run();
+      }
+      usersFixed++;
+    }
+  }
+
+  return {
+    service_drift_bytes: serviceDrift,
+    service_corrected: !dryRun && serviceDrift !== 0,
+    users_fixed: usersFixed,
+    dry_run: dryRun,
+  };
+}
+
 export interface LogEventInput {
   serviceId: string;
   userId: string;
