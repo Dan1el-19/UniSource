@@ -51,6 +51,7 @@ export const auditEventActionSchema = z.enum([
   'folder_deleted',
   'quota_exceeded',
   'share_link_accessed',
+  'quota_reconciled',
 ]);
 export type AuditEventAction = z.infer<typeof auditEventActionSchema>;
 
