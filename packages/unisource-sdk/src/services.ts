@@ -113,7 +113,7 @@ export const adminUserUpdateRequestSchema = z.object({
   email: z.string().trim().email().optional(),
   status: z.boolean().optional(),
   labels: z.array(z.string().trim().min(1)).max(32).optional(),
-  role: z.string().trim().min(1).max(64).optional(),
+  role: z.enum(['user', 'plus', 'admin']).optional(),
   max_storage_bytes: positiveInt.nullable().optional(),
 });
 export type AdminUserUpdateRequest = z.infer<typeof adminUserUpdateRequestSchema>;
