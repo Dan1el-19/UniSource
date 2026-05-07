@@ -22,4 +22,5 @@ declare interface WorkerVariables {
   serviceId: string;
   authType: 'appwrite' | 'apikey';
   isAdmin: boolean;
+  actorId?: string;
 }
