@@ -77,3 +77,6 @@ wrangler.toml
 npm-debug.log*
 
 .claude/
+
+# Git worktrees
+.worktrees/
