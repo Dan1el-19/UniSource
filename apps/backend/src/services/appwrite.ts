@@ -165,6 +165,30 @@ export async function deleteAppwriteFile(
   return { deleted: true, not_found: false };
 }
 
+export interface AppwriteFileMeta {
+  size: number;
+}
+
+export async function getAppwriteFileMeta(
+  env: CloudflareBindings,
+  bucketId: string,
+  fileId: string
+): Promise<AppwriteFileMeta | null> {
+  const baseUrl = getAppwriteApiBaseUrl(env);
+  const url = `${baseUrl}/storage/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}`;
+
+  const response = await fetch(url, { headers: createAppwriteHeaders(env) });
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Appwrite getFileMeta failed (${response.status}): ${body}`);
+  }
+
+  const data = await response.json<{ sizeOriginal: number }>();
+  return { size: data.sizeOriginal };
+}
+
 export async function listAppwriteUsers(
   env: CloudflareBindings,
   options: AppwriteUserListOptions

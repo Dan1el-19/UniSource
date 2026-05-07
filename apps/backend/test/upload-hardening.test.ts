@@ -135,3 +135,9 @@ describe('headObject — R2 service', () => {
     expect(headObject).toBeDefined();
   });
 });
+
+describe('getAppwriteFileMeta — Appwrite service', () => {
+  it('is exported from services/appwrite', () => {
+    expect(getAppwriteFileMeta).toBeDefined();
+  });
+});
