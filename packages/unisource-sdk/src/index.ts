@@ -129,6 +129,40 @@ export type {
 // ─── Main Storage ─────────────────────────────────────────────────────────────
 export * from './mainStorage';
 
+// ─── Releases ───────────────────────────────────────────────────────────────
+export {
+  releaseDTOSchema,
+  releaseUploadInitRequestSchema,
+  releaseUploadInitResponseSchema,
+  releaseUploadCompleteRequestSchema,
+  releaseUploadCompleteResponseSchema,
+  releaseUploadFailResponseSchema,
+  releasesListQuerySchema,
+  releasesListResponseSchema,
+  releaseUpdateRequestSchema,
+  releaseDeleteResponseSchema,
+  releaseSyncManifestSchema,
+  releaseSyncRequestSchema,
+  releaseSyncResultSchema,
+  releaseSyncResponseSchema,
+} from './releases';
+export type {
+  ReleaseDTO,
+  ReleaseUploadInitRequest,
+  ReleaseUploadInitResponse,
+  ReleaseUploadCompleteRequest,
+  ReleaseUploadCompleteResponse,
+  ReleaseUploadFailResponse,
+  ReleasesListQuery,
+  ReleasesListResponse,
+  ReleaseUpdateRequest,
+  ReleaseDeleteResponse,
+  ReleaseSyncManifest,
+  ReleaseSyncRequest,
+  ReleaseSyncResult,
+  ReleaseSyncResponse,
+} from './releases';
+
 // ─── Share Links ─────────────────────────────────────────────────────────────
 export {
   shareLinkSchema,

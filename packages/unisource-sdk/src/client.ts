@@ -62,6 +62,20 @@ import type {
   MainStorageDeleteResponse,
   MainStorageRestoreResponse,
 } from './mainStorage';
+import type {
+  ReleaseDTO,
+  ReleaseUploadInitRequest,
+  ReleaseUploadInitResponse,
+  ReleaseUploadCompleteRequest,
+  ReleaseUploadCompleteResponse,
+  ReleaseUploadFailResponse,
+  ReleasesListQuery,
+  ReleasesListResponse,
+  ReleaseUpdateRequest,
+  ReleaseDeleteResponse,
+  ReleaseSyncRequest,
+  ReleaseSyncResponse,
+} from './releases';
 
 // ─── SDK Error classes ────────────────────────────────────────────────────────
 
@@ -334,6 +348,48 @@ export class UnisourceClient {
       fail: (uploadId: string): Promise<UploadFailResponse> =>
         this.request('POST', '/upload/fail', { body: { upload_id: uploadId } }),
     },
+  };
+
+  // ─── Releases ─────────────────────────────────────────────────────────────
+
+  readonly releases = {
+    upload: {
+      /** Initiate a release upload — returns a presigned PUT URL */
+      init: (body: ReleaseUploadInitRequest, signal?: AbortSignal): Promise<ReleaseUploadInitResponse> =>
+        apiRequest(this.config, 'POST', '/releases/upload/init', { body, signal }),
+
+      /** Confirm that a release object was successfully uploaded */
+      complete: (body: ReleaseUploadCompleteRequest, signal?: AbortSignal): Promise<ReleaseUploadCompleteResponse> =>
+        apiRequest(this.config, 'POST', '/releases/upload/complete', { body, signal }),
+
+      /** Mark a release upload as failed */
+      fail: (releaseId: string, signal?: AbortSignal): Promise<ReleaseUploadFailResponse> =>
+        apiRequest(this.config, 'POST', '/releases/upload/fail', { body: { release_id: releaseId }, signal }),
+    },
+
+    /** List releases for the configured service */
+    list: (query?: ReleasesListQuery, signal?: AbortSignal): Promise<ReleasesListResponse> =>
+      apiRequest(this.config, 'GET', '/releases', { query, signal }),
+
+    /** Get a single release */
+    get: (releaseId: string, signal?: AbortSignal): Promise<ReleaseDTO> =>
+      apiRequest(this.config, 'GET', `/releases/${releaseId}`, { signal }),
+
+    /** Get the latest completed release */
+    latest: (signal?: AbortSignal): Promise<ReleaseDTO> =>
+      apiRequest(this.config, 'GET', '/releases/latest', { signal }),
+
+    /** Update release metadata */
+    update: (releaseId: string, body: ReleaseUpdateRequest, signal?: AbortSignal): Promise<ReleaseDTO> =>
+      apiRequest(this.config, 'PATCH', `/releases/${releaseId}`, { body, signal }),
+
+    /** Delete a release and its completed object, when applicable */
+    delete: (releaseId: string, signal?: AbortSignal): Promise<ReleaseDeleteResponse> =>
+      apiRequest(this.config, 'DELETE', `/releases/${releaseId}`, { signal }),
+
+    /** Sync existing release manifests into the backend */
+    sync: (body: ReleaseSyncRequest, signal?: AbortSignal): Promise<ReleaseSyncResponse> =>
+      apiRequest(this.config, 'POST', '/releases/sync', { body, signal }),
   };
 
   // ─── Admin ────────────────────────────────────────────────────────────────
