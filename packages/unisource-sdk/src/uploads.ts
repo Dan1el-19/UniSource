@@ -8,6 +8,7 @@ export const uploadR2InitRequestSchema = z.object({
   size: positiveInt,
   mime_type: nonEmptyString,
   folder_id: nonEmptyString.optional(),
+  is_main_storage: z.boolean().optional().default(false),
 });
 export type UploadR2InitRequest = z.infer<typeof uploadR2InitRequestSchema>;
 
@@ -28,6 +29,7 @@ export const uploadAppwriteInitRequestSchema = z.object({
   size: positiveInt,
   mime_type: nonEmptyString,
   folder_id: nonEmptyString.optional(),
+  is_main_storage: z.boolean().optional().default(false),
 });
 export type UploadAppwriteInitRequest = z.infer<typeof uploadAppwriteInitRequestSchema>;
 
@@ -46,6 +48,7 @@ export type UploadAppwriteInitResponse = z.infer<typeof uploadAppwriteInitRespon
 
 export const uploadLifecycleRequestSchema = z.object({
   upload_id: nonEmptyString,
+  is_main_storage: z.boolean().optional().default(false),
 });
 export type UploadLifecycleRequest = z.infer<typeof uploadLifecycleRequestSchema>;
 

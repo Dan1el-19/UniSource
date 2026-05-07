@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload } from '../db/files';
-import { createFileRecord } from '../db/fileRecords';
-import { reserveQuota, releaseQuota, logServiceEvent } from '../db/services';
+import { createFileRecord, createMainStorageFileRecord } from '../db/fileRecords';
+import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../db/services';
 import { rateLimitMiddleware } from '../middleware/ratelimit';
 import { generatePresignedPutUrl, headObject } from '../services/r2';
 import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
@@ -69,8 +69,10 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
   const { filename, size, mime_type, folder_id } = body;
 
   // Quota check and reserve before creating presigned URL (atomic)
-  const quotaReserved = await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
-  if (!quotaReserved.ok) {
+  const quotaResult = body.is_main_storage
+    ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
+    : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
+  if (!quotaResult.ok) {
     if (userId !== 'system') {
       c.executionCtx.waitUntil(
         logServiceEvent(c.env.APP_DB, {
@@ -84,11 +86,12 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
         })
       );
     }
+    const scope = 'scope' in quotaResult ? quotaResult.scope : 'service';
     return c.json(
       {
         error: 'Conflict',
         message:
-          quotaReserved.scope === 'user'
+          scope === 'user'
             ? 'Storage quota exceeded for this user'
             : 'Storage quota exceeded for this service',
       },
@@ -152,8 +155,10 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
   const { filename, size, mime_type, folder_id } = body;
 
   // Quota check and reserve (atomic)
-  const quotaReserved = await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
-  if (!quotaReserved.ok) {
+  const quotaResult = body.is_main_storage
+    ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
+    : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
+  if (!quotaResult.ok) {
     if (userId !== 'system') {
       c.executionCtx.waitUntil(
         logServiceEvent(c.env.APP_DB, {
@@ -167,11 +172,12 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
         })
       );
     }
+    const scope = 'scope' in quotaResult ? quotaResult.scope : 'service';
     return c.json(
       {
         error: 'Conflict',
         message:
-          quotaReserved.scope === 'user'
+          scope === 'user'
             ? 'Storage quota exceeded for this user'
             : 'Storage quota exceeded for this service',
       },
@@ -216,7 +222,9 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
  * Bug #15 fix: verifies the upload belongs to this user + service
  */
 upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
-  const { upload_id } = c.req.valid('json');
+  const body = c.req.valid('json');
+  const { upload_id } = body;
+  const isMainStorage = body.is_main_storage === true;
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
 
@@ -239,7 +247,11 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
     const updated = await failUpload(c.env.APP_DB, upload_id);
     if (updated) {
       // Release quota since upload expired
-      await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+      if (isMainStorage) {
+        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
+      } else {
+        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+      }
     }
     return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
   }
@@ -261,7 +273,11 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   if (physicalSize === null || physicalSize !== record.size) {
     const failed = await failUpload(c.env.APP_DB, upload_id);
     if (failed) {
-      await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+      if (isMainStorage) {
+        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
+      } else {
+        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+      }
     }
     return c.json(
       {
@@ -280,21 +296,38 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   // Promote to confirmed file record and increment service storage usage
   if (userId !== 'system') {
     const newFileId = crypto.randomUUID();
-    await createFileRecord(c.env.APP_DB, {
-      id: newFileId,
-      service_id: serviceId,
-      user_id: userId,
-      folder_id: record.folder_id ?? null,
-      upload_id,
-      filename: record.filename,
-      size: record.size,
-      mime_type: record.mime_type,
-      storage_destination: record.destination,
-      storage_key: record.storage_key,
-      bucket: record.bucket,
-    });
+
+    if (isMainStorage) {
+      await createMainStorageFileRecord(c.env.APP_DB, {
+        id: newFileId,
+        service_id: serviceId,
+        uploaded_by: userId,
+        upload_id,
+        filename: record.filename,
+        size: record.size,
+        mime_type: record.mime_type,
+        storage_destination: record.destination,
+        storage_key: record.storage_key,
+        bucket: record.bucket,
+      });
+    } else {
+      await createFileRecord(c.env.APP_DB, {
+        id: newFileId,
+        service_id: serviceId,
+        user_id: userId,
+        folder_id: record.folder_id ?? null,
+        upload_id,
+        filename: record.filename,
+        size: record.size,
+        mime_type: record.mime_type,
+        storage_destination: record.destination,
+        storage_key: record.storage_key,
+        bucket: record.bucket,
+      });
+    }
+
     // Quota was already reserved atomically in /init, no need to increment here.
-    
+
     // Audit log
     c.executionCtx.waitUntil(
       logServiceEvent(c.env.APP_DB, {
@@ -303,7 +336,7 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
         action: 'upload_completed',
         resourceType: 'file',
         resourceId: newFileId,
-        metadata: { filename: record.filename, size: record.size },
+        metadata: { filename: record.filename, size: record.size, is_main_storage: isMainStorage },
         ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
       })
     );
@@ -313,7 +346,9 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
 });
 
 upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
-  const { upload_id } = c.req.valid('json');
+  const body = c.req.valid('json');
+  const { upload_id } = body;
+  const isMainStorage = body.is_main_storage === true;
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
 
@@ -333,7 +368,11 @@ upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validation
   const updated = await failUpload(c.env.APP_DB, upload_id);
   // Release reserved quota
   if (updated) {
-    await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+    if (isMainStorage) {
+      await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
+    } else {
+      await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+    }
   }
   return c.json<UploadFailResponse>({ success: true, upload_id, status: 'failed' });
 });
