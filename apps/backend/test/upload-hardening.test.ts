@@ -205,5 +205,91 @@ describe('POST /upload/complete — physical verification', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { success: boolean };
     expect(body.success).toBe(true);
+    expect(vi.mocked(completeUpload)).toHaveBeenCalled();
+  });
+});
+
+const pendingAppwriteRecord: UploadRecord = {
+  id: 'upload-456',
+  service_id: 'usrc',
+  user_id: null,
+  folder_id: null,
+  filename: 'test.pdf',
+  size: 1024,
+  mime_type: 'application/pdf',
+  destination: 'appwrite',
+  storage_key: 'usrc/uploads/2026/01/01/abcdef123456789',
+  bucket: 'appwrite-bucket-id',
+  status: 'pending',
+  presigned_url: null,
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  created_at: Math.floor(Date.now() / 1000),
+  updated_at: Math.floor(Date.now() / 1000),
+};
+
+describe('POST /upload/complete — physical verification (Appwrite)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(getUpload).mockResolvedValue(pendingAppwriteRecord);
+  });
+
+  it('returns 409 and fails the upload when Appwrite file is not found', async () => {
+    vi.mocked(getAppwriteFileMeta).mockResolvedValue(null);
+    vi.mocked(failUpload).mockResolvedValue(true);
+
+    const app = buildUploadApp();
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-456' }),
+      }),
+      { ...baseEnv, usrc_d1: mockD1() }
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string; message: string };
+    expect(body.error).toBe('Conflict');
+    expect(body.message).toContain('not found');
+    expect(vi.mocked(failUpload)).toHaveBeenCalled();
+  });
+
+  it('returns 409 when Appwrite file size does not match expected', async () => {
+    vi.mocked(getAppwriteFileMeta).mockResolvedValue({ size: 512 }); // expected 1024
+    vi.mocked(failUpload).mockResolvedValue(true);
+
+    const app = buildUploadApp();
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-456' }),
+      }),
+      { ...baseEnv, usrc_d1: mockD1() }
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as { message: string };
+    expect(body.message).toContain('size mismatch');
+  });
+
+  it('completes successfully when Appwrite file exists with correct size', async () => {
+    vi.mocked(getAppwriteFileMeta).mockResolvedValue({ size: 1024 });
+    vi.mocked(completeUpload).mockResolvedValue(true);
+
+    const app = buildUploadApp();
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-456' }),
+      }),
+      { ...baseEnv, usrc_d1: mockD1() }
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { success: boolean };
+    expect(body.success).toBe(true);
+    expect(vi.mocked(completeUpload)).toHaveBeenCalled();
   });
 });
