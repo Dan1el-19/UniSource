@@ -13,6 +13,7 @@ export interface FileRecord {
   storage_destination: UploadDestination;
   storage_key: string;
   bucket: string;
+  is_main_storage: 0 | 1;
   is_trashed: 0 | 1;
   trashed_at: number | null;
   created_at: number;
@@ -274,4 +275,89 @@ export async function trashFilesInFolders(
 
   const results = await db.batch(stmts);
   return results.reduce((acc, r) => acc + (r.meta.changes ?? 0), 0);
+}
+
+export interface ListMainStorageInput {
+  limit: number;
+  cursor?: string | null;
+}
+
+export async function createMainStorageFileRecord(
+  db: D1Database,
+  input: {
+    id?: string;
+    service_id: string;
+    uploaded_by: string;
+    upload_id?: string | null;
+    filename: string;
+    size: number;
+    mime_type: string;
+    storage_destination: string;
+    storage_key: string;
+    bucket: string;
+  }
+): Promise<FileRecord> {
+  const now = Math.floor(Date.now() / 1000);
+  const id = input.id ?? crypto.randomUUID();
+  await db
+    .prepare(
+      `INSERT INTO files
+         (id, service_id, user_id, folder_id, upload_id, filename, size, mime_type,
+          storage_destination, storage_key, bucket, is_main_storage, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    )
+    .bind(
+      id,
+      input.service_id,
+      input.uploaded_by,
+      input.upload_id ?? null,
+      input.filename,
+      input.size,
+      input.mime_type,
+      input.storage_destination,
+      input.storage_key,
+      input.bucket,
+      now,
+      now
+    )
+    .run();
+
+  return getFileRecord(db, id) as Promise<FileRecord>;
+}
+
+export async function listMainStorageFileRecords(
+  db: D1Database,
+  serviceId: string,
+  input: ListMainStorageInput
+): Promise<{ items: FileRecord[]; next_cursor: string | null }> {
+  const binds: (string | number)[] = [serviceId];
+  let cursorClause = '';
+
+  if (input.cursor) {
+    const parsed = decodeFileCursor(input.cursor);
+    if (!parsed) throw new Error('Invalid cursor');
+    cursorClause = 'AND (created_at < ? OR (created_at = ? AND id < ?))';
+    binds.push(parsed.created_at, parsed.created_at, parsed.id);
+  }
+
+  const fetchLimit = input.limit + 1;
+  const rows = await db
+    .prepare(
+      `SELECT * FROM files
+       WHERE service_id = ? AND is_main_storage = 1 AND is_trashed = 0
+       ${cursorClause}
+       ORDER BY created_at DESC, id DESC
+       LIMIT ?`
+    )
+    .bind(...binds, fetchLimit)
+    .all<FileRecord>();
+
+  const items = rows.results ?? [];
+  const hasMore = items.length > input.limit;
+  const page = hasMore ? items.slice(0, input.limit) : items;
+  const last = page[page.length - 1];
+  return {
+    items: page,
+    next_cursor: hasMore && last ? `${last.created_at}:${last.id}` : null,
+  };
 }
