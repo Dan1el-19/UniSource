@@ -56,6 +56,12 @@ import type {
   ShareLinkUpdateResponse,
   ShareLinkDeleteResponse,
 } from './shareLinks';
+import type {
+  MainStorageListQuery,
+  MainStorageListResponse,
+  MainStorageDeleteResponse,
+  MainStorageRestoreResponse,
+} from './mainStorage';
 
 // ─── SDK Error classes ────────────────────────────────────────────────────────
 
@@ -150,10 +156,11 @@ async function apiRequest<T>(
   config: UnisourceClientConfig,
   method: string,
   path: string,
-  options: { body?: unknown; query?: Record<string, string | number | boolean | undefined | null>; signal?: AbortSignal } = {}
+  options: { body?: unknown; query?: Record<string, string | number | boolean | undefined | null>; signal?: AbortSignal; extraHeaders?: Record<string, string> } = {}
 ): Promise<T> {
   const token = await config.getToken();
   const authHeaders: Record<string, string> = {
+    ...(options.extraHeaders ?? {}),
     'X-Service-ID': config.serviceId,
   };
   if (token) {
@@ -191,6 +198,18 @@ export class UnisourceClient {
     this.config = config;
   }
 
+  private request<T>(
+    method: string,
+    path: string,
+    options: { body?: unknown; query?: Record<string, string | number | boolean | undefined | null>; signal?: AbortSignal; extraHeaders?: Record<string, string> } = {}
+  ): Promise<T> {
+    return apiRequest<T>(this.config, method, path, options);
+  }
+
+  private withAsUser(options?: { asUser?: string }): Record<string, string> {
+    return options?.asUser ? { 'X-Target-User-ID': options.asUser } : {};
+  }
+
   // ─── Upload ────────────────────────────────────────────────────────────────
 
   readonly upload = {
@@ -215,64 +234,106 @@ export class UnisourceClient {
 
   readonly myFiles = {
     /** List files owned by the authenticated user */
-    list: (query?: FileRecordsListQuery, signal?: AbortSignal): Promise<FileRecordsListResponse> =>
-      apiRequest(this.config, 'GET', '/my-files', { query, signal }),
+    list: (query?: FileRecordsListQuery, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileRecordsListResponse> =>
+      apiRequest(this.config, 'GET', '/my-files', { query, signal, extraHeaders: this.withAsUser(options) }),
 
     /** List files in the trash */
-    trash: (query?: { cursor?: string; limit?: number }, signal?: AbortSignal): Promise<FileRecordsListResponse> =>
-      apiRequest(this.config, 'GET', '/my-files/trash', { query, signal }),
+    trash: (query?: { cursor?: string; limit?: number }, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileRecordsListResponse> =>
+      apiRequest(this.config, 'GET', '/my-files/trash', { query, signal, extraHeaders: this.withAsUser(options) }),
 
     /** Get a single file record */
-    get: (id: string, signal?: AbortSignal): Promise<FileRecordDetailResponse> =>
-      apiRequest(this.config, 'GET', `/my-files/${id}`, { signal }),
+    get: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileRecordDetailResponse> =>
+      apiRequest(this.config, 'GET', `/my-files/${id}`, { signal, extraHeaders: this.withAsUser(options) }),
 
     /** Get a time-limited download URL (never cached by proxy) */
-    downloadUrl: (id: string, signal?: AbortSignal): Promise<FileDownloadUrlResponse> =>
-      apiRequest(this.config, 'GET', `/my-files/${id}/download-url`, { signal }),
+    downloadUrl: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileDownloadUrlResponse> =>
+      apiRequest(this.config, 'GET', `/my-files/${id}/download-url`, { signal, extraHeaders: this.withAsUser(options) }),
 
     /** Move file to a different folder (null = root) */
-    move: (id: string, body: FileMoveRequest, signal?: AbortSignal): Promise<{ file: FileRecord }> =>
-      apiRequest(this.config, 'PATCH', `/my-files/${id}/move`, { body, signal }),
+    move: (id: string, body: FileMoveRequest, signal?: AbortSignal, options?: { asUser?: string }): Promise<{ file: FileRecord }> =>
+      apiRequest(this.config, 'PATCH', `/my-files/${id}/move`, { body, signal, extraHeaders: this.withAsUser(options) }),
 
     /** Soft-delete (move to trash) or permanently delete */
-    delete: (id: string, query?: { permanent?: boolean }, signal?: AbortSignal): Promise<FileDeleteResponse> =>
-      apiRequest(this.config, 'DELETE', `/my-files/${id}`, { query, signal }),
+    delete: (id: string, query?: { permanent?: boolean }, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileDeleteResponse> =>
+      apiRequest(this.config, 'DELETE', `/my-files/${id}`, { query, signal, extraHeaders: this.withAsUser(options) }),
 
     /** Restore a file from trash */
-    restore: (id: string, signal?: AbortSignal): Promise<FileRestoreResponse> =>
-      apiRequest(this.config, 'POST', `/my-files/${id}/restore`, { signal }),
+    restore: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileRestoreResponse> =>
+      apiRequest(this.config, 'POST', `/my-files/${id}/restore`, { signal, extraHeaders: this.withAsUser(options) }),
 
     /** Rename a file */
-    update: (id: string, body: FileUpdateRequest, signal?: AbortSignal): Promise<FileUpdateResponse> =>
-      apiRequest(this.config, 'PATCH', `/my-files/${id}`, { body, signal }),
+    update: (id: string, body: FileUpdateRequest, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/my-files/${id}`, { body, signal, extraHeaders: this.withAsUser(options) }),
   };
 
   // ─── Folders ──────────────────────────────────────────────────────────────
 
   readonly folders = {
     /** List folders owned by the authenticated user */
-    list: (query?: FolderListQuery, signal?: AbortSignal): Promise<FolderListResponse> =>
-      apiRequest(this.config, 'GET', '/folders', { query, signal }),
+    list: (query?: FolderListQuery, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderListResponse> =>
+      apiRequest(this.config, 'GET', '/folders', { query, signal, extraHeaders: this.withAsUser(options) }),
 
     /** Get a single folder by ID */
-    get: (id: string, signal?: AbortSignal): Promise<FolderDetailResponse> =>
-      apiRequest(this.config, 'GET', `/folders/${id}`, { signal }),
+    get: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderDetailResponse> =>
+      apiRequest(this.config, 'GET', `/folders/${id}`, { signal, extraHeaders: this.withAsUser(options) }),
 
     /** Create a new folder */
-    create: (body: FolderCreateRequest, signal?: AbortSignal): Promise<FolderCreateResponse> =>
-      apiRequest(this.config, 'POST', '/folders', { body, signal }),
+    create: (body: FolderCreateRequest, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderCreateResponse> =>
+      apiRequest(this.config, 'POST', '/folders', { body, signal, extraHeaders: this.withAsUser(options) }),
 
     /** Update folder name or color tag */
-    update: (id: string, body: FolderUpdateRequest, signal?: AbortSignal): Promise<FolderUpdateResponse> =>
-      apiRequest(this.config, 'PATCH', `/folders/${id}`, { body, signal }),
+    update: (id: string, body: FolderUpdateRequest, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/folders/${id}`, { body, signal, extraHeaders: this.withAsUser(options) }),
 
     /** Soft-delete or permanently delete a folder and its contents */
-    delete: (id: string, query?: { permanent?: boolean }, signal?: AbortSignal): Promise<FolderDeleteResponse> =>
-      apiRequest(this.config, 'DELETE', `/folders/${id}`, { query, signal }),
+    delete: (id: string, query?: { permanent?: boolean }, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderDeleteResponse> =>
+      apiRequest(this.config, 'DELETE', `/folders/${id}`, { query, signal, extraHeaders: this.withAsUser(options) }),
 
     /** Restore a folder from trash */
-    restore: (id: string, signal?: AbortSignal): Promise<FolderRestoreResponse> =>
-      apiRequest(this.config, 'POST', `/folders/${id}/restore`, { signal }),
+    restore: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderRestoreResponse> =>
+      apiRequest(this.config, 'POST', `/folders/${id}/restore`, { signal, extraHeaders: this.withAsUser(options) }),
+  };
+
+  // ─── Main Storage ─────────────────────────────────────────────────────────
+
+  readonly mainStorage = {
+    /** List files in the main storage pool */
+    list: (query?: MainStorageListQuery): Promise<MainStorageListResponse> =>
+      this.request('GET', '/main', { query }),
+
+    /** Get a single main-storage file record */
+    get: (fileId: string): Promise<FileRecord> =>
+      this.request('GET', `/main/${fileId}`),
+
+    /** Rename a main-storage file */
+    rename: (fileId: string, filename: string): Promise<FileRecord> =>
+      this.request('PATCH', `/main/${fileId}`, { body: { filename } }),
+
+    /** Delete a main-storage file (soft by default; pass permanent=true for hard delete) */
+    delete: (fileId: string, permanent = false): Promise<MainStorageDeleteResponse> =>
+      this.request('DELETE', `/main/${fileId}${permanent ? '?permanent=true' : ''}`),
+
+    /** Restore a soft-deleted main-storage file */
+    restore: (fileId: string): Promise<MainStorageRestoreResponse> =>
+      this.request('POST', `/main/${fileId}/restore`),
+
+    upload: {
+      /** Initiate an R2 upload targeting main storage */
+      r2Init: (input: Omit<UploadR2InitRequest, 'is_main_storage'>): Promise<UploadR2InitResponse> =>
+        this.request('POST', '/upload/r2/init', { body: { ...input, is_main_storage: true } }),
+
+      /** Initiate an Appwrite upload targeting main storage */
+      appwriteInit: (input: Omit<UploadAppwriteInitRequest, 'is_main_storage'>): Promise<UploadAppwriteInitResponse> =>
+        this.request('POST', '/upload/appwrite/init', { body: { ...input, is_main_storage: true } }),
+
+      /** Confirm a main-storage upload completed */
+      complete: (uploadId: string): Promise<UploadCompleteResponse> =>
+        this.request('POST', '/upload/complete', { body: { upload_id: uploadId, is_main_storage: true } }),
+
+      /** Mark a main-storage upload as failed */
+      fail: (uploadId: string): Promise<UploadFailResponse> =>
+        this.request('POST', '/upload/fail', { body: { upload_id: uploadId } }),
+    },
   };
 
   // ─── Admin ────────────────────────────────────────────────────────────────

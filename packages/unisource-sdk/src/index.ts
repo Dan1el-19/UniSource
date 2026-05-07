@@ -126,7 +126,10 @@ export type {
   AdminUserPasswordResetResponse,
 } from './services';
 
-// ─── Share Links ──────────────────────────────────────────────────────────────
+// ─── Main Storage ─────────────────────────────────────────────────────────────
+export * from './mainStorage';
+
+// ─── Share Links ─────────────────────────────────────────────────────────────
 export {
   shareLinkSchema,
   shareLinkCreateRequestSchema,
