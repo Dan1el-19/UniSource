@@ -141,3 +141,69 @@ describe('getAppwriteFileMeta — Appwrite service', () => {
     expect(getAppwriteFileMeta).toBeDefined();
   });
 });
+
+describe('POST /upload/complete — physical verification', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(getUpload).mockResolvedValue(pendingR2Record);
+  });
+
+  it('returns 409 and fails the upload when R2 object is not found', async () => {
+    vi.mocked(headObject).mockResolvedValue(null);
+    vi.mocked(failUpload).mockResolvedValue(true);
+
+    const app = buildUploadApp();
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-123' }),
+      }),
+      { ...baseEnv, usrc_d1: mockD1() }
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string; message: string };
+    expect(body.error).toBe('Conflict');
+    expect(body.message).toContain('not found');
+    expect(vi.mocked(failUpload)).toHaveBeenCalled();
+  });
+
+  it('returns 409 when R2 file size does not match expected', async () => {
+    vi.mocked(headObject).mockResolvedValue({ size: 512 }); // expected 1024
+    vi.mocked(failUpload).mockResolvedValue(true);
+
+    const app = buildUploadApp();
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-123' }),
+      }),
+      { ...baseEnv, usrc_d1: mockD1() }
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as { message: string };
+    expect(body.message).toContain('size mismatch');
+  });
+
+  it('completes successfully when R2 object exists with correct size', async () => {
+    vi.mocked(headObject).mockResolvedValue({ size: 1024 });
+    vi.mocked(completeUpload).mockResolvedValue(true);
+
+    const app = buildUploadApp();
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-123' }),
+      }),
+      { ...baseEnv, usrc_d1: mockD1() }
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { success: boolean };
+    expect(body.success).toBe(true);
+  });
+});

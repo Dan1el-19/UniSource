@@ -4,8 +4,8 @@ import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload }
 import { createFileRecord } from '../db/fileRecords';
 import { reserveQuota, releaseQuota, logServiceEvent } from '../db/services';
 import { rateLimitMiddleware } from '../middleware/ratelimit';
-import { generatePresignedPutUrl } from '../services/r2';
-import { getAppwriteUploadConfig } from '../services/appwrite';
+import { generatePresignedPutUrl, headObject } from '../services/r2';
+import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
 import { getServiceConfig, buildStorageKey } from '../config/services';
 import {
   type UploadAppwriteInitResponse,
@@ -242,6 +242,34 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
       await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
     }
     return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
+  }
+
+  // Verify the file physically exists in storage with the correct size
+  let physicalSize: number | null = null;
+  if (record.destination === 'r2') {
+    const svcConfig = getServiceConfig(record.service_id)!;
+    const meta = await headObject(c.env, svcConfig.bucketName, record.storage_key);
+    physicalSize = meta?.size ?? null;
+  } else {
+    const fileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
+    if (fileId) {
+      const meta = await getAppwriteFileMeta(c.env, record.bucket, fileId);
+      physicalSize = meta?.size ?? null;
+    }
+  }
+
+  if (physicalSize === null || physicalSize !== record.size) {
+    const failed = await failUpload(c.env.usrc_d1, upload_id);
+    if (failed) {
+      await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
+    }
+    return c.json(
+      {
+        error: 'Conflict',
+        message: physicalSize === null ? 'File not found in storage' : 'File size mismatch',
+      },
+      409
+    );
   }
 
   const updated = await completeUpload(c.env.usrc_d1, upload_id);
