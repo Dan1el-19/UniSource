@@ -293,3 +293,46 @@ describe('POST /upload/complete — physical verification (Appwrite)', () => {
     expect(vi.mocked(completeUpload)).toHaveBeenCalled();
   });
 });
+
+describe('POST /public/:slug/unlock — rate limiting', () => {
+  it('returns 429 when rate limit is exceeded', async () => {
+    const rateLimitedEnv = {
+      ...baseEnv,
+      RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: false }) },
+    } as unknown as CloudflareBindings;
+
+    const app = buildPublicApp();
+    const res = await app.fetch(
+      new Request('http://localhost/public/any-slug/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'brute-force-attempt' }),
+      }),
+      rateLimitedEnv
+    );
+
+    expect(res.status).toBe(429);
+  });
+
+  it('proceeds past rate limiter when limit allows (returns 404 from missing share link)', async () => {
+    const passEnv = {
+      ...baseEnv,
+      RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
+      APP_DB: mockD1(0),
+    } as unknown as CloudflareBindings;
+
+    const app = buildPublicApp();
+    const res = await app.fetch(
+      new Request('http://localhost/public/nonexistent/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'test' }),
+      }),
+      passEnv
+    );
+
+    // 404 because share link not found in mock DB — but NOT 429
+    expect(res.status).not.toBe(429);
+    expect(res.status).toBe(404);
+  });
+});

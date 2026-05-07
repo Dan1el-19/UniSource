@@ -13,8 +13,9 @@ import {
 } from '../services/appwrite';
 import { getServiceConfig } from '../config/services';
 import { createSignedToken, verifySignedToken } from '../utils/signedTokens';
+import { rateLimitMiddleware } from '../middleware/ratelimit';
 
-type HonoEnv = { Bindings: CloudflareBindings };
+type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
 const DOWNLOAD_URL_TTL = 15 * 60;
 const PUBLIC_DOWNLOAD_SCOPE = 'public-download';
@@ -139,6 +140,7 @@ publicRouter.get('/:slug', zValidator('param', slugParam, validationErrorHook), 
 
 publicRouter.post(
   '/:slug/unlock',
+  rateLimitMiddleware,
   zValidator('param', slugParam, validationErrorHook),
   zValidator('json', z.object({ password: z.string().min(1) }), validationErrorHook),
   async (c) => {
