@@ -107,6 +107,7 @@ export {
   adminUserUpdateResponseSchema,
   adminUserPasswordResetRequestSchema,
   adminUserPasswordResetResponseSchema,
+  adminQuotaReconcileResponseSchema,
 } from './services';
 export type {
   Service,
@@ -124,6 +125,7 @@ export type {
   AdminUserUpdateResponse,
   AdminUserPasswordResetRequest,
   AdminUserPasswordResetResponse,
+  AdminQuotaReconcileResponse,
 } from './services';
 
 // ─── Main Storage ─────────────────────────────────────────────────────────────
