@@ -1,14 +1,18 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "usrc-backend",
+	"account_id": "0435db96c4078cd58f12162e0b83cee0",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-04-17",
 	"compatibility_flags": ["nodejs_compat"],
+	"custom_domains": [
+		{ "pattern": "api.usrc.dev", "zone_name": "usrc.dev" }
+	],
 	"d1_databases": [
 		{
  			"binding": "usrc_d1",
  			"database_name": "usrc-d1",
-			"database_id": "548cf71c-49e7-4080-9a16-8a6d143772c8",
+			"database_id": "fabfb0d8-ebe5-43ad-bc3e-67ed34af3a37",
 			"migrations_dir": "src/db/migrations"
 		}
 	],
