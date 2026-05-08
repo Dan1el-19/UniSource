@@ -64,6 +64,8 @@ export const auditEventSchema = z.object({
   resource_id: nonEmptyString,
   metadata: z.record(z.string(), z.unknown()).nullable(),
   ip_address: z.string().nullable(),
+  actor_id: z.string().nullable().optional(),
+  target_user_id: z.string().nullable().optional(),
   created_at: unixTimestamp,
 });
 export type AuditEvent = z.infer<typeof auditEventSchema>;

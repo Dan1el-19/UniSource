@@ -221,6 +221,8 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorH
         resourceId: id,
         metadata: { descendants_deleted: descendantIds.length },
         ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+        actorId: c.get('actorId') ?? null,
+        targetUserId: c.get('actorId') ? c.get('userId') : null,
       })
     );
 
