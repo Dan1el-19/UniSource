@@ -15,11 +15,16 @@ vi.mock('../src/db/fileRecords', async (importOriginal) => {
   };
 });
 
+vi.mock('../src/db/services', () => ({
+  releaseMainStorageQuota: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../src/middleware/requireRole', () => ({
   requireRoleMiddleware: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
 import { listMainStorageFileRecords, getFileRecord, trashFileRecord, deleteFileRecordPermanently, updateFileRecord, restoreFileRecord } from '../src/db/fileRecords';
+import { releaseMainStorageQuota } from '../src/db/services';
 import mainStorageRouter from '../src/routes/mainStorage';
 
 function buildMainApp(userId = 'u1', serviceId = 'usrc') {
@@ -126,12 +131,23 @@ describe('DELETE /main/:id', () => {
   });
 
   it('returns 200 on permanent delete when ?permanent=true', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 0 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 0, size: 1024 } as any);
     vi.mocked(deleteFileRecordPermanently).mockResolvedValue(undefined as any);
+    vi.mocked(releaseMainStorageQuota).mockResolvedValue(undefined);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1?permanent=true', { method: 'DELETE' }), env);
     expect(res.status).toBe(200);
     expect(vi.mocked(deleteFileRecordPermanently)).toHaveBeenCalled();
+    expect(vi.mocked(releaseMainStorageQuota)).toHaveBeenCalledWith(env.usrc_d1, 'usrc', 1024);
+  });
+
+  it('does NOT call releaseMainStorageQuota on soft delete', async () => {
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 0, size: 1024 } as any);
+    vi.mocked(trashFileRecord).mockResolvedValue(undefined as any);
+    const app = buildMainApp();
+    const res = await app.fetch(new Request('http://localhost/main/file-1', { method: 'DELETE' }), env);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(releaseMainStorageQuota)).not.toHaveBeenCalled();
   });
 });
 
