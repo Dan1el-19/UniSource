@@ -273,6 +273,8 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
         resourceId: id,
         metadata: { filename: record.filename, size: record.size },
         ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+        actorId: c.get('actorId') ?? null,
+        targetUserId: c.get('actorId') ? c.get('userId') : null,
       })
     );
 

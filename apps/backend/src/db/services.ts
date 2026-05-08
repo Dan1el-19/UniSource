@@ -435,6 +435,8 @@ export interface LogEventInput {
   resourceId: string;
   metadata?: Record<string, any>;
   ipAddress?: string | null;
+  actorId?: string | null;
+  targetUserId?: string | null;
 }
 
 // Logs an audit event for B2B dashboards
@@ -449,8 +451,8 @@ export async function logServiceEvent(
   await db
     .prepare(
       `INSERT INTO service_user_events
-       (id, service_id, user_id, action, resource_type, resource_id, metadata, ip_address, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, service_id, user_id, action, resource_type, resource_id, metadata, ip_address, actor_id, target_user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -461,6 +463,8 @@ export async function logServiceEvent(
       input.resourceId,
       metadataStr,
       input.ipAddress ?? null,
+      input.actorId ?? null,
+      input.targetUserId ?? null,
       now
     )
     .run();
