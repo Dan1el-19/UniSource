@@ -1,9 +1,13 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "app-backend",
+	"account_id": "00000000000000000000000000000000",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-04-17",
 	"compatibility_flags": ["nodejs_compat"],
+	"custom_domains": [
+		{ "pattern": "api.example.com", "zone_name": "example.com" }
+	],
 	"d1_databases": [
 		{
  			"binding": "APP_DB",
