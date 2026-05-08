@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build SDK
+        run: pnpm --filter @unisource/sdk build
+
       - name: Verify backend
         run: pnpm --filter app-backend check
 
