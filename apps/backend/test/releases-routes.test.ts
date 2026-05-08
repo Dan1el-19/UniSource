@@ -80,6 +80,7 @@ const completedRelease = {
 };
 
 const pendingRelease = { ...completedRelease, upload_status: 'pending' as const };
+const failedRelease = { ...completedRelease, upload_status: 'failed' as const };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -285,6 +286,40 @@ describe('POST /releases/upload/fail', () => {
     expect(res.status).toBe(200);
     expect(failRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-1');
   });
+
+  it('returns success when release is already failed', async () => {
+    vi.mocked(getRelease).mockResolvedValue(failedRelease);
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/fail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ release_id: 'rel-1' }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { status: string };
+    expect(body.status).toBe('failed');
+    expect(failRelease).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 with actual state when release is completed', async () => {
+    vi.mocked(getRelease).mockResolvedValue(completedRelease);
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/fail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ release_id: 'rel-1' }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json() as { message: string };
+    expect(body.message).toBe('Release is already in state: completed');
+    expect(failRelease).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /releases/latest', () => {
@@ -420,5 +455,31 @@ describe('POST /releases/sync', () => {
       })
     );
     expect(completeRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-sync');
+  });
+
+  it('returns 400 and does not create release when manifest r2_key is outside service releases prefix', async () => {
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releases: [
+            {
+              id: 'rel-sync',
+              name: 'v1.2.0',
+              r2_key: 'backups/usrc/rel-sync.zip',
+              size: 1234,
+            },
+          ],
+        }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json() as { message: string };
+    expect(body.message).toBe('r2_key must start with releases/usrc/');
+    expect(createRelease).not.toHaveBeenCalled();
+    expect(completeRelease).not.toHaveBeenCalled();
   });
 });

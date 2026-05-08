@@ -102,6 +102,10 @@ function buildReleaseStorageKey(serviceId: string, releaseId: string, filename: 
   return `releases/${serviceId}/${releaseId}${ext ? `.${ext}` : ''}`;
 }
 
+function getReleaseStoragePrefix(serviceId: string): string {
+  return `releases/${serviceId}/`;
+}
+
 releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validationErrorHook), async (c) => {
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
@@ -193,9 +197,26 @@ releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, validatio
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
   }
 
-  if (release.upload_status !== 'failed') {
-    await failRelease(c.env.usrc_d1, release_id);
+  if (release.upload_status === 'failed') {
+    return c.json({ success: true, release_id, status: 'failed' });
   }
+
+  if (release.upload_status !== 'pending') {
+    return c.json({ error: 'Conflict', message: `Release is already in state: ${release.upload_status}` }, 409);
+  }
+
+  const failed = await failRelease(c.env.usrc_d1, release_id);
+  if (!failed) {
+    const current = await getRelease(c.env.usrc_d1, release_id, serviceId);
+    if (!current) {
+      return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
+    }
+    if (current.upload_status === 'failed') {
+      return c.json({ success: true, release_id, status: 'failed' });
+    }
+    return c.json({ error: 'Conflict', message: `Release is already in state: ${current.upload_status}` }, 409);
+  }
+
   return c.json({ success: true, release_id, status: 'failed' });
 });
 
@@ -257,7 +278,14 @@ releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), 
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
   const body = c.req.valid('json');
+  const storagePrefix = getReleaseStoragePrefix(serviceId);
   const results = [];
+
+  for (const manifest of body.releases) {
+    if (!manifest.r2_key.startsWith(storagePrefix)) {
+      return c.json({ error: 'Bad Request', message: `r2_key must start with ${storagePrefix}` }, 400);
+    }
+  }
 
   for (const manifest of body.releases) {
     const releaseId = manifest.id ?? crypto.randomUUID();
