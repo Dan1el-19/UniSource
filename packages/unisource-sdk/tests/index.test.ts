@@ -4,6 +4,8 @@ import {
   fileRecordSchema,
   folderListQuerySchema,
   getPublicFileInfo,
+  mainStorageListQuerySchema,
+  mainStorageRenameResponseSchema,
   unlockPublicFile,
   UnisourceClient,
   UnisourceError,
@@ -166,6 +168,35 @@ describe('unisource-sdk schemas', () => {
     expect(shareLinkUpdateRequestSchema.safeParse({}).success).toBe(false);
     expect(shareLinkUpdateRequestSchema.safeParse({ is_active: false }).success).toBe(true);
     expect(shareLinkUpdateRequestSchema.safeParse({ name: null }).success).toBe(true);
+  });
+
+  it('mainStorageListQuerySchema enforces backend pagination limits', () => {
+    expect(mainStorageListQuerySchema.safeParse({ limit: 1 }).success).toBe(true);
+    expect(mainStorageListQuerySchema.safeParse({ limit: FILES_MAX_LIMIT }).success).toBe(true);
+    expect(mainStorageListQuerySchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(mainStorageListQuerySchema.safeParse({ limit: FILES_MAX_LIMIT + 1 }).success).toBe(false);
+  });
+
+  it('accepts main storage rename response payload', () => {
+    const parsed = mainStorageRenameResponseSchema.safeParse({
+      file: {
+        id: 'file-id',
+        service_id: 'default',
+        user_id: 'admin-user',
+        folder_id: null,
+        upload_id: 'upload-id',
+        filename: 'firmware.bin',
+        size: 2048,
+        mime_type: 'application/octet-stream',
+        storage_destination: 'r2',
+        is_trashed: false,
+        trashed_at: null,
+        created_at: 1_800_000_000,
+        updated_at: 1_800_000_010,
+      },
+    });
+
+    expect(parsed.success).toBe(true);
   });
 });
 
@@ -330,5 +361,80 @@ describe('unisource-sdk HTTP helpers', () => {
     });
 
     await expect(client.myFiles.list()).rejects.toBeInstanceOf(UnisourceNetworkError);
+  });
+
+  it('matches backend main storage endpoint contracts', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === 'https://api.example.com/main/file-1' && init?.method === 'PATCH') {
+        return new Response(
+          JSON.stringify({
+            file: {
+              id: 'file-1',
+              service_id: 'default',
+              user_id: 'admin-user',
+              folder_id: null,
+              upload_id: 'upload-1',
+              filename: 'renamed.bin',
+              size: 2048,
+              mime_type: 'application/octet-stream',
+              storage_destination: 'r2',
+              is_trashed: false,
+              trashed_at: null,
+              created_at: 1_800_000_000,
+              updated_at: 1_800_000_010,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (url === 'https://api.example.com/main/file-1?permanent=true' && init?.method === 'DELETE') {
+        return new Response(
+          JSON.stringify({ success: true, file_id: 'file-1' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new UnisourceClient({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'default',
+      getToken: async () => 'admin-token',
+    });
+
+    const renamed = await client.mainStorage.rename('file-1', 'renamed.bin');
+    const deleted = await client.mainStorage.delete('file-1', true);
+
+    expect(renamed.file.filename).toBe('renamed.bin');
+    expect(deleted).toEqual({ success: true, file_id: 'file-1' });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://api.example.com/main/file-1',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({
+          'X-Service-ID': 'default',
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ filename: 'renamed.bin' }),
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://api.example.com/main/file-1?permanent=true',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          'X-Service-ID': 'default',
+          Authorization: 'Bearer admin-token',
+        }),
+      })
+    );
   });
 });

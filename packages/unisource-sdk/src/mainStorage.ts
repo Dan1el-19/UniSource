@@ -1,27 +1,38 @@
 import { z } from 'zod';
-import { nonEmptyString } from './primitives';
+import { FILES_MAX_LIMIT, nonEmptyString } from './primitives';
 import { fileRecordSchema } from './fileRecords';
 
 // ─── List ──────────────────────────────────────────────────────────────────────
 
 export const mainStorageListQuerySchema = z.object({
-  limit: z.number().int().positive().optional(),
+  limit: z.number().int().min(1).max(FILES_MAX_LIMIT).optional(),
   cursor: nonEmptyString.optional(),
 });
 export type MainStorageListQuery = z.infer<typeof mainStorageListQuerySchema>;
 
+export const mainStorageFileSchema = fileRecordSchema;
+export type MainStorageFile = z.infer<typeof mainStorageFileSchema>;
+
 export const mainStorageListResponseSchema = z.object({
-  items: z.array(fileRecordSchema),
+  items: z.array(mainStorageFileSchema),
   next_cursor: z.string().nullable(),
 });
 export type MainStorageListResponse = z.infer<typeof mainStorageListResponseSchema>;
 
+export const mainStorageDetailResponseSchema = mainStorageFileSchema;
+export type MainStorageDetailResponse = z.infer<typeof mainStorageDetailResponseSchema>;
+
 // ─── Rename ────────────────────────────────────────────────────────────────────
 
 export const mainStorageRenameRequestSchema = z.object({
-  filename: nonEmptyString,
+  filename: nonEmptyString.max(255),
 });
 export type MainStorageRenameRequest = z.infer<typeof mainStorageRenameRequestSchema>;
+
+export const mainStorageRenameResponseSchema = z.object({
+  file: mainStorageFileSchema,
+});
+export type MainStorageRenameResponse = z.infer<typeof mainStorageRenameResponseSchema>;
 
 // ─── Delete ────────────────────────────────────────────────────────────────────
 
