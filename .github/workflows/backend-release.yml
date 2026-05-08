@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - 'apps/backend/**'
-      - '!apps/backend/.github/**'
   workflow_dispatch:
 
 concurrency:
