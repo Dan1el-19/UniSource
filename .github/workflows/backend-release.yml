@@ -1,17 +1,22 @@
-name: Release
+name: Release Backend
 
 on:
   push:
     branches:
       - main
+    paths:
+      - 'apps/backend/**'
+      - '!apps/backend/.github/**'
   workflow_dispatch:
 
 concurrency:
-  group: release-main
+  group: release-backend
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   release:
@@ -38,10 +43,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify project
-        run: pnpm check
+      - name: Verify backend
+        run: pnpm --filter app-backend check
 
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        working-directory: apps/backend
         run: pnpm release
