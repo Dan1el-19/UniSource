@@ -10,6 +10,7 @@ export default defineConfig({
     }),
   ],
   test: {
+    fileParallelism: false,
     include: ['test/**/*.test.ts'],
   },
 })
