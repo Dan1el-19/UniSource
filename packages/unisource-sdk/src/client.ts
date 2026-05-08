@@ -57,8 +57,10 @@ import type {
   ShareLinkDeleteResponse,
 } from './shareLinks';
 import type {
+  MainStorageDetailResponse,
   MainStorageListQuery,
   MainStorageListResponse,
+  MainStorageRenameResponse,
   MainStorageDeleteResponse,
   MainStorageRestoreResponse,
 } from './mainStorage';
@@ -316,16 +318,16 @@ export class UnisourceClient {
       this.request('GET', '/main', { query }),
 
     /** Get a single main-storage file record */
-    get: (fileId: string): Promise<FileRecord> =>
+    get: (fileId: string): Promise<MainStorageDetailResponse> =>
       this.request('GET', `/main/${fileId}`),
 
     /** Rename a main-storage file */
-    rename: (fileId: string, filename: string): Promise<FileRecord> =>
+    rename: (fileId: string, filename: string): Promise<MainStorageRenameResponse> =>
       this.request('PATCH', `/main/${fileId}`, { body: { filename } }),
 
     /** Delete a main-storage file (soft by default; pass permanent=true for hard delete) */
     delete: (fileId: string, permanent = false): Promise<MainStorageDeleteResponse> =>
-      this.request('DELETE', `/main/${fileId}${permanent ? '?permanent=true' : ''}`),
+      this.request('DELETE', `/main/${fileId}`, { query: { permanent: permanent || undefined } }),
 
     /** Restore a soft-deleted main-storage file */
     restore: (fileId: string): Promise<MainStorageRestoreResponse> =>
