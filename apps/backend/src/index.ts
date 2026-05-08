@@ -54,8 +54,9 @@ app.use('/my-files/:fileId/share-links/*', authMiddleware);
 app.use('/share-links/*', authMiddleware);
 app.route('/', shareLinkRouter);
 
-// MAIN_STORAGE management — requires plus or admin role
+// MAIN_STORAGE management — admin-only, dual-auth (API key or admin JWT)
 app.use('/main/*', authMiddleware);
+app.use('/main/*', requireAdminMiddleware);
 app.route('/main', mainStorage);
 
 // Release management — admin-only per service
