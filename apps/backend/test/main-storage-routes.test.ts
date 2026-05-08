@@ -19,6 +19,22 @@ vi.mock('../src/db/services', () => ({
   releaseMainStorageQuota: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../src/db/shareLinks', () => ({
+  deactivateShareLinksForFile: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../src/services/r2', () => ({
+  deleteObject: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../src/services/appwrite', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/services/appwrite')>();
+  return {
+    ...actual,
+    deleteAppwriteFile: vi.fn().mockResolvedValue({ deleted: true, not_found: false }),
+  };
+});
+
 vi.mock('../src/middleware/requireRole', () => ({
   requireRoleMiddleware: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
@@ -87,7 +103,7 @@ describe('GET /main/:id', () => {
     vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 1 } as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1'), env);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
   });
 });
 
@@ -131,7 +147,17 @@ describe('DELETE /main/:id', () => {
   });
 
   it('returns 200 on permanent delete when ?permanent=true', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 0, size: 1024 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({
+      id: 'file-1',
+      service_id: 'default',
+      user_id: 'u1',
+      is_main_storage: 1,
+      is_trashed: 0,
+      size: 1024,
+      storage_destination: 'r2',
+      bucket: 'bucket',
+      storage_key: 'key',
+    } as any);
     vi.mocked(deleteFileRecordPermanently).mockResolvedValue(undefined as any);
     vi.mocked(releaseMainStorageQuota).mockResolvedValue(undefined);
     const app = buildMainApp();

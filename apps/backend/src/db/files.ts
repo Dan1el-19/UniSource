@@ -17,6 +17,7 @@ export interface UploadRecord {
   status: UploadStatus;
   presigned_url: string | null;
   expires_at: number;
+  is_main_storage: 0 | 1;
   created_at: number;
   updated_at: number;
 }
@@ -34,6 +35,7 @@ export interface CreateUploadInput {
   bucket: string;
   presigned_url: string | null;
   expires_at: number;
+  is_main_storage?: boolean;
 }
 
 export interface ListUploadsInput {
@@ -76,8 +78,8 @@ export async function createUpload(db: D1Database, input: CreateUploadInput): Pr
     .prepare(
       `INSERT INTO uploads
          (id, service_id, user_id, folder_id, filename, size, mime_type, destination,
-          storage_key, bucket, status, presigned_url, expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`
+          storage_key, bucket, status, presigned_url, expires_at, is_main_storage, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
     )
     .bind(
       input.id,
@@ -92,6 +94,7 @@ export async function createUpload(db: D1Database, input: CreateUploadInput): Pr
       input.bucket,
       input.presigned_url,
       input.expires_at,
+      input.is_main_storage ? 1 : 0,
       now,
       now
     )

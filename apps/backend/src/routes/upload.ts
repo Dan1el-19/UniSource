@@ -132,6 +132,7 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
     bucket: svcConfig.bucketName,
     presigned_url,
     expires_at,
+    is_main_storage: body.is_main_storage === true,
   });
 
   return c.json<UploadR2InitResponse>({
@@ -204,6 +205,7 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
     bucket: config.bucket_id,
     presigned_url: null,
     expires_at: config.expires_at,
+    is_main_storage: body.is_main_storage === true,
   });
 
   return c.json<UploadAppwriteInitResponse>({
@@ -224,7 +226,6 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
 upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
   const body = c.req.valid('json');
   const { upload_id } = body;
-  const isMainStorage = body.is_main_storage === true;
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
 
@@ -237,6 +238,8 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   if (!record) {
     return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
   }
+
+  const isMainStorage = record.is_main_storage === 1;
 
   if (record.status === 'completed') {
     return c.json<UploadCompleteResponse>({ success: true, upload_id, status: 'completed' });
@@ -293,8 +296,9 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
     return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
   }
 
-  // Promote to confirmed file record and increment service storage usage
-  if (userId !== 'system') {
+  // Promote to confirmed file record. API-key uploads are promoted for main storage,
+  // while regular per-user file records still require an authenticated user owner.
+  if (userId !== 'system' || isMainStorage) {
     const newFileId = crypto.randomUUID();
 
     if (isMainStorage) {
@@ -328,18 +332,19 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
 
     // Quota was already reserved atomically in /init, no need to increment here.
 
-    // Audit log
-    c.executionCtx.waitUntil(
-      logServiceEvent(c.env.APP_DB, {
-        serviceId,
-        userId,
-        action: 'upload_completed',
-        resourceType: 'file',
-        resourceId: newFileId,
-        metadata: { filename: record.filename, size: record.size, is_main_storage: isMainStorage },
-        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
-      })
-    );
+    if (userId !== 'system') {
+      c.executionCtx.waitUntil(
+        logServiceEvent(c.env.APP_DB, {
+          serviceId,
+          userId,
+          action: 'upload_completed',
+          resourceType: 'file',
+          resourceId: newFileId,
+          metadata: { filename: record.filename, size: record.size, is_main_storage: isMainStorage },
+          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+        })
+      );
+    }
   }
 
   return c.json<UploadCompleteResponse>({ success: true, upload_id, status: 'completed' });
@@ -348,7 +353,6 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
 upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
   const body = c.req.valid('json');
   const { upload_id } = body;
-  const isMainStorage = body.is_main_storage === true;
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
 
@@ -360,6 +364,8 @@ upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validation
   if (!record || record.service_id !== serviceId) {
     return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
   }
+
+  const isMainStorage = record.is_main_storage === 1;
 
   if (record.status !== 'pending') {
     return c.json({ error: 'Conflict', message: `Upload is already in state: ${record.status}` }, 409);

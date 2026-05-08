@@ -77,6 +77,7 @@ const blokRecord: UploadRecord = {
 	status: 'completed',
 	presigned_url: null,
 	expires_at: Math.floor(Date.now() / 1000) + 3600,
+	is_main_storage: 0,
 	created_at: Math.floor(Date.now() / 1000),
 	updated_at: Math.floor(Date.now() / 1000),
 };

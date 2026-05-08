@@ -40,7 +40,7 @@ vi.mock('../src/db/files', async (importOriginal) => {
 
 vi.mock('../src/db/fileRecords', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/db/fileRecords')>();
-  return { ...actual, createFileRecord: vi.fn() };
+  return { ...actual, createFileRecord: vi.fn(), createMainStorageFileRecord: vi.fn() };
 });
 
 vi.mock('../src/db/services', async (importOriginal) => {
@@ -54,9 +54,10 @@ vi.mock('../src/db/services', async (importOriginal) => {
   };
 });
 
-import { headObject } from '../src/services/r2';
+import { generatePresignedPutUrl, headObject } from '../src/services/r2';
 import { getAppwriteFileMeta } from '../src/services/appwrite';
-import { getUpload, failUpload, completeUpload } from '../src/db/files';
+import { createUpload, getUpload, failUpload, completeUpload } from '../src/db/files';
+import { createMainStorageFileRecord } from '../src/db/fileRecords';
 import upload from '../src/routes/upload';
 import publicRouter from '../src/routes/public';
 
@@ -80,6 +81,7 @@ const pendingR2Record: UploadRecord = {
   expires_at: Math.floor(Date.now() / 1000) + 3600,
   created_at: Math.floor(Date.now() / 1000),
   updated_at: Math.floor(Date.now() / 1000),
+  is_main_storage: 0,
 };
 
 function mockD1(changes = 1): D1Database {
@@ -207,6 +209,60 @@ describe('POST /upload/complete — physical verification', () => {
     expect(body.success).toBe(true);
     expect(vi.mocked(completeUpload)).toHaveBeenCalled();
   });
+
+  it('uses the persisted upload main-storage flag when promoting a completed upload', async () => {
+    vi.mocked(getUpload).mockResolvedValue({ ...pendingR2Record, is_main_storage: 1 });
+    vi.mocked(headObject).mockResolvedValue({ size: 1024 });
+    vi.mocked(completeUpload).mockResolvedValue(true);
+
+    const app = buildUploadApp();
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-123' }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(createMainStorageFileRecord)).toHaveBeenCalled();
+  });
+});
+
+describe('POST /upload/r2/init', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('persists the main-storage flag on upload records', async () => {
+    vi.mocked(generatePresignedPutUrl).mockResolvedValue({
+      presigned_url: 'https://example.com/put',
+      storage_key: 'key',
+      expires_at: 9999999999,
+    });
+
+    const app = buildUploadApp('u1');
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'firmware.bin',
+          size: 1024,
+          mime_type: 'application/octet-stream',
+          is_main_storage: true,
+        }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(201);
+    expect(vi.mocked(createUpload)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ is_main_storage: true })
+    );
+  });
 });
 
 const pendingAppwriteRecord: UploadRecord = {
@@ -223,6 +279,7 @@ const pendingAppwriteRecord: UploadRecord = {
   status: 'pending',
   presigned_url: null,
   expires_at: Math.floor(Date.now() / 1000) + 3600,
+  is_main_storage: 0,
   created_at: Math.floor(Date.now() / 1000),
   updated_at: Math.floor(Date.now() / 1000),
 };
