@@ -1,4 +1,4 @@
-name: Deploy Workers
+name: Deploy Backend
 
 on:
   release:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   deploy:
-    if: ${{ github.event.release.prerelease == false }}
+    if: ${{ github.event.release.prerelease == false && startsWith(github.event.release.tag_name, 'backend@') }}
     runs-on: ubuntu-latest
     name: Deploy
     steps:
@@ -46,4 +46,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           packageManager: pnpm
-          command: deploy
+          workingDirectory: apps/backend
+          command: deploy --minify
