@@ -8,6 +8,7 @@ import {
   updateRelease,
   deleteRelease,
   getLatestRelease,
+  upsertReleaseSync,
 } from '../src/db/releases';
 
 function mockDbReturning(record: unknown, changes = 1): D1Database {
@@ -83,5 +84,26 @@ describe('listReleases', () => {
     const result = await listReleases(db, 'usrc', { limit: 25 });
     expect(result.items).toHaveLength(1);
     expect(result.next_cursor).toBeNull();
+  });
+});
+
+describe('upsertReleaseSync', () => {
+  it('is exported and callable', async () => {
+    const db = mockDbReturning(null, 1);
+    await expect(
+      upsertReleaseSync(db, {
+        id: 'rel-sync-1',
+        service_id: 'usrc',
+        name: 'v2.0.0',
+        size: 0,
+        r2_key: 'releases/usrc/v2.0.0.zip',
+        tags: ['stable'],
+        notes: null,
+        force_update: false,
+        uploaded_by: 'system',
+        presigned_url: '',
+        presigned_expires_at: 0,
+      })
+    ).resolves.toBeUndefined();
   });
 });

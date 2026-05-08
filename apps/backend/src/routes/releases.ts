@@ -10,6 +10,7 @@ import {
   getRelease,
   listReleases,
   updateRelease,
+  upsertReleaseSync,
 } from '../db/releases';
 import { getServiceConfig } from '../config/services';
 import { deleteObject, generatePresignedPutUrl, headObject } from '../services/r2';
@@ -181,7 +182,7 @@ releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, v
 
   const completed = await completeRelease(c.env.usrc_d1, release_id);
   if (!completed) {
-    return c.json({ error: 'Conflict', message: `Release is already in state: ${release.upload_status}` }, 409);
+    return c.json({ error: 'Conflict', message: 'Release could not be completed — it may have been cancelled' }, 409);
   }
 
   await updateRelease(c.env.usrc_d1, release_id, serviceId, { size });
@@ -289,7 +290,7 @@ releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), 
 
   for (const manifest of body.releases) {
     const releaseId = manifest.id ?? crypto.randomUUID();
-    await createRelease(c.env.usrc_d1, {
+    await upsertReleaseSync(c.env.usrc_d1, {
       id: releaseId,
       service_id: serviceId,
       name: manifest.name,

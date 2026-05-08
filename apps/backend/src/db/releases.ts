@@ -199,24 +199,47 @@ export async function deleteRelease(db: D1Database, id: string, serviceId: strin
   return (result.meta.changes ?? 0) > 0;
 }
 
+export async function upsertReleaseSync(db: D1Database, input: CreateReleaseInput): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO releases
+         (id, service_id, name, size, r2_key, tags, notes, force_update, uploaded_by,
+          upload_status, presigned_url, presigned_expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         size = excluded.size,
+         r2_key = excluded.r2_key,
+         tags = excluded.tags,
+         notes = excluded.notes,
+         force_update = excluded.force_update,
+         upload_status = 'pending',
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      input.id,
+      input.service_id,
+      input.name,
+      input.size,
+      input.r2_key,
+      JSON.stringify(input.tags),
+      input.notes ?? null,
+      input.force_update ? 1 : 0,
+      input.uploaded_by,
+      input.presigned_url,
+      input.presigned_expires_at,
+      now,
+      now
+    )
+    .run();
+}
+
 export async function getLatestRelease(db: D1Database, serviceId: string): Promise<ReleaseDTO | null> {
   const row = await db
     .prepare(
       `SELECT * FROM releases
        WHERE service_id = ? AND upload_status = 'completed'
-       ORDER BY created_at DESC
-       LIMIT 1`
-    )
-    .bind(serviceId)
-    .first<ReleaseRecord>();
-  return row ? mapRelease(row) : null;
-}
-
-export async function getLatestReleaseWithForceUpdate(db: D1Database, serviceId: string): Promise<ReleaseDTO | null> {
-  const row = await db
-    .prepare(
-      `SELECT * FROM releases
-       WHERE service_id = ? AND upload_status = 'completed' AND force_update = 1
        ORDER BY created_at DESC
        LIMIT 1`
     )

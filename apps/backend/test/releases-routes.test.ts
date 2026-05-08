@@ -13,6 +13,7 @@ vi.mock('../src/db/releases', async (importOriginal) => {
     updateRelease: vi.fn(),
     deleteRelease: vi.fn(),
     getLatestRelease: vi.fn(),
+    upsertReleaseSync: vi.fn(),
   };
 });
 
@@ -39,6 +40,7 @@ import {
   getLatestRelease,
   updateRelease,
   deleteRelease,
+  upsertReleaseSync,
 } from '../src/db/releases';
 import { deleteObject, generatePresignedPutUrl, headObject } from '../src/services/r2';
 import releasesRouter from '../src/routes/releases';
@@ -444,7 +446,7 @@ describe('POST /releases/sync', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { synced: number };
     expect(body.synced).toBe(1);
-    expect(createRelease).toHaveBeenCalledWith(
+    expect(upsertReleaseSync).toHaveBeenCalledWith(
       relEnv.usrc_d1,
       expect.objectContaining({
         id: 'rel-sync',
@@ -479,7 +481,30 @@ describe('POST /releases/sync', () => {
     expect(res.status).toBe(400);
     const body = await res.json() as { message: string };
     expect(body.message).toBe('r2_key must start with releases/usrc/');
-    expect(createRelease).not.toHaveBeenCalled();
+    expect(upsertReleaseSync).not.toHaveBeenCalled();
     expect(completeRelease).not.toHaveBeenCalled();
+  });
+});
+
+import { requireAdminMiddleware } from '../src/middleware/admin';
+
+describe('releases routes — admin enforcement', () => {
+  it('returns 403 for non-admin JWT user', async () => {
+    const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+    app.use('*', async (c, next) => {
+      c.set('userId', 'user-123' as WorkerVariables['userId']);
+      c.set('serviceId', 'usrc' as WorkerVariables['serviceId']);
+      c.set('authType', 'jwt' as WorkerVariables['authType']);
+      c.set('isAdmin', false as WorkerVariables['isAdmin']);
+      await next();
+    });
+    app.use('/releases/*', requireAdminMiddleware);
+    app.route('/releases', releasesRouter);
+
+    const res = await app.fetch(
+      new Request('http://localhost/releases'),
+      relEnv
+    );
+    expect(res.status).toBe(403);
   });
 });
