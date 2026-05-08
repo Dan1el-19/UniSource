@@ -10,6 +10,7 @@ import {
   deleteFileRecordPermanently,
 } from '../db/fileRecords';
 import { requireRoleMiddleware } from '../middleware/requireRole';
+import { releaseMainStorageQuota } from '../db/services';
 import { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from '@unisource/sdk';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
@@ -87,6 +88,7 @@ mainStorage.delete('/:id', async (c) => {
   }
   if (permanent) {
     await deleteFileRecordPermanently(c.env.APP_DB, file.id, file.user_id, serviceId);
+    await releaseMainStorageQuota(c.env.APP_DB, serviceId, file.size);
   } else {
     await trashFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId);
   }
