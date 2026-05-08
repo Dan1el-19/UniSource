@@ -133,3 +133,12 @@ export const adminUserPasswordResetResponseSchema = z.object({
   user_id: nonEmptyString,
 });
 export type AdminUserPasswordResetResponse = z.infer<typeof adminUserPasswordResetResponseSchema>;
+
+// ─── Quota reconcile ──────────────────────────────────────────────────────────
+
+export const adminQuotaReconcileResponseSchema = z.object({
+  success: z.literal(true),
+  affected: z.number().int().nonnegative(),
+  delta_bytes: z.number().int(),
+});
+export type AdminQuotaReconcileResponse = z.infer<typeof adminQuotaReconcileResponseSchema>;
