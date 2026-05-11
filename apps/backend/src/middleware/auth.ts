@@ -153,7 +153,7 @@ export const authMiddleware = createMiddleware<{
   }
 
   // Path B: Service-scoped static API key (Astro SSR / server-to-server / cron)
-  // Each service has its own secret: SERVICE_API_KEY, BLOKSERWIS_API_KEY, etc.
+  // Each service has its own secret: SERVICE_API_KEY, SECONDARY_SERVICE_API_KEY, etc.
   if (routeMode === 'dual' && apiKeyToken) {
     const config = getServiceConfig(serviceId)!;
     const expectedKey = (c.env as unknown as Record<string, string | undefined>)[config.apiKeyEnvVar];

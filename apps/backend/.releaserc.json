@@ -5,10 +5,13 @@
     ["@semantic-release/commit-analyzer", {
       "preset": "angular",
       "releaseRules": [
-        { "type": "feat", "release": "minor" },
-        { "type": "fix", "release": "patch" },
-        { "type": "perf", "release": "patch" },
-        { "breaking": true, "release": "major" }
+        { "breaking": true, "scope": "backend", "release": "major" },
+        { "type": "feat", "scope": "backend", "release": "minor" },
+        { "type": "fix", "scope": "backend", "release": "patch" },
+        { "type": "perf", "scope": "backend", "release": "patch" },
+        { "scope": "frontend", "release": false },
+        { "scope": "sdk", "release": false },
+        { "scope": "root", "release": false }
       ]
     }],
     "@semantic-release/release-notes-generator",

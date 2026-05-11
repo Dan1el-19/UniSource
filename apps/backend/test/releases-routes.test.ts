@@ -64,7 +64,7 @@ const relEnv = {
   R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'sec',
   SERVICE_API_KEY: 'test-api-key',
-  BLOKSERWIS_API_KEY: 'blok-key',
+  SECONDARY_SERVICE_API_KEY: 'blok-key',
 } as unknown as CloudflareBindings;
 
 const completedRelease = {

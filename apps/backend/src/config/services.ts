@@ -15,14 +15,14 @@ export const SERVICES: Record<string, ServiceConfig> = {
     bucketName: 'unisource',
     bucketEnvKey: 'PRIMARY_BUCKET',
     apiKeyEnvVar: 'SERVICE_API_KEY',
-    maxFileSizeBytes: 536_870_912, // 500 MB
+    maxFileSizeBytes: 5_368_709_120, // 5 GB
   },
   example: {
-    id: 'example',
-    bucketName: 'example',
-    bucketEnvKey: 'BLOKSERWIS_BUCKET',
-    apiKeyEnvVar: 'BLOKSERWIS_API_KEY',
-    maxFileSizeBytes: 2_147_483_648, // 2 GB
+    id: 'service-b',
+    bucketName: 'service-b',
+    bucketEnvKey: 'SECONDARY_BUCKET',
+    apiKeyEnvVar: 'SECONDARY_SERVICE_API_KEY',
+    maxFileSizeBytes: 5_368_709_120, // 5 GB
   },
 };
 

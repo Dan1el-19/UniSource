@@ -106,7 +106,7 @@ const baseEnv = {
   APPWRITE_BUCKET_ID: 'bucket',
   APPWRITE_API_KEY: 'ak',
   SERVICE_API_KEY: 'test-api-key',
-  BLOKSERWIS_API_KEY: 'blok-api-key',
+  SECONDARY_SERVICE_API_KEY: 'blok-api-key',
 } as unknown as CloudflareBindings;
 
 function buildUploadApp(userId = 'system', serviceId = 'default') {

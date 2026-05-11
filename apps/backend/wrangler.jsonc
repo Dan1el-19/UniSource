@@ -22,7 +22,7 @@
 			"bucket_name": "unisource"
 		},
 		{
-			"binding": "BLOKSERWIS_BUCKET",
+			"binding": "SECONDARY_BUCKET",
 			"bucket_name": "example"
 		}
 	],
