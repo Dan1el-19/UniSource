@@ -353,6 +353,81 @@ admin.post(
   }
 );
 
+const roleUpdateSchema = z.object({
+  role: z.enum(['user', 'plus', 'admin']),
+});
+
+admin.patch(
+  '/users/:userId/role',
+  zValidator('param', userIdParamSchema, validationErrorHook),
+  zValidator('json', roleUpdateSchema, validationErrorHook),
+  async (c) => {
+    const serviceId = c.get('serviceId');
+    const { userId } = c.req.valid('param');
+    const { role } = c.req.valid('json');
+    const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+    if (!service) return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+
+    let user = await getAppwriteUser(c.env, userId);
+    const syncedLabels = syncAdminLabel(user.labels, role);
+    if (syncedLabels.join(',') !== user.labels.join(',')) {
+      user = await updateAppwriteUserLabels(c.env, userId, syncedLabels);
+    }
+
+    const currentSettings = await getServiceUser(c.env.usrc_d1, serviceId, userId);
+    await upsertServiceUserSettings(c.env.usrc_d1, {
+      serviceId,
+      userId,
+      role,
+      max_storage_bytes: currentSettings?.max_storage_bytes ?? null,
+    });
+
+    const [metadata, currentUsedBytes] = await Promise.all([
+      getServiceUser(c.env.usrc_d1, serviceId, userId),
+      getUserStorageUsage(c.env.usrc_d1, serviceId, userId),
+    ]);
+
+    return c.json<AdminUserUpdateResponse>({
+      user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
+    });
+  }
+);
+
+const storageLimitUpdateSchema = z.object({
+  limit_bytes: z.number().int().positive().nullable(),
+});
+
+admin.patch(
+  '/users/:userId/storage-limit',
+  zValidator('param', userIdParamSchema, validationErrorHook),
+  zValidator('json', storageLimitUpdateSchema, validationErrorHook),
+  async (c) => {
+    const serviceId = c.get('serviceId');
+    const { userId } = c.req.valid('param');
+    const { limit_bytes } = c.req.valid('json');
+    const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+    if (!service) return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+
+    const user = await getAppwriteUser(c.env, userId);
+    const currentSettings = await getServiceUser(c.env.usrc_d1, serviceId, userId);
+    await upsertServiceUserSettings(c.env.usrc_d1, {
+      serviceId,
+      userId,
+      role: currentSettings?.role ?? (user.labels.includes('admin') ? 'admin' : 'user'),
+      max_storage_bytes: limit_bytes,
+    });
+
+    const [metadata, currentUsedBytes] = await Promise.all([
+      getServiceUser(c.env.usrc_d1, serviceId, userId),
+      getUserStorageUsage(c.env.usrc_d1, serviceId, userId),
+    ]);
+
+    return c.json<AdminUserUpdateResponse>({
+      user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
+    });
+  }
+);
+
 admin.post('/quota/reconcile', async (c) => {
   const serviceId = c.get('serviceId');
   const dryRun = c.req.query('dry_run') === 'true';

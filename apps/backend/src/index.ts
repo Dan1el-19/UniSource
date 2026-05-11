@@ -9,8 +9,10 @@ import upload from './routes/upload';
 import files from './routes/files';
 import folders from './routes/folders';
 import myFiles from './routes/fileRecords';
+import userFiles from './routes/userFiles';
 import admin from './routes/admin';
 import shareLinkRouter from './routes/shareLinks';
+import sharesRouter from './routes/shares';
 import publicRouter from './routes/public';
 import mainStorage from './routes/mainStorage';
 import releasesRouter from './routes/releases';
@@ -28,10 +30,10 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: Math.floor(Date.now(
 app.use('/upload/*', authMiddleware);
 app.route('/upload', upload);
 
-// Admin files list — Dual-Auth (API key server-to-server or JWT)
-app.use('/files/*', authMiddleware);
-app.use('/files/*', requireAdminMiddleware);
-app.route('/files', files);
+// Admin files list (upload records) — Dual-Auth (API key server-to-server or JWT)
+app.use('/admin/files/*', authMiddleware);
+app.use('/admin/files/*', requireAdminMiddleware);
+app.route('/admin/files', files);
 
 // Per-user folders CRUD — requires Appwrite JWT (userId extracted)
 app.use('/folders/*', authMiddleware);
@@ -43,6 +45,11 @@ app.use('/my-files/*', authMiddleware);
 app.use('/my-files/*', adminPreviewMiddleware);
 app.route('/my-files', myFiles);
 
+// Per-user file records via /files/:id (Plan 2 contract) — requires Appwrite JWT
+app.use('/files/*', authMiddleware);
+app.use('/files/*', adminPreviewMiddleware);
+app.route('/files', userFiles);
+
 // Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
 app.use('/admin/*', authMiddleware);
 app.use('/admin/*', requireAdminMiddleware);
@@ -53,6 +60,13 @@ app.use('/my-files/:fileId/share-links', authMiddleware);
 app.use('/my-files/:fileId/share-links/*', authMiddleware);
 app.use('/share-links/*', authMiddleware);
 app.route('/', shareLinkRouter);
+
+// Shares (Plan 2 contract — /shares) — JWT only
+app.use('/shares', authMiddleware);
+app.use('/shares/*', authMiddleware);
+app.use('/shares', adminPreviewMiddleware);
+app.use('/shares/*', adminPreviewMiddleware);
+app.route('/shares', sharesRouter);
 
 // MAIN_STORAGE management — admin-only, dual-auth (API key or admin JWT)
 app.use('/main/*', authMiddleware);

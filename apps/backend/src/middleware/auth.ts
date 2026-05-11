@@ -14,7 +14,6 @@ export interface AuthDecision {
 function getAuthRouteMode(pathname: string): AuthRouteMode {
   if (
     pathname.startsWith('/upload') ||
-    pathname.startsWith('/files') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/main') ||
     pathname.startsWith('/releases')
