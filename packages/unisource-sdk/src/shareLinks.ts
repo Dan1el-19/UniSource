@@ -91,3 +91,19 @@ export const shareLinkDeleteResponseSchema = z.object({
   id: nonEmptyString,
 });
 export type ShareLinkDeleteResponse = z.infer<typeof shareLinkDeleteResponseSchema>;
+
+// ─── Get single share link ────────────────────────────────────────────────────
+export const shareLinkDetailResponseSchema = z.object({
+  link: shareLinkSchema,
+});
+export type ShareLinkDetailResponse = z.infer<typeof shareLinkDetailResponseSchema>;
+
+// ─── Create via /shares (file_id in body) ────────────────────────────────────
+export const sharesCreateRequestSchema = z.object({
+  file_id: nonEmptyString,
+  name: z.string().trim().max(128).optional(),
+  expires_at: positiveInt.optional(),
+  max_downloads: positiveInt.optional(),
+  password: z.string().min(1).optional(),
+});
+export type SharesCreateRequest = z.infer<typeof sharesCreateRequestSchema>;

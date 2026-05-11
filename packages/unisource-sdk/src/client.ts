@@ -45,11 +45,15 @@ import type {
   AdminUserUpdateResponse,
   AdminUserPasswordResetRequest,
   AdminUserPasswordResetResponse,
+  AdminUserRoleUpdateRequest,
+  AdminUserStorageLimitUpdateRequest,
 } from './services';
 import type {
   ShareLinkCreateRequest,
   ShareLinkCreateResponse,
   ShareLinkListResponse,
+  ShareLinkDetailResponse,
+  SharesCreateRequest,
   PublicFileAccessResponse,
   PublicFileLockedResponse,
   ShareLinkUpdateRequest,
@@ -411,19 +415,19 @@ export class UnisourceClient {
 
     /** List all uploads (pending/completed/failed) for this service */
     listUploads: (query?: { status?: UploadStatus; cursor?: string; limit?: number }, signal?: AbortSignal): Promise<UploadsListResponse> =>
-      apiRequest(this.config, 'GET', '/files', { query, signal }),
+      apiRequest(this.config, 'GET', '/admin/files', { query, signal }),
 
     /** Get a single upload for this service */
     getUpload: (id: string, signal?: AbortSignal): Promise<UploadRecordDetailResponse> =>
-      apiRequest(this.config, 'GET', `/files/${id}`, { signal }),
+      apiRequest(this.config, 'GET', `/admin/files/${id}`, { signal }),
 
     /** Get a time-limited download URL for an upload owned by this service */
     downloadUploadUrl: (id: string, signal?: AbortSignal): Promise<FileDownloadUrlResponse> =>
-      apiRequest(this.config, 'GET', `/files/${id}/download-url`, { signal }),
+      apiRequest(this.config, 'GET', `/admin/files/${id}/download-url`, { signal }),
 
     /** Permanently delete an upload owned by this service */
     deleteUpload: (id: string, signal?: AbortSignal): Promise<FileDeleteResponse> =>
-      apiRequest(this.config, 'DELETE', `/files/${id}`, { signal }),
+      apiRequest(this.config, 'DELETE', `/admin/files/${id}`, { signal }),
 
     /** List audit log events for this service */
     auditLog: (query?: AuditLogListQuery, signal?: AbortSignal): Promise<AuditLogListResponse> =>
@@ -450,9 +454,25 @@ export class UnisourceClient {
       signal?: AbortSignal
     ): Promise<AdminUserPasswordResetResponse> =>
       apiRequest(this.config, 'POST', `/admin/users/${userId}/password`, { body, signal }),
+
+    /** Update a user's role */
+    updateUserRole: (
+      userId: string,
+      body: AdminUserRoleUpdateRequest,
+      signal?: AbortSignal
+    ): Promise<AdminUserUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/admin/users/${userId}/role`, { body, signal }),
+
+    /** Update a user's storage limit */
+    updateUserStorageLimit: (
+      userId: string,
+      body: AdminUserStorageLimitUpdateRequest,
+      signal?: AbortSignal
+    ): Promise<AdminUserUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/admin/users/${userId}/storage-limit`, { body, signal }),
   };
 
-  // ─── Share Links ──────────────────────────────────────────────────────────────
+  // ─── Share Links (legacy — per-file endpoints) ────────────────────────────────
 
   readonly shareLinks = {
     /** Create a public share link for a file */
@@ -470,5 +490,49 @@ export class UnisourceClient {
     /** Permanently delete a share link */
     delete: (linkId: string, signal?: AbortSignal): Promise<ShareLinkDeleteResponse> =>
       apiRequest(this.config, 'DELETE', `/share-links/${linkId}`, { signal }),
+  };
+
+  // ─── Files (Plan 2 contract — /files/:id) ────────────────────────────────────
+
+  readonly files = {
+    /** Get a single file record */
+    get: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileRecordDetailResponse> =>
+      apiRequest(this.config, 'GET', `/files/${id}`, { signal, extraHeaders: this.withAsUser(options) }),
+
+    /** Rename or update a file */
+    update: (id: string, body: FileUpdateRequest, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileUpdateResponse> =>
+      apiRequest(this.config, 'PATCH', `/files/${id}`, { body, signal, extraHeaders: this.withAsUser(options) }),
+
+    /** Soft-delete or permanently delete a file */
+    delete: (id: string, query?: { permanent?: boolean }, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileDeleteResponse> =>
+      apiRequest(this.config, 'DELETE', `/files/${id}`, { query, signal, extraHeaders: this.withAsUser(options) }),
+
+    /** Restore a file from trash */
+    restore: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileRestoreResponse> =>
+      apiRequest(this.config, 'POST', `/files/${id}/restore`, { signal, extraHeaders: this.withAsUser(options) }),
+
+    /** Get a time-limited download URL */
+    downloadUrl: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileDownloadUrlResponse> =>
+      apiRequest(this.config, 'GET', `/files/${id}/download-url`, { signal, extraHeaders: this.withAsUser(options) }),
+  };
+
+  // ─── Shares (Plan 2 contract — /shares) ──────────────────────────────────────
+
+  readonly shares = {
+    /** List all share links for the authenticated user */
+    list: (signal?: AbortSignal): Promise<ShareLinkListResponse> =>
+      apiRequest(this.config, 'GET', '/shares', { signal }),
+
+    /** Create a share link (file_id in body) */
+    create: (body: SharesCreateRequest, signal?: AbortSignal): Promise<ShareLinkCreateResponse> =>
+      apiRequest(this.config, 'POST', '/shares', { body, signal }),
+
+    /** Get a single share link by ID */
+    get: (id: string, signal?: AbortSignal): Promise<ShareLinkDetailResponse> =>
+      apiRequest(this.config, 'GET', `/shares/${id}`, { signal }),
+
+    /** Delete a share link */
+    delete: (id: string, signal?: AbortSignal): Promise<ShareLinkDeleteResponse> =>
+      apiRequest(this.config, 'DELETE', `/shares/${id}`, { signal }),
   };
 }
