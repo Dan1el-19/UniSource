@@ -5,6 +5,11 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-05-11",
 	"compatibility_flags": ["nodejs_compat"],
+	"build": {
+		"command": "pnpm --filter @unisource/sdk build",
+		"cwd": "../..",
+		"watch_dir": ["src", "../../packages/unisource-sdk/src"]
+	},
 	"routes": [
 		{ "pattern": "api.usrc.dev", "zone_name": "usrc.dev", "custom_domain": true }
 	],
