@@ -2,7 +2,7 @@
   "name": "@unisource/sdk",
   "private": false,
   "type": "module",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Wspolne kontrakty danych dla backendu i frontendu UniSource.",
   "license": "MIT",
   "publishConfig": {

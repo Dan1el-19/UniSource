@@ -1,5 +1,11 @@
 # @unisource/sdk
 
+## 0.3.2
+
+### Patch Changes
+
+- 28a9b33: Fix upload request types so defaulted `is_main_storage` remains optional for SDK consumers.
+
 ## 0.3.1
 
 ### Patch Changes
