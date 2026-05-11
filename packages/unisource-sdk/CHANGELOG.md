@@ -1,5 +1,11 @@
 # @unisource/sdk
 
+## 0.3.1
+
+### Patch Changes
+
+- 3348a8c: Dostosowano kontrakty mainStorage do backendowych endpointów /main, w tym response rename jako `{ file }` oraz walidację limitu listowania.
+
 ## 0.3.0
 
 ### Minor Changes
