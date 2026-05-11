@@ -1,9 +1,9 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "app-backend",
+	"name": "unisource",
 	"account_id": "00000000000000000000000000000000",
 	"main": "src/index.ts",
-	"compatibility_date": "2026-04-17",
+	"compatibility_date": "2026-05-11",
 	"compatibility_flags": ["nodejs_compat"],
 	"routes": [
 		{ "pattern": "api.example.com", "zone_name": "example.com", "custom_domain": true }
