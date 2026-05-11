@@ -7,9 +7,13 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "prepare:sdk": "pnpm --filter @unisource/sdk build",
+    "predev": "pnpm run prepare:sdk",
     "dev": "vite dev",
+    "prebuild": "pnpm run prepare:sdk",
     "build": "vite build",
     "preview": "vite preview",
+    "pretypecheck": "pnpm run prepare:sdk",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --project=chromium --headed",

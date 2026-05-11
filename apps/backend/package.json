@@ -4,13 +4,17 @@
   "version": "0.0.4",
   "type": "module",
   "scripts": {
+    "prepare:sdk": "pnpm --filter @unisource/sdk build",
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run --minify",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "pretypecheck": "pnpm run prepare:sdk",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "pretest": "pnpm run prepare:sdk",
     "test": "vitest run",
     "test:watch": "vitest",
+    "precheck": "pnpm run prepare:sdk",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit && vitest run",
     "release": "semantic-release"
   },

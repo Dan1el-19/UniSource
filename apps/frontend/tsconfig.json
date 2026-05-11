@@ -13,5 +13,5 @@
 		"typeRoots": ["./.svelte-kit", "./node_modules/@types"]
 	},
 	"include": [".svelte-kit/ambient.d.ts", ".svelte-kit/non-ambient.d.ts", "**/*"],
-	"exclude": ["dist", "node_modules"]
+	"exclude": ["build", "dist", "node_modules"]
 }

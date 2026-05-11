@@ -302,7 +302,7 @@ describe('unisource-sdk HTTP helpers', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      'https://api.example.com/files/upload-1',
+      'https://api.example.com/admin/files/upload-1',
       expect.objectContaining({
         method: 'GET',
         headers: expect.objectContaining({

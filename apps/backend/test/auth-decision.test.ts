@@ -11,11 +11,19 @@ describe('resolveAuthDecision', () => {
   });
 
   it('keeps API key fallback for dual-auth routes', () => {
-    const decision = resolveAuthDecision('/files', 'Bearer service-api-key', null);
+    const decision = resolveAuthDecision('/admin/files', 'Bearer service-api-key', null);
 
     expect(decision.routeMode).toBe('dual');
     expect(decision.jwtToken).toBeNull();
     expect(decision.apiKeyToken).toBe('service-api-key');
+  });
+
+  it('treats user-facing files routes as user routes', () => {
+    const decision = resolveAuthDecision('/files', 'Bearer service-api-key', null);
+
+    expect(decision.routeMode).toBe('user');
+    expect(decision.jwtToken).toBe('service-api-key');
+    expect(decision.apiKeyToken).toBeNull();
   });
 
   it('keeps API key fallback for releases routes', () => {
