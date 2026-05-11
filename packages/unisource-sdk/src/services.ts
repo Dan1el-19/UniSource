@@ -135,3 +135,15 @@ export const adminUserPasswordResetResponseSchema = z.object({
   user_id: nonEmptyString,
 });
 export type AdminUserPasswordResetResponse = z.infer<typeof adminUserPasswordResetResponseSchema>;
+
+// ─── Separate role/storage-limit update endpoints ─────────────────────────────
+
+export const adminUserRoleUpdateRequestSchema = z.object({
+  role: z.enum(['user', 'plus', 'admin']),
+});
+export type AdminUserRoleUpdateRequest = z.infer<typeof adminUserRoleUpdateRequestSchema>;
+
+export const adminUserStorageLimitUpdateRequestSchema = z.object({
+  limit_bytes: positiveInt.nullable(),
+});
+export type AdminUserStorageLimitUpdateRequest = z.infer<typeof adminUserStorageLimitUpdateRequestSchema>;

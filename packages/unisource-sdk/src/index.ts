@@ -107,6 +107,8 @@ export {
   adminUserUpdateResponseSchema,
   adminUserPasswordResetRequestSchema,
   adminUserPasswordResetResponseSchema,
+  adminUserRoleUpdateRequestSchema,
+  adminUserStorageLimitUpdateRequestSchema,
 } from './services';
 export type {
   Service,
@@ -124,6 +126,8 @@ export type {
   AdminUserUpdateResponse,
   AdminUserPasswordResetRequest,
   AdminUserPasswordResetResponse,
+  AdminUserRoleUpdateRequest,
+  AdminUserStorageLimitUpdateRequest,
 } from './services';
 
 // ─── Main Storage ─────────────────────────────────────────────────────────────
@@ -172,6 +176,8 @@ export {
   shareLinkCreateResponseSchema,
   shareLinkUpdateResponseSchema,
   shareLinkDeleteResponseSchema,
+  shareLinkDetailResponseSchema,
+  sharesCreateRequestSchema,
   publicFileAccessResponseSchema,
   publicFileLockedResponseSchema,
 } from './shareLinks';
@@ -183,6 +189,8 @@ export type {
   ShareLinkCreateResponse,
   ShareLinkUpdateResponse,
   ShareLinkDeleteResponse,
+  ShareLinkDetailResponse,
+  SharesCreateRequest,
   PublicFileAccessResponse,
   PublicFileLockedResponse,
 } from './shareLinks';
