@@ -15,14 +15,14 @@ export const SERVICES: Record<string, ServiceConfig> = {
     bucketName: 'unisource',
     bucketEnvKey: 'USRC_BUCKET',
     apiKeyEnvVar: 'USRC_API_KEY',
-    maxFileSizeBytes: 536_870_912, // 500 MB
+    maxFileSizeBytes: 5_368_709_120, // 5 GB
   },
   blokserwis: {
-    id: 'blokserwis',
-    bucketName: 'blokserwis',
-    bucketEnvKey: 'BLOKSERWIS_BUCKET',
-    apiKeyEnvVar: 'BLOKSERWIS_API_KEY',
-    maxFileSizeBytes: 2_147_483_648, // 2 GB
+    id: 'chmura-blokserwis',
+    bucketName: 'chmura-blokserwis',
+    bucketEnvKey: 'CHMURA_BLOKSERWIS_BUCKET',
+    apiKeyEnvVar: 'CHMURA_BLOKSERWIS_API_KEY',
+    maxFileSizeBytes: 5_368_709_120, // 5 GB
   },
 };
 

@@ -1,0 +1,2 @@
+## 1
+Zewnętrzny system udostępniający pliki do pobrania (Appwrite / R2 storage w infrastrukturze) podczas generowania czasowych linków domyślnie wykorzystuje nazwę bazującą na unikalnym ID pliku (tzw. slug). Ponieważ pełna, czytelna dla człowieka nazwa znajduje się tylko w bazie danych, przeglądarka internetowa podczas pobierania bezpośrednio z linku dostawcy odczytywała z niego wyłącznie slug i w ten sposób nazywała pobierany plik.

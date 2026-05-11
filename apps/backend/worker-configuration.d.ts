@@ -2,11 +2,11 @@
 declare interface CloudflareBindings {
   usrc_d1: D1Database;
   USRC_BUCKET: R2Bucket;
-  BLOKSERWIS_BUCKET: R2Bucket;
+  CHMURA_BLOKSERWIS_BUCKET: R2Bucket;
   RATE_LIMITER: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
   // Secrets injected at runtime via `wrangler secret put` — one API key per service
   USRC_API_KEY: string;
-  BLOKSERWIS_API_KEY: string;
+  CHMURA_BLOKSERWIS_API_KEY: string;
   R2_ACCOUNT_ID: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;

@@ -22,7 +22,7 @@
 			"bucket_name": "unisource"
 		},
 		{
-			"binding": "BLOKSERWIS_BUCKET",
+			"binding": "CHMURA_BLOKSERWIS_BUCKET",
 			"bucket_name": "blokserwis"
 		}
 	],
