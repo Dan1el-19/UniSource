@@ -39,7 +39,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Switch app SDK dependency source to npm
-        run: pnpm run sdk:deps:npm
+        run: pnpm -w run sdk:deps:npm
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --config.link-workspace-packages=false
