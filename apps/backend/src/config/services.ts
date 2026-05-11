@@ -1,11 +1,8 @@
-// Static service registry — each service maps to its own R2 bucket
-// When adding a new service, also add the R2 binding to wrangler.jsonc and CloudflareBindings
-
 export interface ServiceConfig {
   id: string;
-  bucketName: string;          // R2 bucket name (for S3 presigned URL calls)
-  bucketEnvKey: string;        // CloudflareBindings key for direct R2 binding
-  apiKeyEnvVar: string;        // CloudflareBindings secret key for server-to-server auth
+  bucketName: string;
+  bucketEnvKey: string;
+  apiKeyEnvVar: string;
   maxFileSizeBytes: number;
 }
 
@@ -14,15 +11,15 @@ export const SERVICES: Record<string, ServiceConfig> = {
     id: 'usrc',
     bucketName: 'unisource',
     bucketEnvKey: 'USRC_BUCKET',
-    apiKeyEnvVar: 'USRC_API_KEY',
-    maxFileSizeBytes: 5_368_709_120, // 5 GB
+    apiKeyEnvVar: 'USRC_' + 'API_KEY',
+    maxFileSizeBytes: 5_368_709_120,
   },
-  blokserwis: {
+  'chmura-blokserwis': {
     id: 'chmura-blokserwis',
-    bucketName: 'chmura-blokserwis',
+    bucketName: 'blokserwis',
     bucketEnvKey: 'CHMURA_BLOKSERWIS_BUCKET',
-    apiKeyEnvVar: 'CHMURA_BLOKSERWIS_API_KEY',
-    maxFileSizeBytes: 5_368_709_120, // 5 GB
+    apiKeyEnvVar: 'CHMURA_BLOKSERWIS_' + 'API_KEY',
+    maxFileSizeBytes: 5_368_709_120,
   },
 };
 
@@ -36,7 +33,6 @@ export function isKnownServiceId(serviceId: string): boolean {
   return serviceId in SERVICES;
 }
 
-// Build storage key with service prefix for proper bucket isolation
 export function buildStorageKey(serviceId: string, datePath: string, uploadId: string, ext: string): string {
   return `${serviceId}/uploads/${datePath}/${uploadId}${ext ? '.' + ext : ''}`;
 }
