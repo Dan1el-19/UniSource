@@ -1,5 +1,12 @@
 # default-nexus
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [28a9b33]
+  - @unisource/sdk@0.3.2
+
 ## 0.0.3
 
 ### Patch Changes
