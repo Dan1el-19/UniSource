@@ -102,6 +102,20 @@ export async function listShareLinksForFile(
   return result.results ?? [];
 }
 
+export async function listShareLinksForUser(
+  db: D1Database,
+  userId: string,
+  serviceId: string
+): Promise<ShareLink[]> {
+  const result = await db
+    .prepare(
+      'SELECT * FROM share_links WHERE user_id = ? AND service_id = ? ORDER BY created_at DESC'
+    )
+    .bind(userId, serviceId)
+    .all<ShareLink>();
+  return result.results ?? [];
+}
+
 export async function updateShareLink(
   db: D1Database,
   id: string,
