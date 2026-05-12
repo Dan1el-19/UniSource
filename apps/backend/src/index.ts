@@ -16,6 +16,7 @@ import sharesRouter from './routes/shares';
 import publicRouter from './routes/public';
 import mainStorage from './routes/mainStorage';
 import releasesRouter from './routes/releases';
+import appRouter from './routes/app';
 
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
@@ -77,6 +78,10 @@ app.route('/main', mainStorage);
 app.use('/releases/*', authMiddleware);
 app.use('/releases/*', requireAdminMiddleware);
 app.route('/releases', releasesRouter);
+
+// App-facing endpoints — API key (no admin required)
+app.use('/app/*', authMiddleware);
+app.route('/app', appRouter);
 
 // Public share access — no auth required
 app.route('/public', publicRouter);

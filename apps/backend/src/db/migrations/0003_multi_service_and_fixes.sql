@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS service_users (
 INSERT INTO services (id, name, default_bucket, max_storage_bytes, max_file_size_bytes)
 VALUES 
   ('usrc', 'UniSource Platform', 'unisource', 16106127360, 536870912),
-  ('blokserwis', 'Chmura Blokserwis', 'blokserwis', 107374182400, 2147483648)
+  ('chmura-blokserwis', 'Chmura Blokserwis', 'chmura-blokserwis', 107374182400, 2147483648)
 ON CONFLICT(id) DO NOTHING;
 
 -- 4. Add service_id isolation columns to operational tables

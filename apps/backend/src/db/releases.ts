@@ -247,3 +247,21 @@ export async function getLatestRelease(db: D1Database, serviceId: string): Promi
     .first<ReleaseRecord>();
   return row ? mapRelease(row) : null;
 }
+
+export async function getLatestReleaseByTag(
+  db: D1Database,
+  serviceId: string,
+  tag: string
+): Promise<ReleaseDTO | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM releases
+       WHERE service_id = ? AND upload_status = 'completed'
+         AND tags LIKE ?
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .bind(serviceId, `%"${tag}"%`)
+    .first<ReleaseRecord>();
+  return row ? mapRelease(row) : null;
+}

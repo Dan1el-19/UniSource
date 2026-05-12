@@ -23,4 +23,6 @@ declare interface WorkerVariables {
   authType: 'appwrite' | 'apikey';
   isAdmin: boolean;
   actorId?: string;
+  /** The Appwrite JWT used to authenticate this request. Set only for JWT-authenticated requests. */
+  appwriteJwt?: string;
 }

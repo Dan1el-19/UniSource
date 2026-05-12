@@ -80,6 +80,8 @@ const blokRecord: UploadRecord = {
 	is_main_storage: 0,
 	created_at: Math.floor(Date.now() / 1000),
 	updated_at: Math.floor(Date.now() / 1000),
+	upload_type: 'single',
+	r2_upload_id: null,
 };
 
 const blokPendingRecord: UploadRecord = {
