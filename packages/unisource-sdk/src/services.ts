@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString, positiveInt, unixTimestamp } from './primitives';
+import { nonEmptyString, positiveInt, unixTimestamp, uploadDestinationSchema } from './primitives';
 
 // ─── Service record ───────────────────────────────────────────────────────────
 
@@ -10,6 +10,7 @@ export const serviceSchema = z.object({
   max_storage_bytes: positiveInt,
   current_used_bytes: z.number().int().nonnegative(),
   max_file_size_bytes: positiveInt,
+  recommended_upload_destination: uploadDestinationSchema.optional(),
   created_at: unixTimestamp,
 });
 export type Service = z.infer<typeof serviceSchema>;
@@ -32,6 +33,25 @@ export type AdminServiceUpdateRequest = z.infer<typeof adminServiceUpdateRequest
 
 export const adminServiceUpdateResponseSchema = serviceDetailResponseSchema;
 export type AdminServiceUpdateResponse = z.infer<typeof adminServiceUpdateResponseSchema>;
+
+// ─── Admin: Service Settings (split from limits) ──────────────────────────────
+
+/**
+ * Separate settings endpoint driven by the Split-Button upload UI. Clients
+ * can flip the recommended default upload destination per service without
+ * disturbing quota-related fields.
+ */
+export const adminServiceSettingsRequestSchema = z
+  .object({
+    recommended_upload_destination: uploadDestinationSchema.optional(),
+  })
+  .refine((v) => v.recommended_upload_destination !== undefined, {
+    message: 'At least one setting must be provided',
+  });
+export type AdminServiceSettingsRequest = z.infer<typeof adminServiceSettingsRequestSchema>;
+
+export const adminServiceSettingsResponseSchema = serviceDetailResponseSchema;
+export type AdminServiceSettingsResponse = z.infer<typeof adminServiceSettingsResponseSchema>;
 
 // ─── Service usage summary ────────────────────────────────────────────────────
 

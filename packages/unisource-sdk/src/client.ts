@@ -9,6 +9,13 @@ import type {
   UploadFailResponse,
   UploadsListResponse,
   UploadRecordDetailResponse,
+  MultipartCreateRequest,
+  MultipartCreateResponse,
+  MultipartSignPartResponse,
+  MultipartListPartsResponse,
+  MultipartCompleteRequest,
+  MultipartCompleteResponse,
+  MultipartAbortResponse,
 } from './uploads';
 import type {
   FileRecord,
@@ -38,6 +45,8 @@ import type {
   ServiceUsageResponse,
   AdminServiceUpdateRequest,
   AdminServiceUpdateResponse,
+  AdminServiceSettingsRequest,
+  AdminServiceSettingsResponse,
   AuditLogListQuery,
   AuditLogListResponse,
   AdminUserListResponse,
@@ -248,6 +257,38 @@ export class UnisourceClient {
     /** Mark an upload as failed and release reserved quota */
     fail: (body: UploadLifecycleRequest, signal?: AbortSignal): Promise<UploadFailResponse> =>
       apiRequest(this.config, 'POST', '/upload/fail', { body, signal }),
+
+    /** Multipart upload helpers — direct browser → R2 via S3 presigned URLs */
+    multipart: {
+      /** Create a multipart upload — returns UploadId + storage key */
+      create: (body: MultipartCreateRequest, signal?: AbortSignal): Promise<MultipartCreateResponse> =>
+        apiRequest(this.config, 'POST', '/upload/r2/multipart/create', { body, signal }),
+
+      /** Short-lived presigned PUT URL for a single part */
+      signPart: (uploadId: string, partNumber: number, signal?: AbortSignal): Promise<MultipartSignPartResponse> =>
+        apiRequest(this.config, 'GET', '/upload/r2/multipart/sign-part', {
+          query: { upload_id: uploadId, part_number: partNumber },
+          signal,
+        }),
+
+      /** List parts already uploaded — feeds Golden Retriever's resume logic */
+      listParts: (uploadId: string, signal?: AbortSignal): Promise<MultipartListPartsResponse> =>
+        apiRequest(this.config, 'GET', '/upload/r2/multipart/list-parts', {
+          query: { upload_id: uploadId },
+          signal,
+        }),
+
+      /** Finalize the multipart upload. Parts must include PartNumber + ETag. */
+      complete: (body: MultipartCompleteRequest, signal?: AbortSignal): Promise<MultipartCompleteResponse> =>
+        apiRequest(this.config, 'POST', '/upload/r2/multipart/complete', { body, signal }),
+
+      /** Abort the multipart upload and release reserved quota */
+      abort: (uploadId: string, signal?: AbortSignal): Promise<MultipartAbortResponse> =>
+        apiRequest(this.config, 'DELETE', '/upload/r2/multipart/abort', {
+          body: { upload_id: uploadId },
+          signal,
+        }),
+    },
   };
 
   // ─── My Files ─────────────────────────────────────────────────────────────
@@ -408,6 +449,13 @@ export class UnisourceClient {
     /** Update custom service-wide limits */
     updateService: (body: AdminServiceUpdateRequest, signal?: AbortSignal): Promise<AdminServiceUpdateResponse> =>
       apiRequest(this.config, 'PATCH', '/admin/service', { body, signal }),
+
+    /** Update service-wide settings (e.g. recommended upload destination) */
+    updateServiceSettings: (
+      body: AdminServiceSettingsRequest,
+      signal?: AbortSignal
+    ): Promise<AdminServiceSettingsResponse> =>
+      apiRequest(this.config, 'PATCH', '/admin/service/settings', { body, signal }),
 
     /** Get real-time storage usage for the service */
     usage: (signal?: AbortSignal): Promise<ServiceUsageResponse> =>
