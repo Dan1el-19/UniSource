@@ -2,6 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 
 export type UploadDestination = 'r2' | 'appwrite';
 export type UploadStatus = 'pending' | 'completed' | 'failed';
+export type UploadType = 'single' | 'multipart';
 
 export interface UploadRecord {
   id: string;
@@ -18,6 +19,8 @@ export interface UploadRecord {
   presigned_url: string | null;
   expires_at: number;
   is_main_storage: 0 | 1;
+  upload_type: UploadType;
+  r2_upload_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -36,6 +39,8 @@ export interface CreateUploadInput {
   presigned_url: string | null;
   expires_at: number;
   is_main_storage?: boolean;
+  upload_type?: UploadType;
+  r2_upload_id?: string | null;
 }
 
 export interface ListUploadsInput {
@@ -78,8 +83,9 @@ export async function createUpload(db: D1Database, input: CreateUploadInput): Pr
     .prepare(
       `INSERT INTO uploads
          (id, service_id, user_id, folder_id, filename, size, mime_type, destination,
-          storage_key, bucket, status, presigned_url, expires_at, is_main_storage, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
+          storage_key, bucket, status, presigned_url, expires_at, is_main_storage,
+          upload_type, r2_upload_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       input.id,
@@ -95,6 +101,8 @@ export async function createUpload(db: D1Database, input: CreateUploadInput): Pr
       input.presigned_url,
       input.expires_at,
       input.is_main_storage ? 1 : 0,
+      input.upload_type ?? 'single',
+      input.r2_upload_id ?? null,
       now,
       now
     )

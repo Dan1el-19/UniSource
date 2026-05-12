@@ -12,7 +12,7 @@ import {
   updateRelease,
   upsertReleaseSync,
 } from '../db/releases';
-import { getServiceConfig } from '../config/services';
+import { buildReleaseStorageKey, getReleaseStoragePrefix, getServiceConfig } from '../config/services';
 import { deleteObject, generatePresignedPutUrl, headObject } from '../services/r2';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
@@ -91,22 +91,6 @@ const syncBodySchema = z.object({
   releases: z.array(syncManifestSchema).min(1).max(100),
 });
 
-function getFilenameExtension(filename: string): string {
-  const lastSegment = filename.split(/[\\/]/).pop() ?? filename;
-  const lastDot = lastSegment.lastIndexOf('.');
-  if (lastDot <= 0 || lastDot === lastSegment.length - 1) return '';
-  return lastSegment.slice(lastDot + 1);
-}
-
-function buildReleaseStorageKey(serviceId: string, releaseId: string, filename: string): string {
-  const ext = getFilenameExtension(filename);
-  return `releases/${serviceId}/${releaseId}${ext ? `.${ext}` : ''}`;
-}
-
-function getReleaseStoragePrefix(serviceId: string): string {
-  return `releases/${serviceId}/`;
-}
-
 releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validationErrorHook), async (c) => {
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
@@ -117,7 +101,7 @@ releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validatio
 
   const body = c.req.valid('json');
   const releaseId = crypto.randomUUID();
-  const r2Key = buildReleaseStorageKey(serviceId, releaseId, body.filename);
+  const r2Key = buildReleaseStorageKey(serviceId, body.filename);
   const { presigned_url, expires_at } = await generatePresignedPutUrl(
     c.env,
     svcConfig.bucketName,

@@ -41,6 +41,7 @@ export interface ServiceRecord {
   current_used_bytes: number;
   main_used_bytes: number;
   max_file_size_bytes: number;
+  recommended_upload_destination: 'r2' | 'appwrite';
   created_at: number;
 }
 
@@ -104,6 +105,39 @@ export async function updateServiceDetails(
        WHERE id = ?`
     )
     .bind(updates.max_storage_bytes, updates.max_file_size_bytes, serviceId)
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) {
+    return null;
+  }
+
+  return getServiceDetails(db, serviceId);
+}
+
+export async function updateServiceSettings(
+  db: D1Database,
+  serviceId: string,
+  updates: {
+    recommended_upload_destination?: 'r2' | 'appwrite';
+  }
+): Promise<ServiceRecord | null> {
+  const fragments: string[] = [];
+  const binds: (string | number)[] = [];
+
+  if (updates.recommended_upload_destination !== undefined) {
+    fragments.push('recommended_upload_destination = ?');
+    binds.push(updates.recommended_upload_destination);
+  }
+
+  if (fragments.length === 0) {
+    return getServiceDetails(db, serviceId);
+  }
+
+  binds.push(serviceId);
+
+  const result = await db
+    .prepare(`UPDATE services SET ${fragments.join(', ')} WHERE id = ?`)
+    .bind(...binds)
     .run();
 
   if ((result.meta.changes ?? 0) === 0) {

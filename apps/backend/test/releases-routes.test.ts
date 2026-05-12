@@ -45,11 +45,11 @@ import {
 import { deleteObject, generatePresignedPutUrl, headObject } from '../src/services/r2';
 import releasesRouter from '../src/routes/releases';
 
-function buildReleasesApp(userId = 'system', isAdmin = true) {
+function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
-    c.set('serviceId', 'default' as WorkerVariables['serviceId']);
+    c.set('serviceId', serviceId as WorkerVariables['serviceId']);
     c.set('authType', 'apikey' as WorkerVariables['authType']);
     c.set('isAdmin', isAdmin as WorkerVariables['isAdmin']);
     await next();
@@ -133,7 +133,7 @@ describe('POST /releases/upload/init', () => {
     expect(res.status).toBe(201);
     const body = await res.json() as { presigned_url: string; release_id: string; r2_key: string };
     expect(body.presigned_url).toBe('https://r2.example.com/put');
-    expect(body.r2_key).toBe(`releases/default/${body.release_id}.zip`);
+    expect(body.r2_key).toBe('releases/default/app.zip');
     expect(createRelease).toHaveBeenCalledWith(
       relEnv.APP_DB,
       expect.objectContaining({
@@ -149,6 +149,29 @@ describe('POST /releases/upload/init', () => {
       relEnv,
       'unisource',
       body.r2_key,
+      'application/octet-stream',
+      3600
+    );
+  });
+
+  it('does not prefix release keys with service id for service-b bucket', async () => {
+    const app = buildReleasesApp('system', true, 'service-b');
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'v1.0.0', filename: 'app.zip', tags: [], force_update: false }),
+      }),
+      relEnv
+    );
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as { r2_key: string };
+    expect(body.r2_key).toBe('releases/app.zip');
+    expect(generatePresignedPutUrl).toHaveBeenCalledWith(
+      relEnv,
+      'service-b',
+      'releases/app.zip',
       'application/octet-stream',
       3600
     );
@@ -483,6 +506,37 @@ describe('POST /releases/sync', () => {
     expect(body.message).toBe('r2_key must start with releases/default/');
     expect(upsertReleaseSync).not.toHaveBeenCalled();
     expect(completeRelease).not.toHaveBeenCalled();
+  });
+
+  it('accepts release sync keys without service id prefix for service-b bucket', async () => {
+    vi.mocked(completeRelease).mockResolvedValue(true);
+    const app = buildReleasesApp('system', true, 'service-b');
+    const res = await app.fetch(
+      new Request('http://localhost/releases/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releases: [
+            {
+              id: 'rel-sync',
+              name: 'v1.2.0',
+              r2_key: 'releases/rel-sync.zip',
+              size: 1234,
+            },
+          ],
+        }),
+      }),
+      relEnv
+    );
+
+    expect(res.status).toBe(200);
+    expect(upsertReleaseSync).toHaveBeenCalledWith(
+      relEnv.APP_DB,
+      expect.objectContaining({
+        service_id: 'service-b',
+        r2_key: 'releases/rel-sync.zip',
+      })
+    );
   });
 });
 

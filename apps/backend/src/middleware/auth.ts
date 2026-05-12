@@ -16,7 +16,8 @@ function getAuthRouteMode(pathname: string): AuthRouteMode {
     pathname.startsWith('/upload') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/main') ||
-    pathname.startsWith('/releases')
+    pathname.startsWith('/releases') ||
+    pathname.startsWith('/app')
   ) {
     return 'dual';
   }
@@ -143,6 +144,7 @@ export const authMiddleware = createMiddleware<{
       c.set('serviceId', serviceId);
       c.set('authType', 'appwrite');
       c.set('isAdmin', authenticatedUser.labels.includes('admin'));
+      c.set('appwriteJwt', jwtToken);
       return next();
     }
 

@@ -12,6 +12,7 @@ import {
   reconcileQuota,
   logServiceEvent,
   updateServiceDetails,
+  updateServiceSettings,
   upsertServiceUserSettings,
 } from '../db/services';
 import {
@@ -29,11 +30,13 @@ import type {
   AuditLogListResponse,
   AdminServiceUpdateRequest,
   AdminServiceUpdateResponse,
+  AdminServiceSettingsResponse,
   AdminUser,
   AdminUserListResponse,
   AdminUserPasswordResetResponse,
   AdminUserUpdateResponse,
 } from '@unisource/sdk';
+import { adminServiceSettingsRequestSchema } from '@unisource/sdk';
 import { DEFAULT_SERVICE_ID } from '../config/services';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
@@ -118,6 +121,7 @@ admin.get('/service', async (c) => {
       max_storage_bytes: service.max_storage_bytes,
       current_used_bytes: service.current_used_bytes,
       max_file_size_bytes: service.max_file_size_bytes,
+      recommended_upload_destination: service.recommended_upload_destination,
       created_at: service.created_at,
     },
   });
@@ -147,6 +151,41 @@ admin.patch(
         max_storage_bytes: service.max_storage_bytes,
         current_used_bytes: service.current_used_bytes,
         max_file_size_bytes: service.max_file_size_bytes,
+        recommended_upload_destination: service.recommended_upload_destination,
+        created_at: service.created_at,
+      },
+    });
+  }
+);
+
+/**
+ * Admin-only: change per-service UI settings (e.g. recommended upload
+ * destination for the split-button upload widget). Kept separate from the
+ * quota/size update endpoint so UX changes don't require re-sending quota.
+ */
+admin.patch(
+  '/service/settings',
+  zValidator('json', adminServiceSettingsRequestSchema, validationErrorHook),
+  async (c) => {
+    const serviceId = c.get('serviceId');
+    const body = c.req.valid('json');
+
+    const service = await updateServiceSettings(c.env.APP_DB, serviceId, {
+      recommended_upload_destination: body.recommended_upload_destination,
+    });
+
+    if (!service) {
+      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+    }
+
+    return c.json<AdminServiceSettingsResponse>({
+      service: {
+        id: service.id,
+        name: service.name,
+        max_storage_bytes: service.max_storage_bytes,
+        current_used_bytes: service.current_used_bytes,
+        max_file_size_bytes: service.max_file_size_bytes,
+        recommended_upload_destination: service.recommended_upload_destination,
         created_at: service.created_at,
       },
     });

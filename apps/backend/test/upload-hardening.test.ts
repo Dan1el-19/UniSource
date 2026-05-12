@@ -82,6 +82,8 @@ const pendingR2Record: UploadRecord = {
   created_at: Math.floor(Date.now() / 1000),
   updated_at: Math.floor(Date.now() / 1000),
   is_main_storage: 0,
+  upload_type: 'single',
+  r2_upload_id: null,
 };
 
 function mockD1(changes = 1): D1Database {
@@ -263,6 +265,38 @@ describe('POST /upload/r2/init', () => {
       expect.objectContaining({ is_main_storage: true })
     );
   });
+
+  it('uses the service-b R2 bucket for service-b uploads', async () => {
+    vi.mocked(generatePresignedPutUrl).mockResolvedValue({
+      presigned_url: 'https://example.com/put',
+      storage_key: 'key',
+      expires_at: 9999999999,
+    });
+
+    const app = buildUploadApp('u1', 'service-b');
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'photo.jpg',
+          size: 1024,
+          mime_type: 'image/jpeg',
+          is_main_storage: true,
+        }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(201);
+    expect(vi.mocked(generatePresignedPutUrl)).toHaveBeenCalledWith(
+      expect.anything(),
+      'service-b',
+      expect.stringMatching(/^uploads\//),
+      'image/jpeg',
+      expect.any(Number)
+    );
+  });
 });
 
 const pendingAppwriteRecord: UploadRecord = {
@@ -282,6 +316,8 @@ const pendingAppwriteRecord: UploadRecord = {
   is_main_storage: 0,
   created_at: Math.floor(Date.now() / 1000),
   updated_at: Math.floor(Date.now() / 1000),
+  upload_type: 'single',
+  r2_upload_id: null,
 };
 
 describe('POST /upload/complete — physical verification (Appwrite)', () => {
