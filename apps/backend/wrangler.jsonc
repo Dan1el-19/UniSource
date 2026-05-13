@@ -34,9 +34,6 @@
 			"bucket_name": "service-b"
 		}
 	],
-	"triggers": {
-  	"crons": ["0 * * * *"]
-	},
 	"ratelimits": [
 		{
 		"name": "RATE_LIMITER",

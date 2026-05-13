@@ -202,14 +202,20 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorH
     }
 
     // Mark all files in descendant folders as trashed (mark-for-deletion pattern).
-    // Actual R2/Appwrite cleanup is handled by a Scheduled Worker cron job —
-    // this avoids synchronous loops that could exceed Workers CPU limits on large folders.
+    // Actual R2/Appwrite cleanup is handled by R2 lifecycle rules — backend
+    // does not own physical cleanup of trashed files anymore (B4).
     await trashFilesInFolders(c.env.APP_DB, descendantIds, userId, serviceId);
 
-    // Delete all descendant folders in D1 (FK cascade sets folder_id=NULL on surviving files)
-    // Delete children first, then parent (reverse BFS order isn't needed because FK is SET NULL)
-    for (const folderId of descendantIds) {
-      await deleteFolderPermanently(c.env.APP_DB, folderId, userId, serviceId);
+    // B11: delete all descendant folders in a single D1 batch instead of
+    // sequential per-folder DELETEs. Children-first iteration order keeps
+    // the recursive CTE consistent with FK semantics.
+    const deleteStmts = descendantIds.map((folderId) =>
+      c.env.APP_DB
+        .prepare('DELETE FROM folders WHERE id = ? AND user_id = ? AND service_id = ?')
+        .bind(folderId, userId, serviceId)
+    );
+    if (deleteStmts.length > 0) {
+      await c.env.APP_DB.batch(deleteStmts);
     }
 
     c.executionCtx.waitUntil(
