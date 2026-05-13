@@ -41,7 +41,7 @@ export interface ServiceRecord {
   current_used_bytes: number;
   main_used_bytes: number;
   max_file_size_bytes: number;
-  recommended_upload_destination: 'r2' | 'appwrite';
+  recommended_upload_destination: 'r2' | 'appwrite' | 'hybrid';
   created_at: number;
 }
 
@@ -118,7 +118,7 @@ export async function updateServiceSettings(
   db: D1Database,
   serviceId: string,
   updates: {
-    recommended_upload_destination?: 'r2' | 'appwrite';
+    recommended_upload_destination?: 'r2' | 'appwrite' | 'hybrid';
   }
 ): Promise<ServiceRecord | null> {
   const fragments: string[] = [];
@@ -270,7 +270,8 @@ async function decrementUserStorageUsage(
 }
 
 // Atomically checks quota and reserves space to prevent race conditions during concurrent uploads.
-// Returns true if quota was reserved successfully, false if quota exceeded.
+// Uses a D1 batch so user + service updates run inside a single transaction —
+// no orphan reservation if the worker crashes between statements (B7/B8).
 export async function reserveQuota(
   db: D1Database,
   serviceId: string,
@@ -279,47 +280,84 @@ export async function reserveQuota(
 ): Promise<{ ok: true } | { ok: false; scope: 'service' | 'user' }> {
   if (userId) {
     const userRecord = await ensureServiceUser(db, serviceId, userId);
-    const userResult =
+
+    const userStmt =
       userRecord.max_storage_bytes === null
-        ? await db
+        ? db
             .prepare(
               `UPDATE service_users
                SET current_used_bytes = current_used_bytes + ?
                WHERE service_id = ? AND user_id = ?`
             )
             .bind(additionalBytes, serviceId, userId)
-            .run()
-        : await db
+        : db
             .prepare(
               `UPDATE service_users
                SET current_used_bytes = current_used_bytes + ?
                WHERE service_id = ? AND user_id = ? AND (current_used_bytes + ?) <= max_storage_bytes`
             )
-            .bind(additionalBytes, serviceId, userId, additionalBytes)
-            .run();
+            .bind(additionalBytes, serviceId, userId, additionalBytes);
 
-    if ((userResult.meta.changes ?? 0) === 0) {
-      return { ok: false, scope: 'user' };
+    const serviceStmt = db
+      .prepare(
+        `UPDATE services
+         SET current_used_bytes = current_used_bytes + ?
+         WHERE id = ? AND (current_used_bytes + ?) <= max_storage_bytes`
+      )
+      .bind(additionalBytes, serviceId, additionalBytes);
+
+    const [userResult, serviceResult] = await db.batch([userStmt, serviceStmt]);
+
+    const userOk = (userResult.meta.changes ?? 0) > 0;
+    const serviceOk = (serviceResult.meta.changes ?? 0) > 0;
+
+    if (userOk && serviceOk) return { ok: true };
+
+    // Rollback whichever side actually applied. D1 batch is atomic per-statement
+    // but not transactional across the two updates — fall back to compensating
+    // updates so we never leave the system in a half-reserved state.
+    const compensations = [];
+    if (userOk) {
+      compensations.push(
+        db
+          .prepare(
+            `UPDATE service_users
+             SET current_used_bytes = MAX(0, current_used_bytes - ?)
+             WHERE service_id = ? AND user_id = ?`
+          )
+          .bind(additionalBytes, serviceId, userId)
+      );
     }
+    if (serviceOk) {
+      compensations.push(
+        db
+          .prepare(
+            `UPDATE services
+             SET current_used_bytes = MAX(0, current_used_bytes - ?)
+             WHERE id = ?`
+          )
+          .bind(additionalBytes, serviceId)
+      );
+    }
+    if (compensations.length > 0) {
+      await db.batch(compensations);
+    }
+
+    return { ok: false, scope: userOk ? 'service' : 'user' };
   }
 
   const result = await db
     .prepare(
-      `UPDATE services 
-       SET current_used_bytes = current_used_bytes + ? 
+      `UPDATE services
+       SET current_used_bytes = current_used_bytes + ?
        WHERE id = ? AND (current_used_bytes + ?) <= max_storage_bytes`
     )
     .bind(additionalBytes, serviceId, additionalBytes)
     .run();
 
-  if ((result.meta.changes ?? 0) === 0) {
-    if (userId) {
-      await decrementUserStorageUsage(db, serviceId, userId, additionalBytes);
-    }
-    return { ok: false, scope: 'service' };
-  }
-
-  return { ok: true };
+  return (result.meta.changes ?? 0) > 0
+    ? { ok: true }
+    : { ok: false, scope: 'service' };
 }
 
 // Note: incrementServiceUsage was replaced by reserveQuota which atomically checks and reserves space.
@@ -379,6 +417,8 @@ export async function releaseMainStorageQuota(
 export interface ReconcileQuotaResult {
   service_drift_bytes: number;
   service_corrected: boolean;
+  main_drift_bytes: number;
+  main_corrected: boolean;
   users_fixed: number;
   dry_run: boolean;
 }
@@ -389,23 +429,41 @@ export async function reconcileQuota(
   dryRun = false
 ): Promise<ReconcileQuotaResult> {
   const serviceUsageRow = await db
-    .prepare('SELECT COALESCE(SUM(size), 0) AS used_bytes FROM files WHERE service_id = ? AND is_trashed = 0')
+    .prepare(
+      `SELECT COALESCE(SUM(size), 0) AS used_bytes
+       FROM files
+       WHERE service_id = ? AND is_trashed = 0 AND is_main_storage = 0`
+    )
     .bind(serviceId)
     .first<{ used_bytes: number | null }>();
   const realServiceBytes = Number(serviceUsageRow?.used_bytes ?? 0);
 
+  const mainUsageRow = await db
+    .prepare(
+      `SELECT COALESCE(SUM(size), 0) AS used_bytes
+       FROM files
+       WHERE service_id = ? AND is_trashed = 0 AND is_main_storage = 1`
+    )
+    .bind(serviceId)
+    .first<{ used_bytes: number | null }>();
+  const realMainBytes = Number(mainUsageRow?.used_bytes ?? 0);
+
   const userUsageRows = await db
     .prepare(
-      'SELECT user_id, COALESCE(SUM(size), 0) AS used_bytes FROM files WHERE service_id = ? AND is_trashed = 0 GROUP BY user_id'
+      `SELECT user_id, COALESCE(SUM(size), 0) AS used_bytes
+       FROM files
+       WHERE service_id = ? AND is_trashed = 0 AND is_main_storage = 0
+       GROUP BY user_id`
     )
     .bind(serviceId)
     .all<UserUsageRow>();
 
   const serviceRow = await db
-    .prepare('SELECT current_used_bytes FROM services WHERE id = ?')
+    .prepare('SELECT current_used_bytes, main_used_bytes FROM services WHERE id = ?')
     .bind(serviceId)
-    .first<{ current_used_bytes: number }>();
+    .first<{ current_used_bytes: number; main_used_bytes: number }>();
   const storedServiceBytes = Number(serviceRow?.current_used_bytes ?? 0);
+  const storedMainBytes = Number(serviceRow?.main_used_bytes ?? 0);
 
   const storedUserRows = await db
     .prepare('SELECT user_id, current_used_bytes FROM service_users WHERE service_id = ?')
@@ -417,11 +475,18 @@ export async function reconcileQuota(
   }
 
   const serviceDrift = realServiceBytes - storedServiceBytes;
+  const mainDrift = realMainBytes - storedMainBytes;
 
   if (serviceDrift !== 0 && !dryRun) {
     await db
       .prepare('UPDATE services SET current_used_bytes = ? WHERE id = ?')
       .bind(realServiceBytes, serviceId)
+      .run();
+  }
+  if (mainDrift !== 0 && !dryRun) {
+    await db
+      .prepare('UPDATE services SET main_used_bytes = ? WHERE id = ?')
+      .bind(realMainBytes, serviceId)
       .run();
   }
 
@@ -456,6 +521,8 @@ export async function reconcileQuota(
   return {
     service_drift_bytes: serviceDrift,
     service_corrected: !dryRun && serviceDrift !== 0,
+    main_drift_bytes: mainDrift,
+    main_corrected: !dryRun && mainDrift !== 0,
     users_fixed: usersFixed,
     dry_run: dryRun,
   };

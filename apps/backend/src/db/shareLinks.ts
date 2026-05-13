@@ -172,12 +172,25 @@ export async function deactivateShareLinksForFile(
     .run();
 }
 
+/**
+ * Atomically increments `download_count` only when the link is still under
+ * the `max_downloads` cap. Returns true if the increment was applied — used
+ * by the public download proxy to enforce the cap without a race condition
+ * (B5).
+ */
 export async function incrementDownloadCount(
   db: D1Database,
   id: string
-): Promise<void> {
-  await db
-    .prepare('UPDATE share_links SET download_count = download_count + 1 WHERE id = ?')
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE share_links
+       SET download_count = download_count + 1
+       WHERE id = ?
+         AND is_active = 1
+         AND (max_downloads IS NULL OR download_count < max_downloads)`
+    )
     .bind(id)
     .run();
+  return (result.meta.changes ?? 0) > 0;
 }
