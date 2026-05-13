@@ -347,15 +347,23 @@ export async function getLatestReleaseByTag(
   serviceId: string,
   tag: string
 ): Promise<ReleaseDTO | null> {
+  // Exact tag match — `tags` is JSON-encoded so we use json_each + tree to
+  // compare values literally instead of LIKE which would match substrings
+  // (B12).
   const row = await db
     .prepare(
-      `SELECT * FROM releases
-       WHERE service_id = ? AND upload_status = 'completed'
-         AND tags LIKE ?
-       ORDER BY created_at DESC
+      `SELECT r.*
+       FROM releases r
+       WHERE r.service_id = ?
+         AND r.upload_status = 'completed'
+         AND EXISTS (
+           SELECT 1 FROM json_each(r.tags) t
+           WHERE t.value = ?
+         )
+       ORDER BY r.created_at DESC
        LIMIT 1`
     )
-    .bind(serviceId, `%"${tag}"%`)
+    .bind(serviceId, tag)
     .first<ReleaseRecord>();
   return row ? mapRelease(row) : null;
 }

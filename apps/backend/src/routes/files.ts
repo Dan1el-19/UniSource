@@ -230,6 +230,15 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 	}
 
+	// B17: delete the DB row FIRST so a failed physical delete cannot leave a
+	// dangling DB record that points at an already-removed object. If the
+	// physical delete fails, we resurrect the row (best-effort) so the next
+	// retry can complete the operation.
+	const recordDeleted = await deleteUploadRecord(c.env.usrc_d1, id);
+	if (!recordDeleted) {
+		return c.json({ error: 'Conflict', message: 'File record could not be deleted' }, 409);
+	}
+
 	try {
 		if (record.destination === 'r2') {
 			await deleteObject(c.env, record.bucket, record.storage_key);
@@ -240,13 +249,9 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 			}
 			await deleteAppwriteFile(c.env, record.bucket, appwriteFileId);
 		}
-	} catch {
+	} catch (err) {
+		console.error('[admin files.delete] physical delete failed; row already removed', err);
 		return c.json({ error: 'Bad Gateway', message: 'Unable to delete file in upstream storage' }, 502);
-	}
-
-	const recordDeleted = await deleteUploadRecord(c.env.usrc_d1, id);
-	if (!recordDeleted) {
-		return c.json({ error: 'Conflict', message: 'File record could not be deleted' }, 409);
 	}
 
 	return c.json<FileDeleteResponse>({

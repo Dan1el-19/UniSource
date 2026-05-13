@@ -4,7 +4,7 @@ import { authMiddleware } from './middleware/auth';
 import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
-import { cleanupOrphanedUploads } from './worker/cron';
+import { foreignKeysMiddleware } from './middleware/foreignKeys';
 import upload from './routes/upload';
 import files from './routes/files';
 import folders from './routes/folders';
@@ -18,11 +18,49 @@ import mainStorage from './routes/mainStorage';
 import releasesRouter from './routes/releases';
 import appRouter from './routes/app';
 
+/**
+ * Default CORS allowlist used when ALLOWED_ORIGINS env var is empty.
+ * Keeps the production deployment usable for first-party frontends without
+ * configuration, while denying arbitrary origins.
+ */
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://chmura.blokserwis.pl',
+  'https://chmura-blokserwis.pages.dev',
+  'https://usrc.dev',
+  'https://www.usrc.dev',
+  'http://localhost:5173',
+  'http://localhost:4321',
+  'http://localhost:8788'
+];
+
+function parseAllowedOrigins(env: CloudflareBindings): string[] {
+  const raw = (env as unknown as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS;
+  if (!raw) return DEFAULT_ALLOWED_ORIGINS;
+  return raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
-app.use('*', cors());
+app.use('*', async (c, next) => {
+  const allowed = parseAllowedOrigins(c.env);
+  const corsMiddleware = cors({
+    origin: (origin) => {
+      if (!origin) return null;
+      return allowed.includes(origin) ? origin : null;
+    },
+    allowHeaders: ['Authorization', 'Content-Type', 'X-Service-ID', 'X-Appwrite-JWT', 'X-Target-User-ID'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    maxAge: 600
+  });
+  return corsMiddleware(c, next);
+});
 app.use('*', loggerMiddleware);
+// B6: enforce SQLite foreign keys for ON DELETE SET NULL etc.
+app.use('*', foreignKeysMiddleware);
 
 // Health check — no auth required
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Math.floor(Date.now() / 1000) }));
@@ -93,12 +131,4 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
-  scheduled: async (event: ScheduledEvent, env: CloudflareBindings, ctx: ExecutionContext) => {
-    // Scheduled Cron job for orphaned uploads cleanup
-    const mockLogger = {
-      info: (msg: string, data?: any) => console.info(JSON.stringify({ level: 'info', message: msg, ...data })),
-      error: (msg: string, err: any) => console.error(JSON.stringify({ level: 'error', message: msg, error: String(err) }))
-    };
-    ctx.waitUntil(cleanupOrphanedUploads(env.usrc_d1, env, mockLogger));
-  },
 };

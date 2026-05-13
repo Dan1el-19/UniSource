@@ -34,9 +34,6 @@
 			"bucket_name": "chmura-blokserwis"
 		}
 	],
-	"triggers": {
-  	"crons": ["0 * * * *"]
-	},
 	"ratelimits": [
 		{
 		"name": "RATE_LIMITER",

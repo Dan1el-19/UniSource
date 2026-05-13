@@ -295,10 +295,11 @@ releases.post(
       const result = await createMultipartUpload(c.env, svcConfig.bucketName, r2Key, body.mime_type);
       r2UploadId = result.upload_id;
     } catch (err) {
+      console.error('[releases.multipart/create] R2 CreateMultipartUpload failed', err);
       return c.json(
         {
           error: 'Bad Gateway',
-          message: `Failed to start multipart upload on R2: ${(err as Error).message}`,
+          message: 'Failed to start multipart upload',
         },
         502
       );
@@ -452,8 +453,9 @@ releases.post(
         parts
       );
     } catch (err) {
+      console.error('[releases.multipart/complete] CompleteMultipartUpload failed', err);
       return c.json(
-        { error: 'Conflict', message: `Failed to complete multipart upload: ${(err as Error).message}` },
+        { error: 'Conflict', message: 'Failed to complete multipart upload' },
         409
       );
     }
@@ -584,9 +586,20 @@ releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), 
   const storagePrefix = getReleaseStoragePrefix(serviceId);
   const results = [];
 
+  // S7: enforce that the prefix is meaningfully scoped to the service. When
+  // a service has objectKeyPrefix='' (e.g. chmura-blokserwis), the resulting
+  // prefix is just `releases/` which is shared across services — restricting
+  // sync to the owning bucket is enough since each service has its own R2
+  // bucket. We still reject any key that doesn't start with the prefix to
+  // prevent foreign keys from being attached to the wrong service. Path
+  // traversal characters in the suffix are also rejected.
   for (const manifest of body.releases) {
     if (!manifest.r2_key.startsWith(storagePrefix)) {
       return c.json({ error: 'Bad Request', message: `r2_key must start with ${storagePrefix}` }, 400);
+    }
+    const suffix = manifest.r2_key.slice(storagePrefix.length);
+    if (suffix.length === 0 || suffix.includes('..') || suffix.startsWith('/')) {
+      return c.json({ error: 'Bad Request', message: 'r2_key has invalid suffix' }, 400);
     }
   }
 
