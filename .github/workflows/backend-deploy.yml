@@ -1,9 +1,9 @@
 name: Deploy Backend
 
 on:
-  release:
-    types:
-      - published
+  push:
+    tags:
+      - 'backend@*'
 
 concurrency:
   group: workers-production
@@ -17,28 +17,27 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.event.release.prerelease == false && startsWith(github.event.release.tag_name, 'backend@') }}
     runs-on: ubuntu-latest
     name: Deploy
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.ref }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Switch app SDK dependency source to npm
+      - name: Switch SDK dependency to npm
         run: pnpm -w run sdk:deps:npm
 
       - name: Install dependencies

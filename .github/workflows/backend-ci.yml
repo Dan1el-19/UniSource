@@ -1,4 +1,4 @@
-name: Release Backend
+name: Backend CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: release-backend
+  group: backend-ci
   cancel-in-progress: false
 
 permissions:
@@ -21,37 +21,37 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  release:
+  ci:
     runs-on: ubuntu-latest
-    name: Release
+    name: Build, Test & Release
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build SDK
         run: pnpm --filter @unisource/sdk build
 
-      - name: Verify backend
+      - name: Check backend
         run: pnpm --filter usrc-backend check
 
-      - name: Create release
+      - name: Release
         env:
           GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
         working-directory: apps/backend
