@@ -177,6 +177,17 @@ export {
   releaseSyncRequestSchema,
   releaseSyncResultSchema,
   releaseSyncResponseSchema,
+  releaseMultipartCreateRequestSchema,
+  releaseMultipartCreateResponseSchema,
+  releaseMultipartSignPartQuerySchema,
+  releaseMultipartSignPartResponseSchema,
+  releaseMultipartListPartsQuerySchema,
+  releaseMultipartListPartsResponseSchema,
+  releaseMultipartPartSchema,
+  releaseMultipartCompleteRequestSchema,
+  releaseMultipartCompleteResponseSchema,
+  releaseMultipartAbortRequestSchema,
+  releaseMultipartAbortResponseSchema,
 } from './releases';
 export type {
   ReleaseDTO,
@@ -193,6 +204,17 @@ export type {
   ReleaseSyncRequest,
   ReleaseSyncResult,
   ReleaseSyncResponse,
+  ReleaseMultipartCreateRequest,
+  ReleaseMultipartCreateResponse,
+  ReleaseMultipartSignPartQuery,
+  ReleaseMultipartSignPartResponse,
+  ReleaseMultipartListPartsQuery,
+  ReleaseMultipartListPartsResponse,
+  ReleaseMultipartPart,
+  ReleaseMultipartCompleteRequest,
+  ReleaseMultipartCompleteResponse,
+  ReleaseMultipartAbortRequest,
+  ReleaseMultipartAbortResponse,
 } from './releases';
 
 // ─── Share Links ─────────────────────────────────────────────────────────────

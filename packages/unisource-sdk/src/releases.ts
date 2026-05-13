@@ -64,6 +64,84 @@ export const releaseUploadFailResponseSchema = z.object({
 });
 export type ReleaseUploadFailResponse = z.infer<typeof releaseUploadFailResponseSchema>;
 
+// ─── Multipart Upload Lifecycle ──────────────────────────────────────────────
+
+export const releaseMultipartCreateRequestSchema = z.object({
+  name: releaseNameSchema,
+  filename: releaseFilenameSchema,
+  /** Defaults server-side to `application/octet-stream` when omitted. */
+  mime_type: nonEmptyString.optional(),
+  tags: releaseTagsSchema.optional().default([]),
+  notes: releaseNotesSchema,
+  force_update: z.boolean().optional().default(false),
+});
+export type ReleaseMultipartCreateRequest = z.input<typeof releaseMultipartCreateRequestSchema>;
+
+export const releaseMultipartCreateResponseSchema = z.object({
+  /** UniSource release id — the same id is used for sign/list/complete/abort. */
+  upload_id: nonEmptyString,
+  /** S3 (R2) multipart UploadId returned by CreateMultipartUpload. */
+  r2_upload_id: nonEmptyString,
+  /** R2 object key the parts are being uploaded against. */
+  key: nonEmptyString,
+  bucket: nonEmptyString,
+  expires_at: positiveInt,
+});
+export type ReleaseMultipartCreateResponse = z.infer<typeof releaseMultipartCreateResponseSchema>;
+
+export const releaseMultipartSignPartQuerySchema = z.object({
+  upload_id: releaseIdSchema,
+  part_number: z.coerce.number().int().min(1).max(10_000),
+});
+export type ReleaseMultipartSignPartQuery = z.input<typeof releaseMultipartSignPartQuerySchema>;
+
+export const releaseMultipartSignPartResponseSchema = z.object({
+  url: z.string().url(),
+  expires_at: positiveInt,
+});
+export type ReleaseMultipartSignPartResponse = z.infer<typeof releaseMultipartSignPartResponseSchema>;
+
+export const releaseMultipartListPartsQuerySchema = z.object({
+  upload_id: releaseIdSchema,
+});
+export type ReleaseMultipartListPartsQuery = z.input<typeof releaseMultipartListPartsQuerySchema>;
+
+export const releaseMultipartPartSchema = z.object({
+  PartNumber: z.number().int().min(1).max(10_000),
+  ETag: nonEmptyString,
+  Size: z.number().int().nonnegative(),
+});
+export type ReleaseMultipartPart = z.infer<typeof releaseMultipartPartSchema>;
+
+export const releaseMultipartListPartsResponseSchema = z.object({
+  parts: z.array(releaseMultipartPartSchema),
+});
+export type ReleaseMultipartListPartsResponse = z.infer<typeof releaseMultipartListPartsResponseSchema>;
+
+export const releaseMultipartCompleteRequestSchema = z.object({
+  upload_id: releaseIdSchema,
+  parts: z
+    .array(
+      z.object({
+        PartNumber: z.number().int().min(1).max(10_000),
+        ETag: nonEmptyString,
+      })
+    )
+    .min(1),
+});
+export type ReleaseMultipartCompleteRequest = z.input<typeof releaseMultipartCompleteRequestSchema>;
+
+export const releaseMultipartCompleteResponseSchema = releaseUploadCompleteResponseSchema;
+export type ReleaseMultipartCompleteResponse = z.infer<typeof releaseMultipartCompleteResponseSchema>;
+
+export const releaseMultipartAbortRequestSchema = z.object({
+  upload_id: releaseIdSchema,
+});
+export type ReleaseMultipartAbortRequest = z.input<typeof releaseMultipartAbortRequestSchema>;
+
+export const releaseMultipartAbortResponseSchema = releaseUploadFailResponseSchema;
+export type ReleaseMultipartAbortResponse = z.infer<typeof releaseMultipartAbortResponseSchema>;
+
 // ─── List ───────────────────────────────────────────────────────────────────
 
 export const releasesListQuerySchema = z.object({

@@ -90,6 +90,13 @@ import type {
   ReleaseDeleteResponse,
   ReleaseSyncRequest,
   ReleaseSyncResponse,
+  ReleaseMultipartCreateRequest,
+  ReleaseMultipartCreateResponse,
+  ReleaseMultipartSignPartResponse,
+  ReleaseMultipartListPartsResponse,
+  ReleaseMultipartCompleteRequest,
+  ReleaseMultipartCompleteResponse,
+  ReleaseMultipartAbortResponse,
 } from './releases';
 
 // ─── SDK Error classes ────────────────────────────────────────────────────────
@@ -412,6 +419,38 @@ export class UnisourceClient {
       /** Mark a release upload as failed */
       fail: (releaseId: string, signal?: AbortSignal): Promise<ReleaseUploadFailResponse> =>
         apiRequest(this.config, 'POST', '/releases/upload/fail', { body: { release_id: releaseId }, signal }),
+
+      /** Multipart upload helpers — direct browser → R2 via S3 presigned URLs */
+      multipart: {
+        /** Create a multipart release upload — returns the R2 UploadId + storage key */
+        create: (body: ReleaseMultipartCreateRequest, signal?: AbortSignal): Promise<ReleaseMultipartCreateResponse> =>
+          apiRequest(this.config, 'POST', '/releases/upload/multipart/create', { body, signal }),
+
+        /** Short-lived presigned PUT URL for a single part */
+        signPart: (uploadId: string, partNumber: number, signal?: AbortSignal): Promise<ReleaseMultipartSignPartResponse> =>
+          apiRequest(this.config, 'GET', '/releases/upload/multipart/sign-part', {
+            query: { upload_id: uploadId, part_number: partNumber },
+            signal,
+          }),
+
+        /** List parts already uploaded — feeds Golden Retriever's resume logic */
+        listParts: (uploadId: string, signal?: AbortSignal): Promise<ReleaseMultipartListPartsResponse> =>
+          apiRequest(this.config, 'GET', '/releases/upload/multipart/list-parts', {
+            query: { upload_id: uploadId },
+            signal,
+          }),
+
+        /** Finalize the multipart upload — backend reads object size from R2 (no client size). */
+        complete: (body: ReleaseMultipartCompleteRequest, signal?: AbortSignal): Promise<ReleaseMultipartCompleteResponse> =>
+          apiRequest(this.config, 'POST', '/releases/upload/multipart/complete', { body, signal }),
+
+        /** Abort an in-flight multipart upload and mark the release as failed */
+        abort: (uploadId: string, signal?: AbortSignal): Promise<ReleaseMultipartAbortResponse> =>
+          apiRequest(this.config, 'DELETE', '/releases/upload/multipart/abort', {
+            body: { upload_id: uploadId },
+            signal,
+          }),
+      },
     },
 
     /** List releases for the configured service */
