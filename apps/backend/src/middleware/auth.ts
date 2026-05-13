@@ -133,17 +133,32 @@ export const authMiddleware = createMiddleware<{
     if (authenticatedUser) {
       // Non-default services require explicit service_users membership
       // This prevents a usrc.dev account from accessing blokserwis data
+      let serviceRole: 'user' | 'plus' | 'admin' = authenticatedUser.labels.includes('admin')
+        ? 'admin'
+        : 'user';
+
       if (serviceId !== DEFAULT_SERVICE_ID) {
         const access = await checkUserServiceAccess(c.env.usrc_d1, serviceId, authenticatedUser.userId);
         if (!access) {
           return c.json({ error: 'Forbidden', message: 'Access to this service is not permitted' }, 403);
+        }
+        // Per-service role overrides Appwrite labels for non-default services.
+        if (access.role === 'admin' || access.role === 'plus' || access.role === 'user') {
+          serviceRole = access.role;
+        }
+      } else {
+        // Default service still benefits from a stored per-service role when present.
+        const access = await checkUserServiceAccess(c.env.usrc_d1, serviceId, authenticatedUser.userId);
+        if (access && (access.role === 'admin' || access.role === 'plus' || access.role === 'user')) {
+          serviceRole = access.role;
         }
       }
 
       c.set('userId', authenticatedUser.userId);
       c.set('serviceId', serviceId);
       c.set('authType', 'appwrite');
-      c.set('isAdmin', authenticatedUser.labels.includes('admin'));
+      c.set('isAdmin', serviceRole === 'admin');
+      c.set('serviceRole', serviceRole);
       c.set('appwriteJwt', jwtToken);
       return next();
     }
@@ -164,6 +179,7 @@ export const authMiddleware = createMiddleware<{
       c.set('serviceId', serviceId);
       c.set('authType', 'apikey');
       c.set('isAdmin', true);
+      c.set('serviceRole', 'system');
       return next();
     }
   }

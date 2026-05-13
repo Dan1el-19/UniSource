@@ -58,7 +58,18 @@ async function generateDownloadUrl(
   return { download_url: downloadUrl, url_expires_at: token.expires_at };
 }
 
+/**
+ * S2: Public download links are signed with a dedicated `DOWNLOAD_TOKEN_SECRET`
+ * binding (configured via `wrangler secret put`). Falls back to a derivation of
+ * the Appwrite key + project id only when the dedicated secret is missing — this
+ * is the legacy behaviour, kept temporarily so existing deployments do not break,
+ * but should be retired once `DOWNLOAD_TOKEN_SECRET` is rolled out everywhere.
+ */
 function getPublicDownloadSecret(env: CloudflareBindings): string {
+  const dedicated = (env as unknown as { DOWNLOAD_TOKEN_SECRET?: string }).DOWNLOAD_TOKEN_SECRET;
+  if (dedicated && dedicated.length > 0) {
+    return `${dedicated}:${PUBLIC_DOWNLOAD_SCOPE}`;
+  }
   return `${env.APPWRITE_API_KEY}:${env.APPWRITE_PROJECT_ID}:${PUBLIC_DOWNLOAD_SCOPE}`;
 }
 
@@ -113,7 +124,7 @@ publicRouter.get('/:slug', zValidator('param', slugParam, validationErrorHook), 
   }
 
   try {
-    const { download_url, url_expires_at } = await generateDownloadUrl(
+    const { url_expires_at } = await generateDownloadUrl(
       c.env,
       link.service_id,
       file.storage_destination,
@@ -134,6 +145,7 @@ publicRouter.get('/:slug', zValidator('param', slugParam, validationErrorHook), 
       link_expires_at: link.expires_at,
     });
   } catch {
+    // S5: do not echo upstream provider details to the public client.
     return c.json({ error: 'Bad Gateway', message: 'Unable to generate download URL' }, 502);
   }
 });
@@ -171,7 +183,7 @@ publicRouter.post(
     }
 
     try {
-      const { download_url, url_expires_at } = await generateDownloadUrl(
+      const { url_expires_at } = await generateDownloadUrl(
         c.env,
         link.service_id,
         file.storage_destination,
@@ -218,7 +230,12 @@ publicRouter.get(
     if (link.expires_at && link.expires_at < now) {
       return c.json({ error: 'Gone', message: 'Share link has expired' }, 410);
     }
-    if (link.max_downloads !== null && link.download_count >= link.max_downloads) {
+
+    // B5: atomic increment + max_downloads check. The DB UPDATE only succeeds
+    // when the link is still under cap; concurrent requests on the last slot
+    // can therefore not both exceed the limit.
+    const incremented = await incrementDownloadCount(c.env.usrc_d1, link.id);
+    if (!incremented) {
       return c.json({ error: 'Gone', message: 'Download limit reached' }, 410);
     }
 
@@ -241,19 +258,17 @@ publicRouter.get(
         return c.json({ error: 'Bad Gateway', message: 'Unable to stream download' }, 502);
       }
 
+      // Audit logging is best-effort and does not block the response.
       c.executionCtx.waitUntil(
-        Promise.all([
-          incrementDownloadCount(c.env.usrc_d1, link.id),
-          logServiceEvent(c.env.usrc_d1, {
-            serviceId: link.service_id,
-            userId: link.user_id,
-            action: 'share_link_accessed',
-            resourceType: 'file',
-            resourceId: link.file_id,
-            metadata: { slug, link_id: link.id },
-            ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
-          }),
-        ])
+        logServiceEvent(c.env.usrc_d1, {
+          serviceId: link.service_id,
+          userId: link.user_id,
+          action: 'share_link_accessed',
+          resourceType: 'file',
+          resourceId: link.file_id,
+          metadata: { slug, link_id: link.id },
+          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+        })
       );
 
       const headers = new Headers();
