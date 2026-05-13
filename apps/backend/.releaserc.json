@@ -9,15 +9,26 @@
         { "type": "feat", "scope": "backend", "release": "minor" },
         { "type": "fix", "scope": "backend", "release": "patch" },
         { "type": "perf", "scope": "backend", "release": "patch" },
+        { "type": "feat", "scope": null, "release": false },
+        { "type": "fix", "scope": null, "release": false },
+        { "type": "perf", "scope": null, "release": false },
+        { "breaking": true, "scope": "frontend", "release": false },
+        { "breaking": true, "scope": "sdk", "release": false },
+        { "breaking": true, "scope": "root", "release": false },
         { "scope": "frontend", "release": false },
         { "scope": "sdk", "release": false },
-        { "scope": "root", "release": false }
+        { "scope": "root", "release": false },
+        { "type": "ci", "release": false },
+        { "type": "docs", "release": false },
+        { "type": "chore", "release": false },
+        { "type": "test", "release": false },
+        { "type": "refactor", "release": false }
       ]
     }],
     "@semantic-release/release-notes-generator",
     ["@semantic-release/github", {
       "successComment": false,
-      "failTitle": false
+      "failComment": false
     }]
   ]
 }
