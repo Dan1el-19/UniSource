@@ -1,5 +1,12 @@
 # app-backend
 
+## 0.0.7
+
+### Patch Changes
+
+- Updated dependencies [c6c66b6]
+  - @unisource/sdk@0.7.0
+
 ## 0.0.6
 
 ### Patch Changes

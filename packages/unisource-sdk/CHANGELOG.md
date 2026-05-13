@@ -1,5 +1,19 @@
 # @unisource/sdk
 
+## 0.7.0
+
+### Minor Changes
+
+- c6c66b6: Audit 2026-05-13 fixes:
+
+  - Add `recommendedUploadDestinationSchema` (`r2 | appwrite | hybrid`) and `RecommendedUploadDestination` type.
+  - `serviceSchema.recommended_upload_destination` and `adminServiceSettingsRequestSchema` now accept `hybrid`.
+  - `fileRecordSchema.size` is now non-negative (zero-byte files are valid).
+  - `fileUpdateRequestSchema.filename` now hard-caps at 255 chars to mirror backend.
+  - `admin.listUploads()` accepts an optional `destination` filter.
+  - New `app.releases.latest(channel)` helper backed by `GET /app/releases/latest`.
+  - New `nonNegativeInt` primitive and `AppReleaseLatestResponse` / `AppReleaseLatestQuery` types.
+
 ## 0.6.0
 
 ### Minor Changes
