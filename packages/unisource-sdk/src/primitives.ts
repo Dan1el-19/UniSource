@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 export const nonEmptyString = z.string().trim().min(1);
 export const positiveInt = z.number().int().positive();
+export const nonNegativeInt = z.number().int().nonnegative();
 export const unixTimestamp = z.number().int().nonnegative();
 
 // ─── Pagination constants ─────────────────────────────────────────────────────
@@ -13,8 +14,20 @@ export const FILES_MAX_LIMIT = 100;
 
 // ─── Upload Destination ──────────────────────────────────────────────────────
 
+/**
+ * Storage backend a file lives on.
+ * - 'r2'      — Cloudflare R2 via presigned PUT / multipart
+ * - 'appwrite' — Appwrite Storage via direct browser SDK upload
+ *
+ * `recommendedUploadDestinationSchema` adds the meta-value 'hybrid' which is
+ * only valid as a service-wide setting (the upload manager picks r2/appwrite
+ * per-file based on size).
+ */
 export const uploadDestinationSchema = z.enum(['r2', 'appwrite']);
 export type UploadDestination = z.infer<typeof uploadDestinationSchema>;
+
+export const recommendedUploadDestinationSchema = z.enum(['r2', 'appwrite', 'hybrid']);
+export type RecommendedUploadDestination = z.infer<typeof recommendedUploadDestinationSchema>;
 
 // ─── Upload Status ────────────────────────────────────────────────────────────
 

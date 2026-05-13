@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { nonEmptyString, positiveInt, uploadDestinationSchema, FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from './primitives';
+import {
+  nonEmptyString,
+  nonNegativeInt,
+  positiveInt,
+  uploadDestinationSchema,
+  FILES_DEFAULT_LIMIT,
+  FILES_MAX_LIMIT,
+} from './primitives';
 
 // ─── User-facing file record ──────────────────────────────────────────────────
 
@@ -14,7 +21,8 @@ export const fileRecordSchema = z.object({
   folder_id: nonEmptyString.nullable(),
   upload_id: nonEmptyString.nullable(),
   filename: nonEmptyString,
-  size: positiveInt,
+  /** SDK6: zero-byte uploads are valid (e.g. placeholders). */
+  size: nonNegativeInt,
   mime_type: nonEmptyString,
   storage_destination: uploadDestinationSchema,
   is_trashed: z.boolean(),
@@ -88,8 +96,9 @@ export type FileRestoreResponse = z.infer<typeof fileRestoreResponseSchema>;
 
 // ─── Update (rename) ──────────────────────────────────────────────────────────
 
+/** SDK4: filename hard-capped to 255 to match backend Zod validation. */
 export const fileUpdateRequestSchema = z.object({
-  filename: nonEmptyString,
+  filename: z.string().trim().min(1).max(255),
 });
 export type FileUpdateRequest = z.infer<typeof fileUpdateRequestSchema>;
 

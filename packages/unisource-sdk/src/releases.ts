@@ -208,3 +208,29 @@ export const releaseSyncResponseSchema = z.object({
   results: z.array(releaseSyncResultSchema),
 });
 export type ReleaseSyncResponse = z.infer<typeof releaseSyncResponseSchema>;
+
+// ─── App-facing /app/releases/latest ─────────────────────────────────────────
+
+/**
+ * Response of `GET /app/releases/latest?channel=...` — used by client apps to
+ * discover the most recent completed release for a given distribution channel
+ * (e.g. `stable`, `beta`). Includes a short-lived presigned download URL.
+ */
+export const appReleaseLatestQuerySchema = z.object({
+  channel: nonEmptyString.optional().default('stable'),
+});
+export type AppReleaseLatestQuery = z.input<typeof appReleaseLatestQuerySchema>;
+
+export const appReleaseLatestResponseSchema = z.object({
+  id: nonEmptyString,
+  name: nonEmptyString,
+  size: z.number().int().nonnegative(),
+  r2_key: nonEmptyString,
+  tags: z.array(nonEmptyString),
+  notes: z.string().nullable(),
+  force_update: z.boolean(),
+  created_at: nonEmptyString,
+  download_url: z.string().url(),
+  download_url_expires_at: positiveInt,
+});
+export type AppReleaseLatestResponse = z.infer<typeof appReleaseLatestResponseSchema>;
