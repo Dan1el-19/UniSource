@@ -33,6 +33,7 @@ vi.mock('../src/db/files', async (importOriginal) => {
     getUpload: vi.fn(),
     getUploadForUser: vi.fn(),
     completeUpload: vi.fn(),
+    completeUploadAndCreateFile: vi.fn().mockResolvedValue({ completed: true, alreadyCompleted: false }),
     failUpload: vi.fn(),
     createUpload: vi.fn().mockResolvedValue({}),
   };
@@ -56,7 +57,7 @@ vi.mock('../src/db/services', async (importOriginal) => {
 
 import { generatePresignedPutUrl, headObject } from '../src/services/r2';
 import { getAppwriteFileMeta } from '../src/services/appwrite';
-import { createUpload, getUpload, failUpload, completeUpload } from '../src/db/files';
+import { createUpload, getUpload, failUpload, completeUpload, completeUploadAndCreateFile } from '../src/db/files';
 import { createMainStorageFileRecord } from '../src/db/fileRecords';
 import upload from '../src/routes/upload';
 import publicRouter from '../src/routes/public';
@@ -215,7 +216,7 @@ describe('POST /upload/complete — physical verification', () => {
   it('uses the persisted upload main-storage flag when promoting a completed upload', async () => {
     vi.mocked(getUpload).mockResolvedValue({ ...pendingR2Record, is_main_storage: 1 });
     vi.mocked(headObject).mockResolvedValue({ size: 1024 });
-    vi.mocked(completeUpload).mockResolvedValue(true);
+    vi.mocked(completeUploadAndCreateFile).mockResolvedValue({ completed: true, alreadyCompleted: false });
 
     const app = buildUploadApp();
     const res = await app.fetch(
@@ -228,7 +229,10 @@ describe('POST /upload/complete — physical verification', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(createMainStorageFileRecord)).toHaveBeenCalled();
+    expect(vi.mocked(completeUploadAndCreateFile)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ file: expect.objectContaining({ is_main_storage: true }) })
+    );
   });
 });
 
