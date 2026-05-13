@@ -1,4 +1,4 @@
-name: Backend CI
+name: Release Backend
 
 on:
   push:
@@ -6,30 +6,32 @@ on:
       - main
     paths:
       - 'apps/backend/**'
-      - 'packages/unisource-sdk/**'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'package.json'
+      - '!apps/backend/package.json'
+      - '!apps/backend/CHANGELOG.md'
+      - '.github/workflows/backend-release.yml'
   workflow_dispatch:
 
 concurrency:
-  group: backend-ci-${{ github.ref }}
+  group: backend-release-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  ci:
+  release:
     runs-on: ubuntu-latest
-    name: Check backend
+    name: Release backend tag
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -49,3 +51,9 @@ jobs:
 
       - name: Check backend
         run: pnpm --filter usrc-backend check
+
+      - name: Release backend
+        env:
+          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        working-directory: apps/backend
+        run: pnpm release
