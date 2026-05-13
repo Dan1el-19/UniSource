@@ -11,6 +11,7 @@ export interface ReleaseRecord {
   upload_status: 'pending' | 'completed' | 'failed';
   presigned_url: string | null;
   presigned_expires_at: number | null;
+  r2_upload_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -88,6 +89,99 @@ export async function createRelease(db: D1Database, input: CreateReleaseInput): 
   const created = await getRelease(db, input.id, input.service_id);
   if (!created) throw new Error('Failed to retrieve created release');
   return created;
+}
+
+export interface CreateMultipartReleaseInput {
+  id: string;
+  service_id: string;
+  name: string;
+  r2_key: string;
+  tags: string[];
+  notes?: string | null;
+  force_update?: boolean;
+  uploaded_by: string;
+  r2_upload_id: string;
+}
+
+/**
+ * Inserts a pending release tied to an in-flight S3 multipart upload.
+ * Unlike `createRelease`, no presigned PUT URL is generated — uploads happen
+ * via per-part presigned URLs against the R2 UploadId.
+ */
+export async function createMultipartRelease(
+  db: D1Database,
+  input: CreateMultipartReleaseInput
+): Promise<ReleaseDTO> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO releases
+         (id, service_id, name, size, r2_key, tags, notes, force_update, uploaded_by,
+          upload_status, presigned_url, presigned_expires_at, r2_upload_id, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, 'pending', NULL, NULL, ?, ?, ?)`
+    )
+    .bind(
+      input.id,
+      input.service_id,
+      input.name,
+      input.r2_key,
+      JSON.stringify(input.tags),
+      input.notes ?? null,
+      input.force_update ? 1 : 0,
+      input.uploaded_by,
+      input.r2_upload_id,
+      now,
+      now
+    )
+    .run();
+
+  const created = await getRelease(db, input.id, input.service_id);
+  if (!created) throw new Error('Failed to retrieve created multipart release');
+  return created;
+}
+
+export interface ReleaseMultipartContext {
+  release_id: string;
+  service_id: string;
+  r2_key: string;
+  r2_upload_id: string;
+  upload_status: 'pending' | 'completed' | 'failed';
+}
+
+/**
+ * Resolves the S3 UploadId + R2 key for a pending multipart release. Returns
+ * null when the release does not exist for the given service or was not
+ * created via the multipart flow.
+ */
+export async function getReleaseMultipartContext(
+  db: D1Database,
+  id: string,
+  serviceId: string
+): Promise<ReleaseMultipartContext | null> {
+  const row = await db
+    .prepare(
+      `SELECT id, service_id, r2_key, r2_upload_id, upload_status
+       FROM releases
+       WHERE id = ? AND service_id = ?`
+    )
+    .bind(id, serviceId)
+    .first<{
+      id: string;
+      service_id: string;
+      r2_key: string;
+      r2_upload_id: string | null;
+      upload_status: 'pending' | 'completed' | 'failed';
+    }>();
+
+  if (!row || !row.r2_upload_id) return null;
+
+  return {
+    release_id: row.id,
+    service_id: row.service_id,
+    r2_key: row.r2_key,
+    r2_upload_id: row.r2_upload_id,
+    upload_status: row.upload_status,
+  };
 }
 
 export async function getRelease(db: D1Database, id: string, serviceId: string): Promise<ReleaseDTO | null> {
