@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyString, positiveInt, unixTimestamp, uploadDestinationSchema } from './primitives';
+import { nonEmptyString, positiveInt, recommendedUploadDestinationSchema, unixTimestamp } from './primitives';
 
 // ─── Service record ───────────────────────────────────────────────────────────
 
@@ -10,7 +10,7 @@ export const serviceSchema = z.object({
   max_storage_bytes: positiveInt,
   current_used_bytes: z.number().int().nonnegative(),
   max_file_size_bytes: positiveInt,
-  recommended_upload_destination: uploadDestinationSchema.optional(),
+  recommended_upload_destination: recommendedUploadDestinationSchema.optional(),
   created_at: unixTimestamp,
 });
 export type Service = z.infer<typeof serviceSchema>;
@@ -43,7 +43,7 @@ export type AdminServiceUpdateResponse = z.infer<typeof adminServiceUpdateRespon
  */
 export const adminServiceSettingsRequestSchema = z
   .object({
-    recommended_upload_destination: uploadDestinationSchema.optional(),
+    recommended_upload_destination: recommendedUploadDestinationSchema.optional(),
   })
   .refine((v) => v.recommended_upload_destination !== undefined, {
     message: 'At least one setting must be provided',

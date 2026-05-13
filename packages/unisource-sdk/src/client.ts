@@ -1,4 +1,4 @@
-import type { ApiError, UploadStatus } from './primitives';
+import type { ApiError, UploadDestination, UploadStatus } from './primitives';
 import type {
   UploadR2InitRequest,
   UploadR2InitResponse,
@@ -97,6 +97,7 @@ import type {
   ReleaseMultipartCompleteRequest,
   ReleaseMultipartCompleteResponse,
   ReleaseMultipartAbortResponse,
+  AppReleaseLatestResponse,
 } from './releases';
 
 // ─── SDK Error classes ────────────────────────────────────────────────────────
@@ -501,7 +502,10 @@ export class UnisourceClient {
       apiRequest(this.config, 'GET', '/admin/service/usage', { signal }),
 
     /** List all uploads (pending/completed/failed) for this service */
-    listUploads: (query?: { status?: UploadStatus; cursor?: string; limit?: number }, signal?: AbortSignal): Promise<UploadsListResponse> =>
+    listUploads: (
+      query?: { destination?: UploadDestination; status?: UploadStatus; cursor?: string; limit?: number },
+      signal?: AbortSignal
+    ): Promise<UploadsListResponse> =>
       apiRequest(this.config, 'GET', '/admin/files', { query, signal }),
 
     /** Get a single upload for this service */
@@ -621,5 +625,22 @@ export class UnisourceClient {
     /** Delete a share link */
     delete: (id: string, signal?: AbortSignal): Promise<ShareLinkDeleteResponse> =>
       apiRequest(this.config, 'DELETE', `/shares/${id}`, { signal }),
+  };
+
+  // ─── App-facing endpoints (/app/*) — public release distribution ──────────────
+
+  readonly app = {
+    releases: {
+      /**
+       * Get the latest completed release for a channel (e.g. `stable`, `beta`).
+       * Backed by `GET /app/releases/latest`. Returns the release metadata plus
+       * a short-lived presigned download URL.
+       */
+      latest: (
+        channel: string = 'stable',
+        signal?: AbortSignal
+      ): Promise<AppReleaseLatestResponse> =>
+        apiRequest(this.config, 'GET', '/app/releases/latest', { query: { channel }, signal }),
+    },
   };
 }

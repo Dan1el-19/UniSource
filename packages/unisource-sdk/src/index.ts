@@ -2,14 +2,21 @@
 export {
   nonEmptyString,
   positiveInt,
+  nonNegativeInt,
   unixTimestamp,
   uploadDestinationSchema,
+  recommendedUploadDestinationSchema,
   uploadStatusSchema,
   apiErrorSchema,
   FILES_DEFAULT_LIMIT,
   FILES_MAX_LIMIT,
 } from './primitives';
-export type { UploadDestination, UploadStatus, ApiError } from './primitives';
+export type {
+  UploadDestination,
+  RecommendedUploadDestination,
+  UploadStatus,
+  ApiError,
+} from './primitives';
 
 
 // ─── Upload ───────────────────────────────────────────────────────────────────
@@ -188,6 +195,8 @@ export {
   releaseMultipartCompleteResponseSchema,
   releaseMultipartAbortRequestSchema,
   releaseMultipartAbortResponseSchema,
+  appReleaseLatestQuerySchema,
+  appReleaseLatestResponseSchema,
 } from './releases';
 export type {
   ReleaseDTO,
@@ -215,6 +224,8 @@ export type {
   ReleaseMultipartCompleteResponse,
   ReleaseMultipartAbortRequest,
   ReleaseMultipartAbortResponse,
+  AppReleaseLatestQuery,
+  AppReleaseLatestResponse,
 } from './releases';
 
 // ─── Share Links ─────────────────────────────────────────────────────────────
