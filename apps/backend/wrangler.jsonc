@@ -5,6 +5,9 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-05-11",
 	"compatibility_flags": ["nodejs_compat"],
+	"alias": {
+		"@aws-sdk/xml-builder/dist-es/xml-parser.browser": "@aws-sdk/xml-builder/dist-es/xml-parser"
+	},
 	"build": {
 		"command": "pnpm --filter @unisource/sdk build",
 		"cwd": "../..",
