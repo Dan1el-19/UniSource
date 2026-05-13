@@ -210,3 +210,85 @@ export async function deleteUploadRecord(db: D1Database, id: string): Promise<bo
 
   return (result.meta.changes ?? 0) > 0;
 }
+
+/**
+ * B3: Atomically marks an upload as completed AND inserts the corresponding
+ * `files` row in a single D1 batch. Either both rows change or neither does,
+ * preventing the failure mode where the upload status flips to `completed`
+ * but the user-facing `files` record never appears (which permanently leaks
+ * quota and storage with no recovery path).
+ *
+ * The returned `completed` flag is true when this call applied the
+ * transition. When the upload was already completed by an earlier request we
+ * return `completed: false, alreadyCompleted: true` so callers can short-
+ * circuit instead of re-creating the file record.
+ */
+export interface CompleteUploadAndCreateFileInput {
+  uploadId: string;
+  file: {
+    id: string;
+    service_id: string;
+    user_id: string;
+    folder_id: string | null;
+    upload_id: string;
+    filename: string;
+    size: number;
+    mime_type: string;
+    storage_destination: UploadDestination;
+    storage_key: string;
+    bucket: string;
+    is_main_storage: boolean;
+  };
+}
+
+export async function completeUploadAndCreateFile(
+  db: D1Database,
+  input: CompleteUploadAndCreateFileInput
+): Promise<{ completed: boolean; alreadyCompleted: boolean }> {
+  const now = Math.floor(Date.now() / 1000);
+  const f = input.file;
+
+  // Insert the file row only if the upload transitions from pending to
+  // completed in the same batch — `WHERE NOT EXISTS` guards against double-
+  // inserting when retries arrive after the upload is already completed.
+  const completeStmt = db
+    .prepare(`UPDATE uploads SET status = 'completed', updated_at = ? WHERE id = ? AND status = 'pending'`)
+    .bind(now, input.uploadId);
+
+  const insertStmt = db
+    .prepare(
+      `INSERT INTO files
+         (id, service_id, user_id, folder_id, upload_id, filename, size, mime_type,
+          storage_destination, storage_key, bucket, is_main_storage, is_trashed, trashed_at, created_at, updated_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?
+       WHERE EXISTS (
+         SELECT 1 FROM uploads WHERE id = ? AND status = 'completed'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM files WHERE upload_id = ?
+       )`
+    )
+    .bind(
+      f.id,
+      f.service_id,
+      f.user_id,
+      f.folder_id,
+      f.upload_id,
+      f.filename,
+      f.size,
+      f.mime_type,
+      f.storage_destination,
+      f.storage_key,
+      f.bucket,
+      f.is_main_storage ? 1 : 0,
+      now,
+      now,
+      input.uploadId,
+      input.uploadId
+    );
+
+  const [completeResult] = await db.batch([completeStmt, insertStmt]);
+  const completed = (completeResult.meta.changes ?? 0) > 0;
+
+  return { completed, alreadyCompleted: !completed };
+}

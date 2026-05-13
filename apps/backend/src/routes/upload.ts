@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload } from '../db/files';
+import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload, completeUploadAndCreateFile } from '../db/files';
 import { createFileRecord, createMainStorageFileRecord } from '../db/fileRecords';
 import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../db/services';
 import { rateLimitMiddleware } from '../middleware/ratelimit';
@@ -14,7 +14,8 @@ import {
   abortMultipartUpload,
 } from '../services/r2';
 import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
-import { getServiceConfig, buildStorageKey } from '../config/services';
+import { getServiceConfig, buildStorageKey, buildAppwriteStorageKey } from '../config/services';
+import { canWriteMainStorage, mainStorageForbiddenResponse } from '../middleware/mainStorageGuard';
 import {
   type UploadAppwriteInitResponse,
   type UploadCompleteResponse,
@@ -83,6 +84,11 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
   const body = c.req.valid('json');
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
+
+  // S1: only admin/plus/system can target main storage.
+  if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+    return mainStorageForbiddenResponse(c);
+  }
 
   const { filename, size, mime_type, folder_id } = body;
 
@@ -171,6 +177,11 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
 
+  // S1: only admin/plus/system can target main storage.
+  if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+    return mainStorageForbiddenResponse(c);
+  }
+
   const { filename, size, mime_type, folder_id } = body;
 
   // Quota check and reserve (atomic)
@@ -205,8 +216,11 @@ upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppw
   }
 
   const uploadId = crypto.randomUUID();
-  const fileId = crypto.randomUUID().replace(/-/g, '').slice(0, 20);
-  const storageKey = `${serviceId}/uploads/${getDatePath()}/${fileId}`;
+  // Task 1: use full UUID v4 (122 bits) instead of 80-bit truncated id and
+  // share the same `<prefix>/uploads/<datePath>/<id>` shape as R2 so
+  // extractAppwriteFileIdFromStorageKey() keeps working.
+  const fileId = crypto.randomUUID();
+  const storageKey = buildAppwriteStorageKey(serviceId, getDatePath(), fileId);
 
   const config = getAppwriteUploadConfig(c.env, fileId, UPLOAD_TTL_SECONDS);
 
@@ -310,48 +324,39 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
     );
   }
 
-  const updated = await completeUpload(c.env.APP_DB, upload_id);
-  if (!updated) {
-    return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
-  }
+  // B3: atomically transition status -> completed AND insert the file row.
+  // If the worker dies after this call, recovery is trivial — both rows are
+  // either present or absent.
+  const newFileId = crypto.randomUUID();
 
   // Promote to confirmed file record. API-key uploads are promoted for main storage,
   // while regular per-user file records still require an authenticated user owner.
   if (userId !== 'system' || isMainStorage) {
-    const newFileId = crypto.randomUUID();
+    const promotion = await completeUploadAndCreateFile(c.env.APP_DB, {
+      uploadId: upload_id,
+      file: {
+        id: newFileId,
+        service_id: serviceId,
+        user_id: isMainStorage ? userId : userId,
+        folder_id: isMainStorage ? null : record.folder_id ?? null,
+        upload_id,
+        filename: record.filename,
+        size: record.size,
+        mime_type: record.mime_type,
+        storage_destination: record.destination,
+        storage_key: record.storage_key,
+        bucket: record.bucket,
+        is_main_storage: isMainStorage,
+      },
+    });
 
-    if (isMainStorage) {
-      await createMainStorageFileRecord(c.env.APP_DB, {
-        id: newFileId,
-        service_id: serviceId,
-        uploaded_by: userId,
-        upload_id,
-        filename: record.filename,
-        size: record.size,
-        mime_type: record.mime_type,
-        storage_destination: record.destination,
-        storage_key: record.storage_key,
-        bucket: record.bucket,
-      });
-    } else {
-      await createFileRecord(c.env.APP_DB, {
-        id: newFileId,
-        service_id: serviceId,
-        user_id: userId,
-        folder_id: record.folder_id ?? null,
-        upload_id,
-        filename: record.filename,
-        size: record.size,
-        mime_type: record.mime_type,
-        storage_destination: record.destination,
-        storage_key: record.storage_key,
-        bucket: record.bucket,
-      });
+    if (!promotion.completed && !promotion.alreadyCompleted) {
+      return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
     }
 
     // Quota was already reserved atomically in /init, no need to increment here.
 
-    if (userId !== 'system') {
+    if (userId !== 'system' && promotion.completed) {
       c.executionCtx.waitUntil(
         logServiceEvent(c.env.APP_DB, {
           serviceId,
@@ -363,6 +368,12 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
           ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
         })
       );
+    }
+  } else {
+    // Anonymous (system) non-main upload: just flip the upload row.
+    const updated = await completeUpload(c.env.APP_DB, upload_id);
+    if (!updated) {
+      return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
     }
   }
 
@@ -450,6 +461,11 @@ upload.post(
     const body = c.req.valid('json');
     const serviceId = c.get('serviceId');
     const userId = c.get('userId');
+
+    // S1: only admin/plus/system can target main storage.
+    if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+      return mainStorageForbiddenResponse(c);
+    }
 
     const { filename, size, mime_type, folder_id } = body;
 
@@ -660,7 +676,9 @@ upload.post(
         } else {
           await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
         }
-        await abortMultipartUpload(c.env, record.bucket, record.storage_key, record.r2_upload_id!).catch(() => undefined);
+        await abortMultipartUpload(c.env, record.bucket, record.storage_key, record.r2_upload_id!).catch((err) => {
+          console.error('[multipart/complete] abortMultipartUpload after expiry failed', err);
+        });
       }
       return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
     }
@@ -675,8 +693,10 @@ upload.post(
         parts
       );
     } catch (err) {
+      // S5: keep upstream error in server logs; do not echo to clients.
+      console.error('[multipart/complete] R2 CompleteMultipartUpload failed', err);
       return c.json(
-        { error: 'Conflict', message: `Failed to complete multipart upload: ${(err as Error).message}` },
+        { error: 'Conflict', message: 'Failed to complete multipart upload' },
         409
       );
     }
@@ -701,34 +721,16 @@ upload.post(
       );
     }
 
-    const updated = await completeUpload(c.env.APP_DB, upload_id);
-    if (!updated) {
-      return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
-    }
+    const newFileId = crypto.randomUUID();
 
-    // Promote to confirmed file record (same rules as /upload/complete).
     if (userId !== 'system' || isMainStorage) {
-      const newFileId = crypto.randomUUID();
-
-      if (isMainStorage) {
-        await createMainStorageFileRecord(c.env.APP_DB, {
-          id: newFileId,
-          service_id: serviceId,
-          uploaded_by: userId,
-          upload_id,
-          filename: record.filename,
-          size: record.size,
-          mime_type: record.mime_type,
-          storage_destination: record.destination,
-          storage_key: record.storage_key,
-          bucket: record.bucket,
-        });
-      } else {
-        await createFileRecord(c.env.APP_DB, {
+      const promotion = await completeUploadAndCreateFile(c.env.APP_DB, {
+        uploadId: upload_id,
+        file: {
           id: newFileId,
           service_id: serviceId,
           user_id: userId,
-          folder_id: record.folder_id ?? null,
+          folder_id: isMainStorage ? null : record.folder_id ?? null,
           upload_id,
           filename: record.filename,
           size: record.size,
@@ -736,10 +738,15 @@ upload.post(
           storage_destination: record.destination,
           storage_key: record.storage_key,
           bucket: record.bucket,
-        });
+          is_main_storage: isMainStorage,
+        },
+      });
+
+      if (!promotion.completed && !promotion.alreadyCompleted) {
+        return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
       }
 
-      if (userId !== 'system') {
+      if (userId !== 'system' && promotion.completed) {
         c.executionCtx.waitUntil(
           logServiceEvent(c.env.APP_DB, {
             serviceId,
@@ -757,6 +764,11 @@ upload.post(
             ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
           })
         );
+      }
+    } else {
+      const updated = await completeUpload(c.env.APP_DB, upload_id);
+      if (!updated) {
+        return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
       }
     }
 
@@ -793,7 +805,9 @@ upload.delete(
     }
 
     // Tell R2 to drop all uploaded parts.
-    await abortMultipartUpload(c.env, record.bucket, record.storage_key, record.r2_upload_id!).catch(() => undefined);
+    await abortMultipartUpload(c.env, record.bucket, record.storage_key, record.r2_upload_id!).catch((err) => {
+      console.error('[multipart/abort] abortMultipartUpload failed', err);
+    });
 
     const updated = await failUpload(c.env.APP_DB, upload_id);
     if (updated) {
