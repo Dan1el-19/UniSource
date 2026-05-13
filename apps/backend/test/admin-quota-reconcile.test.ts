@@ -41,6 +41,8 @@ describe('POST /admin/quota/reconcile', () => {
     vi.mocked(reconcileQuota).mockResolvedValue({
       service_drift_bytes: 0,
       service_corrected: false,
+      main_drift_bytes: 0,
+      main_corrected: false,
       users_fixed: 0,
       dry_run: false,
     });
@@ -62,6 +64,8 @@ describe('POST /admin/quota/reconcile', () => {
     vi.mocked(reconcileQuota).mockResolvedValue({
       service_drift_bytes: 500,
       service_corrected: false,
+      main_drift_bytes: 0,
+      main_corrected: false,
       users_fixed: 0,
       dry_run: true,
     });
