@@ -118,6 +118,19 @@ export const cfAccessMiddleware = createMiddleware<{
     return next();
   }
 
+  // Service token auth (server-to-server)
+  const clientId = c.req.header('CF-Access-Client-Id');
+  const clientSecret = c.req.header('CF-Access-Client-Secret');
+  const expectedId = env.CF_ACCESS_SERVICE_CLIENT_ID;
+  const expectedSecret = env.CF_ACCESS_SERVICE_CLIENT_SECRET;
+  if (clientId && clientSecret && expectedId && expectedSecret) {
+    if (clientId === expectedId && clientSecret === expectedSecret) {
+      c.set('cfAccessUser' as never, { email: 'service@internal', sub: 'service' } as never);
+      return next();
+    }
+    return c.json({ error: 'Unauthorized', message: 'Invalid service token' }, 401);
+  }
+
   const aud = env.CF_ACCESS_AUD;
   const team = env.CF_ACCESS_TEAM;
 

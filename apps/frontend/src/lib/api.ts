@@ -48,16 +48,22 @@ async function apiFetch<T>(
   request: Request,
   options: RequestInit = {}
 ): Promise<T> {
-  const cfJwt = request.headers.get('Cf-Access-Jwt-Assertion');
-  const cookieHeader = request.headers.get('Cookie') ?? '';
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  if (cfJwt) headers['Cf-Access-Jwt-Assertion'] = cfJwt;
-  else if (cookieHeader) headers['Cookie'] = cookieHeader;
+  const clientId = env.CF_ACCESS_CLIENT_ID;
+  const clientSecret = env.CF_ACCESS_CLIENT_SECRET;
+  if (clientId && clientSecret) {
+    headers['CF-Access-Client-Id'] = clientId;
+    headers['CF-Access-Client-Secret'] = clientSecret;
+  } else {
+    const cfJwt = request.headers.get('Cf-Access-Jwt-Assertion');
+    const cookieHeader = request.headers.get('Cookie') ?? '';
+    if (cfJwt) headers['Cf-Access-Jwt-Assertion'] = cfJwt;
+    else if (cookieHeader) headers['Cookie'] = cookieHeader;
+  }
 
   const res = await fetch(`${API_BASE()}${path}`, { ...options, headers });
 
