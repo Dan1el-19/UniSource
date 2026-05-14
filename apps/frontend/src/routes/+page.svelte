@@ -1,131 +1,103 @@
 <script lang="ts">
-	import { Cloud } from 'lucide-svelte';
-	import SessionCta from '$components/auth/SessionCta.svelte';
+  import type { PageData } from './$types';
+  import ServiceCard from '$components/ServiceCard.svelte';
+
+  let { data }: { data: PageData } = $props();
 </script>
 
-<svelte:head>
-	<title>UniSource | Premium Cloud Storage</title>
-	<meta name="description" content="Premium Cloud Storage Solution" />
-</svelte:head>
+<div class="page-pad">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-sub">{data.services.length} service{data.services.length !== 1 ? 's' : ''} configured</p>
+    </div>
+    {#if data.services.length > 0}
+      <a href="/services/new" class="btn-primary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New service
+      </a>
+    {/if}
+  </div>
 
-<main
-	class="landing-wrap relative min-h-dvh overflow-hidden px-shell py-16 flex items-center justify-center"
->
-	<div class="absolute inset-0 pointer-events-none">
-		<div class="landing-vignette absolute inset-0"></div>
-		<div class="landing-grid absolute inset-0"></div>
-	</div>
-
-	<section
-		class="hero-frame relative z-10 mx-auto w-full max-w-4xl rounded-[34px] px-6 py-10 text-center md:px-10 md:py-14 xl:max-w-5xl 2xl:max-w-6xl"
-	>
-		<div class="hero-mark mx-auto mb-9 inline-flex items-center gap-3 rounded-full px-4 py-2">
-			<Cloud size={21} strokeWidth={1.7} style="color: var(--color-accent);" />
-			<span class="hero-mark-label">UniSource</span>
-		</div>
-
-		<p class="hero-kicker mx-auto mb-6 inline-flex rounded-full px-4 py-1.5 text-sm">
-			Dark-first file workspace
-		</p>
-
-		<h1
-			class="hero-title mx-auto mb-8 max-w-3xl 2xl:max-w-4xl"
-			style="color: var(--color-text-primary);"
-		>
-			Service, która wygląda jak produkt premium i działa jak narzędzie codzienne.
-		</h1>
-
-		<p
-			class="hero-copy mx-auto mb-12 max-w-2xl text-base md:text-lg"
-			style="color: var(--color-text-secondary);"
-		>
-			UniSource porządkuje pliki, foldery i uploady w jednej przestrzeni. Szybki dostęp, spokojny
-			interfejs, pełna kontrola.
-		</p>
-
-		<SessionCta autoRedirectAuthenticated={true} />
-	</section>
-</main>
+  {#if data.services.length === 0}
+    <div class="empty-hero">
+      <div class="empty-hero-icon">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      </div>
+      <h2 class="empty-hero-title">Welcome to UniSource</h2>
+      <p class="empty-hero-sub">Create your first service to start managing file uploads.</p>
+      <a href="/services/new" class="btn-primary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Create first service
+      </a>
+    </div>
+  {:else}
+    <div class="service-grid">
+      {#each data.services as service (service.id)}
+        <ServiceCard {service} />
+      {/each}
+    </div>
+  {/if}
+</div>
 
 <style>
-	.landing-wrap {
-		background:
-			radial-gradient(
-				840px 520px at 50% -30%,
-				color-mix(in oklab, var(--color-accent) 5%, transparent) 0%,
-				transparent 68%
-			),
-			var(--color-bg-base);
-	}
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .page-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+  .page-sub {
+    font-size: 13px;
+    color: var(--color-muted);
+    margin: 4px 0 0;
+  }
 
-	.landing-vignette {
-		background:
-			radial-gradient(
-				1150px 560px at 50% 115%,
-				color-mix(in oklab, #000 54%, transparent) 0%,
-				transparent 74%
-			),
-			linear-gradient(
-				180deg,
-				color-mix(in oklab, var(--color-bg-base) 96%, #000) 0%,
-				var(--color-bg-base) 100%
-			);
-		opacity: 0.94;
-	}
+  .service-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  @media (min-width: 600px) {
+    .service-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  @media (min-width: 1024px) {
+    .service-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
 
-	.landing-grid {
-		background-image: radial-gradient(
-			circle at 1px 1px,
-			color-mix(in oklab, var(--color-border-subtle) 48%, transparent) 1px,
-			transparent 0
-		);
-		background-size: 24px 24px;
-		opacity: 0.22;
-	}
-
-	.hero-frame {
-		border: 1px solid color-mix(in oklab, var(--color-border-default) 32%, transparent);
-		background: linear-gradient(
-			180deg,
-			color-mix(in oklab, var(--color-bg-base) 82%, transparent) 0%,
-			color-mix(in oklab, var(--color-bg-base) 88%, transparent) 100%
-		);
-		box-shadow:
-			0 0 0 1px color-mix(in oklab, var(--color-accent-glow) 72%, transparent),
-			0 28px 64px color-mix(in oklab, #000 36%, transparent),
-			inset 0 1px 0 color-mix(in oklab, var(--color-accent) 9%, transparent);
-		backdrop-filter: blur(10px) saturate(120%);
-		-webkit-backdrop-filter: blur(10px) saturate(120%);
-	}
-
-	.hero-mark {
-		border: 1px solid color-mix(in oklab, var(--color-border-default) 36%, transparent);
-		background: color-mix(in oklab, var(--color-bg-surface) 46%, transparent);
-	}
-
-	.hero-mark-label {
-		font-size: var(--text-sm);
-		line-height: var(--leading-sm);
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--color-text-secondary);
-	}
-
-	.hero-kicker {
-		border: 1px solid color-mix(in oklab, var(--color-border-subtle) 92%, transparent);
-		color: color-mix(in oklab, var(--color-text-secondary) 95%, #fff);
-		letter-spacing: 0.01em;
-	}
-
-	.hero-title {
-		font-size: clamp(2.15rem, 5.4vw, 3.85rem);
-		line-height: 1.14;
-		font-weight: 560;
-		letter-spacing: -0.024em;
-		text-wrap: balance;
-	}
-
-	.hero-copy {
-		text-wrap: pretty;
-	}
+  .empty-hero {
+    text-align: center;
+    padding: 72px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .empty-hero-icon {
+    color: var(--color-muted);
+    opacity: 0.4;
+    margin-bottom: 8px;
+  }
+  .empty-hero-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .empty-hero-sub {
+    font-size: 13.5px;
+    color: var(--color-muted);
+    margin: 0 0 8px;
+  }
 </style>

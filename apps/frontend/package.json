@@ -1,42 +1,29 @@
 {
-  "name": "default-nexus",
+  "name": "unisource-admin",
   "private": true,
   "type": "module",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
-    "prepare:sdk": "pnpm --filter @unisource/sdk build",
-    "predev": "pnpm run prepare:sdk",
     "dev": "vite dev",
-    "prebuild": "pnpm run prepare:sdk",
     "build": "vite build",
     "preview": "vite preview",
-    "pretypecheck": "pnpm run prepare:sdk",
-    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "e2e": "playwright test",
-    "e2e:headed": "playwright test --project=chromium --headed",
-    "e2e:ui": "playwright test --ui",
-    "e2e:install": "playwright install chromium"
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@unisource/sdk": "workspace:*",
-    "appwrite": "^24.2.0",
-    "lucide-svelte": "^1.0.1",
-    "svelte": "^5.55.4",
-    "typescript": "^5.9.3"
+    "svelte": "^5.55.4"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
-    "@sveltejs/adapter-node": "^5.5.4",
+    "@sveltejs/adapter-cloudflare": "^5.1.0",
     "@sveltejs/kit": "^2.57.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^25.6.0",
-    "daisyui": "^5.5.19",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
     "vite": "^8.0.9"
   }
 }
