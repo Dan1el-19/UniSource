@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory';
 import { Client, Account } from 'node-appwrite';
 import { checkUserServiceAccess } from '../db/services';
 import { isKnownServiceId, getServiceConfig, DEFAULT_SERVICE_ID } from '../config/services';
+import { validateApiKeyByHash } from '../db/apiKeys';
 
 export type AuthRouteMode = 'user' | 'dual';
 
@@ -168,19 +169,36 @@ export const authMiddleware = createMiddleware<{
     }
   }
 
-  // Path B: Service-scoped static API key (Astro SSR / server-to-server / cron)
-  // Each service has its own secret: SERVICE_API_KEY, SECONDARY_SERVICE_API_KEY, etc.
+  // Path B: API key authentication
   if (routeMode === 'dual' && apiKeyToken) {
-    const config = getServiceConfig(serviceId)!;
-    const expectedKey = (c.env as unknown as Record<string, string | undefined>)[config.apiKeyEnvVar];
+    // Step 1: Try D1 api_keys lookup by SHA-256 hash
+    const d1Key = await validateApiKeyByHash(c.env.APP_DB, apiKeyToken, serviceId);
 
-    if (expectedKey && apiKeyToken === expectedKey) {
+    if (d1Key) {
       c.set('userId', 'system');
       c.set('serviceId', serviceId);
       c.set('authType', 'apikey');
-      c.set('isAdmin', true);
+      c.set('isAdmin', d1Key.permissions.includes('admin'));
       c.set('serviceRole', 'system');
       return next();
+    }
+
+    // Step 2: Legacy env-var API key fallback (only when LEGACY_API_KEYS_ENABLED=true)
+    const legacyEnabled =
+      (c.env as unknown as Record<string, string | undefined>).LEGACY_API_KEYS_ENABLED === 'true';
+
+    if (legacyEnabled) {
+      const config = getServiceConfig(serviceId)!;
+      const expectedKey = (c.env as unknown as Record<string, string | undefined>)[config.apiKeyEnvVar];
+
+      if (expectedKey && apiKeyToken === expectedKey) {
+        c.set('userId', 'system');
+        c.set('serviceId', serviceId);
+        c.set('authType', 'apikey');
+        c.set('isAdmin', true);
+        c.set('serviceRole', 'system');
+        return next();
+      }
     }
   }
 
