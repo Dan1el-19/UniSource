@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "unisource-admin",
+  "compatibility_date": "2026-05-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": ".svelte-kit/cloudflare",
+  "routes": [
+    { "pattern": "usrc.dev", "zone_name": "usrc.dev", "custom_domain": true }
+  ]
+}
