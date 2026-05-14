@@ -13,8 +13,8 @@
     "sdk:deps:npm": "node scripts/set-app-sdk-source.mjs npm"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.0",
-    "commitizen": "^4.3.0",
+    "@changesets/cli": "^2.31.0",
+    "commitizen": "^4.3.1",
     "cz-conventional-changelog": "^3.3.0"
   },
   "config": {
