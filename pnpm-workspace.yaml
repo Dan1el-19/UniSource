@@ -2,7 +2,7 @@ packages:
   - 'apps/*'
   - 'packages/unisource-sdk'
   
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
-  - workerd
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
