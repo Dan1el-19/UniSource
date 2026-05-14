@@ -1,10 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "unisource-admin",
+  "account_id": "0435db96c4078cd58f12162e0b83cee0",
   "compatibility_date": "2026-05-11",
   "compatibility_flags": ["nodejs_compat"],
   "main": ".svelte-kit/cloudflare/_worker.js",
-  "assets": { "directory": ".svelte-kit/cloudflare" },
+  "assets": { "directory": ".svelte-kit/cloudflare", "binding": "ASSETS" },
   "routes": [
     { "pattern": "usrc.dev", "zone_name": "usrc.dev", "custom_domain": true }
   ]
