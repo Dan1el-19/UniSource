@@ -4,7 +4,5 @@
   "compatibility_date": "2026-05-11",
   "compatibility_flags": ["nodejs_compat"],
   "pages_build_output_dir": ".svelte-kit/cloudflare",
-  "routes": [
-    { "pattern": "example.com", "zone_name": "example.com", "custom_domain": true }
-  ]
+  "custom_domains": ["example.com"]
 }
