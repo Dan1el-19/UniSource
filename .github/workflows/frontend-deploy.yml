@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6.0.5
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -50,7 +50,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile --config.link-workspace-packages=false
 
       - name: Build frontend
-        run: pnpm --filter frontend build
+        run: pnpm --filter ./apps/frontend build
 
       - name: Deploy frontend Worker
         uses: cloudflare/wrangler-action@v3
