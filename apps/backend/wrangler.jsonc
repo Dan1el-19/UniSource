@@ -8,6 +8,21 @@
 	"alias": {
 		"@aws-sdk/xml-builder/dist-es/xml-parser.browser": "@aws-sdk/xml-builder/dist-es/xml-parser"
 	},
+	"observability": {
+    	"enabled": false,
+    	"head_sampling_rate": 1,
+    	"logs": {
+      	"enabled": true,
+      	"head_sampling_rate": 1,
+      	"persist": true,
+      	"invocation_logs": true
+    },
+    "traces": {
+      	"enabled": false,
+      	"persist": true,
+      	"head_sampling_rate": 1
+    }
+  	},
 	"build": {
 		"command": "pnpm --filter @unisource/sdk build",
 		"cwd": "../..",
@@ -43,4 +58,5 @@
 		"period": 60
 		}
 	}
-]}
+	]
+}

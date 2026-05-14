@@ -17,6 +17,7 @@ import publicRouter from './routes/public';
 import mainStorage from './routes/mainStorage';
 import releasesRouter from './routes/releases';
 import appRouter from './routes/app';
+import superadminRouter from './routes/superadmin';
 
 /**
  * Default CORS allowlist used when ALLOWED_ORIGINS env var is empty.
@@ -123,6 +124,9 @@ app.route('/app', appRouter);
 
 // Public share access — no auth required
 app.route('/public', publicRouter);
+
+// Superadmin panel API — protected by Cloudflare Access JWT (cfAccessMiddleware applied inside)
+app.route('/superadmin', superadminRouter);
 
 app.onError((err, c) => {
   logError('Unhandled Application Error', err, c as any);

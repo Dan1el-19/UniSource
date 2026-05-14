@@ -25,6 +25,25 @@ declare interface CloudflareBindings {
    * to the first-party defaults baked into `index.ts`.
    */
   ALLOWED_ORIGINS?: string;
+  /**
+   * Cloudflare Access audience tag for /superadmin/* JWT verification.
+   * Required in production. Set via `wrangler secret put CF_ACCESS_AUD`.
+   */
+  CF_ACCESS_AUD?: string;
+  /**
+   * Cloudflare Access team domain, e.g. "myteam.cloudflareaccess.com".
+   * Required in production. Set via `wrangler secret put CF_ACCESS_TEAM`.
+   */
+  CF_ACCESS_TEAM?: string;
+  /**
+   * When set to "true", bypasses CF Access JWT verification for local dev.
+   * MUST NOT be set in production.
+   */
+  BYPASS_CF_ACCESS?: string;
+  /**
+   * When set to "true", enables legacy env-var API key fallback in auth middleware.
+   */
+  LEGACY_API_KEYS_ENABLED?: string;
 }
 
 // Context variables set by authMiddleware — used as Hono Variables generic
