@@ -98,6 +98,13 @@ async function verifyJwt(
 
     const email = payload['email'] as string | undefined;
     const sub = payload['sub'] as string | undefined;
+    const commonName = payload['common_name'] as string | undefined;
+
+    // Service token JWT: empty sub, no email, common_name set to client_id
+    if (commonName && (!email || !sub)) {
+      return { email: `service:${commonName}`, sub: commonName };
+    }
+
     if (!email || !sub) return null;
 
     return { email, sub };
