@@ -19,8 +19,6 @@
     "release": "semantic-release"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1030.0",
-    "@aws-sdk/s3-request-presigner": "^3.1030.0",
     "@hono/zod-validator": "^0.7.6",
     "@unisource/sdk": "workspace:*",
     "aws4fetch": "^1.0.20",
