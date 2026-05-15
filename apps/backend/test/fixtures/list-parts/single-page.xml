@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListPartsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Bucket>test-bucket</Bucket>
+  <Key>test-key</Key>
+  <UploadId>U1</UploadId>
+  <PartNumberMarker>0</PartNumberMarker>
+  <MaxParts>1000</MaxParts>
+  <IsTruncated>false</IsTruncated>
+  <Part>
+    <PartNumber>1</PartNumber>
+    <LastModified>2026-05-01T12:00:00.000Z</LastModified>
+    <ETag>"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"</ETag>
+    <Size>5242880</Size>
+  </Part>
+  <Part>
+    <PartNumber>2</PartNumber>
+    <LastModified>2026-05-01T12:00:01.000Z</LastModified>
+    <ETag>"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"</ETag>
+    <Size>5242880</Size>
+  </Part>
+  <Part>
+    <PartNumber>3</PartNumber>
+    <LastModified>2026-05-01T12:00:02.000Z</LastModified>
+    <ETag>"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3"</ETag>
+    <Size>1048576</Size>
+  </Part>
+</ListPartsResult>

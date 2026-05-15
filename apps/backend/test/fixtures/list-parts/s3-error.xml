@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>NoSuchUpload</Code>
+  <Message>The specified multipart upload does not exist.</Message>
+  <UploadId>U1</UploadId>
+  <RequestId>req-1</RequestId>
+  <HostId>host-1</HostId>
+</Error>
