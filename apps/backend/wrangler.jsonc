@@ -9,20 +9,20 @@
 		"@aws-sdk/xml-builder/dist-es/xml-parser.browser": "@aws-sdk/xml-builder/dist-es/xml-parser"
 	},
 	"observability": {
-    	"enabled": false,
-    	"head_sampling_rate": 1,
-    	"logs": {
-      	"enabled": true,
-      	"head_sampling_rate": 1,
-      	"persist": true,
-      	"invocation_logs": true
-    },
-    "traces": {
-      	"enabled": false,
-      	"persist": true,
-      	"head_sampling_rate": 1
-    }
-  	},
+		"enabled": false,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": false,
+			"persist": true,
+			"head_sampling_rate": 1
+		}
+	},
 	"build": {
 		"command": "pnpm --filter @unisource/sdk build",
 		"cwd": "../..",
@@ -33,8 +33,8 @@
 	],
 	"d1_databases": [
 		{
- 			"binding": "usrc_d1",
- 			"database_name": "usrc-d1",
+			"binding": "usrc_d1",
+			"database_name": "usrc-d1",
 			"database_id": "fabfb0d8-ebe5-43ad-bc3e-67ed34af3a37",
 			"migrations_dir": "src/db/migrations"
 		}
@@ -51,12 +51,29 @@
 	],
 	"ratelimits": [
 		{
-		"name": "RATE_LIMITER",
-		"namespace_id": "1001",
-		"simple": {
-		"limit": 100,
-		"period": 60
+			"name": "RL_GENERAL",
+			"namespace_id": "1001",
+			"simple": { "limit": 1000, "period": 60 }
+		},
+		{
+			"name": "RL_UPLOAD_INIT",
+			"namespace_id": "1002",
+			"simple": { "limit": 30, "period": 60 }
+		},
+		{
+			"name": "RL_PUBLIC_READ",
+			"namespace_id": "1003",
+			"simple": { "limit": 300, "period": 60 }
+		},
+		{
+			"name": "RL_AUTH_FAIL",
+			"namespace_id": "1004",
+			"simple": { "limit": 10, "period": 60 }
+		},
+		{
+			"name": "RL_SHARE_PASSWORD",
+			"namespace_id": "1005",
+			"simple": { "limit": 5, "period": 60 }
 		}
-	}
 	]
 }
