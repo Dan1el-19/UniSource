@@ -3,6 +3,7 @@ import { Client, Account } from 'node-appwrite';
 import { checkUserServiceAccess } from '../db/services';
 import { isKnownServiceId, getServiceConfig, DEFAULT_SERVICE_ID } from '../config/services';
 import { validateApiKeyByHash } from '../db/apiKeys';
+import { consumeRateLimit } from './ratelimit';
 
 export type AuthRouteMode = 'user' | 'dual';
 
@@ -165,6 +166,13 @@ export const authMiddleware = createMiddleware<{
     }
 
     if (routeMode === 'user') {
+      const limit = await consumeRateLimit(c, 'auth-fail');
+      if (!limit.allowed) {
+        return c.json(
+          { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
+          429
+        );
+      }
       return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
     }
   }
@@ -200,6 +208,19 @@ export const authMiddleware = createMiddleware<{
         return next();
       }
     }
+  }
+
+  // All authentication attempts failed. Bump the auth-fail rate limiter so a
+  // burst of bad tokens from one IP gets blocked before it can probe further.
+  // We bump *after* the auth attempt rather than before so legitimate users
+  // who briefly mistype a header don't get throttled by the same IP's earlier
+  // success traffic — only failures count.
+  const limit = await consumeRateLimit(c, 'auth-fail');
+  if (!limit.allowed) {
+    return c.json(
+      { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
+      429
+    );
   }
 
   return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
