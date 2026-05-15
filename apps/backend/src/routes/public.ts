@@ -13,7 +13,7 @@ import {
 } from '../services/appwrite';
 import { getServiceConfig } from '../config/services';
 import { createSignedToken, verifySignedToken } from '../utils/signedTokens';
-import { rateLimitMiddleware } from '../middleware/ratelimit';
+import { rateLimit } from '../middleware/ratelimit';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -93,7 +93,7 @@ function buildAttachmentDisposition(filename: string): string {
 
 const publicRouter = new Hono<HonoEnv>();
 
-publicRouter.get('/:slug', zValidator('param', slugParam, validationErrorHook), async (c) => {
+publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugParam, validationErrorHook), async (c) => {
   const { slug } = c.req.valid('param');
   const now = Math.floor(Date.now() / 1000);
 
@@ -152,7 +152,7 @@ publicRouter.get('/:slug', zValidator('param', slugParam, validationErrorHook), 
 
 publicRouter.post(
   '/:slug/unlock',
-  rateLimitMiddleware,
+  rateLimit('share-password', { discriminator: (c) => c.req.param('slug') }),
   zValidator('param', slugParam, validationErrorHook),
   zValidator('json', z.object({ password: z.string().min(1) }), validationErrorHook),
   async (c) => {
@@ -211,6 +211,7 @@ publicRouter.post(
 
 publicRouter.get(
   '/:slug/download',
+  rateLimit('public-read'),
   zValidator('param', slugParam, validationErrorHook),
   zValidator('query', downloadTokenQuery, validationErrorHook),
   async (c) => {

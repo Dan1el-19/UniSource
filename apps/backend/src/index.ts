@@ -5,6 +5,7 @@ import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
 import { foreignKeysMiddleware } from './middleware/foreignKeys';
+import { rateLimit } from './middleware/ratelimit';
 import upload from './routes/upload';
 import files from './routes/files';
 import folders from './routes/folders';
@@ -68,58 +69,72 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: Math.floor(Date.now(
 
 // Upload gateway — Dual-Auth (JWT or API key)
 app.use('/upload/*', authMiddleware);
+app.use('/upload/*', rateLimit('general'));
 app.route('/upload', upload);
 
 // Admin files list (upload records) — Dual-Auth (API key server-to-server or JWT)
 app.use('/admin/files/*', authMiddleware);
+app.use('/admin/files/*', rateLimit('general'));
 app.use('/admin/files/*', requireAdminMiddleware);
 app.route('/admin/files', files);
 
 // Per-user folders CRUD — requires Appwrite JWT (userId extracted)
 app.use('/folders/*', authMiddleware);
+app.use('/folders/*', rateLimit('general'));
 app.use('/folders/*', adminPreviewMiddleware);
 app.route('/folders', folders);
 
 // Per-user file records (with trash/move) — requires Appwrite JWT
 app.use('/my-files/*', authMiddleware);
+app.use('/my-files/*', rateLimit('general'));
 app.use('/my-files/*', adminPreviewMiddleware);
 app.route('/my-files', myFiles);
 
 // Per-user file records via /files/:id (Plan 2 contract) — requires Appwrite JWT
 app.use('/files/*', authMiddleware);
+app.use('/files/*', rateLimit('general'));
 app.use('/files/*', adminPreviewMiddleware);
 app.route('/files', userFiles);
 
 // Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
 app.use('/admin/*', authMiddleware);
+app.use('/admin/*', rateLimit('general'));
 app.use('/admin/*', requireAdminMiddleware);
 app.route('/admin', admin);
 
 // Share link CRUD — JWT only (user must own the file)
 app.use('/my-files/:fileId/share-links', authMiddleware);
+app.use('/my-files/:fileId/share-links', rateLimit('general'));
 app.use('/my-files/:fileId/share-links/*', authMiddleware);
+app.use('/my-files/:fileId/share-links/*', rateLimit('general'));
 app.use('/share-links/*', authMiddleware);
+app.use('/share-links/*', rateLimit('general'));
 app.route('/', shareLinkRouter);
 
 // Shares (Plan 2 contract — /shares) — JWT only
 app.use('/shares', authMiddleware);
+app.use('/shares', rateLimit('general'));
 app.use('/shares/*', authMiddleware);
+app.use('/shares/*', rateLimit('general'));
 app.use('/shares', adminPreviewMiddleware);
 app.use('/shares/*', adminPreviewMiddleware);
 app.route('/shares', sharesRouter);
 
 // MAIN_STORAGE management — admin-only, dual-auth (API key or admin JWT)
 app.use('/main/*', authMiddleware);
+app.use('/main/*', rateLimit('general'));
 app.use('/main/*', requireAdminMiddleware);
 app.route('/main', mainStorage);
 
 // Release management — admin-only per service
 app.use('/releases/*', authMiddleware);
+app.use('/releases/*', rateLimit('general'));
 app.use('/releases/*', requireAdminMiddleware);
 app.route('/releases', releasesRouter);
 
 // App-facing endpoints — API key (no admin required)
 app.use('/app/*', authMiddleware);
+app.use('/app/*', rateLimit('general'));
 app.route('/app', appRouter);
 
 // Public share access — no auth required

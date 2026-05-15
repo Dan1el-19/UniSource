@@ -395,7 +395,7 @@ describe('POST /public/:slug/unlock — rate limiting', () => {
   it('returns 429 when rate limit is exceeded', async () => {
     const rateLimitedEnv = {
       ...baseEnv,
-      RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: false }) },
+      RL_SHARE_PASSWORD: { limit: vi.fn().mockResolvedValue({ success: false }) },
     } as unknown as CloudflareBindings;
 
     const app = buildPublicApp();
@@ -414,7 +414,7 @@ describe('POST /public/:slug/unlock — rate limiting', () => {
   it('proceeds past rate limiter when limit allows (returns 404 from missing share link)', async () => {
     const passEnv = {
       ...baseEnv,
-      RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
+      RL_SHARE_PASSWORD: { limit: vi.fn().mockResolvedValue({ success: true }) },
       usrc_d1: mockD1(0),
     } as unknown as CloudflareBindings;
 
@@ -429,6 +429,64 @@ describe('POST /public/:slug/unlock — rate limiting', () => {
     );
 
     // 404 because share link not found in mock DB — but NOT 429
+    expect(res.status).not.toBe(429);
+    expect(res.status).toBe(404);
+  });
+
+  it('keys per (ip, slug) so two slugs from one IP do NOT share a counter', async () => {
+    // Bug guard: previously the limiter keyed on IP only, so an attacker who
+    // burned the limit on one slug got blocked on every other slug. Verify
+    // each (ip, slug) pair gets its own bucket by inspecting the produced key.
+    const limitMock = vi.fn().mockResolvedValue({ success: true });
+    const passEnv = {
+      ...baseEnv,
+      RL_SHARE_PASSWORD: { limit: limitMock },
+      usrc_d1: mockD1(0),
+    } as unknown as CloudflareBindings;
+
+    const app = buildPublicApp();
+    await app.fetch(
+      new Request('http://localhost/public/slug-a/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': '1.2.3.4' },
+        body: JSON.stringify({ password: 'x' }),
+      }),
+      passEnv
+    );
+    await app.fetch(
+      new Request('http://localhost/public/slug-b/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': '1.2.3.4' },
+        body: JSON.stringify({ password: 'x' }),
+      }),
+      passEnv
+    );
+
+    expect(limitMock).toHaveBeenCalledTimes(2);
+    const keyA = (limitMock.mock.calls[0]![0] as { key: string }).key;
+    const keyB = (limitMock.mock.calls[1]![0] as { key: string }).key;
+    expect(keyA).not.toBe(keyB);
+    expect(keyA).toMatch(/^share-password:/);
+    expect(keyB).toMatch(/^share-password:/);
+  });
+});
+
+describe('rate-limit policy bypass when binding missing', () => {
+  it('lets requests through when no RL_* binding is configured (e.g. local dev)', async () => {
+    // Same as the "limit allows" case but with NO binding at all — covers
+    // the test/local-dev codepath where wrangler hasn't injected limiters.
+    const noBindingEnv = { ...baseEnv, usrc_d1: mockD1(0) } as unknown as CloudflareBindings;
+
+    const app = buildPublicApp();
+    const res = await app.fetch(
+      new Request('http://localhost/public/nonexistent/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'test' }),
+      }),
+      noBindingEnv
+    );
+
     expect(res.status).not.toBe(429);
     expect(res.status).toBe(404);
   });
