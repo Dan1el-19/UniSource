@@ -1,18 +1,10 @@
+import { SERVICES } from '../config/services';
 import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-  HeadObjectCommand,
-  CreateMultipartUploadCommand,
-  UploadPartCommand,
-  CompleteMultipartUploadCommand,
-  AbortMultipartUploadCommand,
-  ListPartsCommand,
-  type ListPartsCommandOutput,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-
+  createR2SigningClient,
+  r2ObjectUrl,
+  presign,
+} from './r2/sigv4';
+import { parseListPartsResponse, parseS3ErrorCode } from './r2/list-parts-xml';
 
 export interface PresignedUploadResult {
   presigned_url: string;
@@ -54,35 +46,64 @@ export interface MultipartCompleteResult {
   etag: string | null;
 }
 
-function createS3Client(env: CloudflareBindings): S3Client {
-  return new S3Client({
-    region: 'auto',
-    endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-    },
-  });
+const LIST_PARTS_MAX_PAGES = 10;
+
+/**
+ * Resolve the R2Bucket binding for a given bucket name by walking the
+ * SERVICES map. Throws if the bucket is unknown or the binding is not
+ * configured in the worker — defence-in-depth against accidental
+ * cross-bucket access.
+ */
+function bindingByBucketName(env: CloudflareBindings, bucketName: string): R2Bucket {
+  for (const svc of Object.values(SERVICES)) {
+    if (svc.bucketName === bucketName) {
+      const binding = (env as unknown as Record<string, R2Bucket | undefined>)[svc.bucketEnvKey];
+      if (!binding) {
+        throw new Error(`R2 binding not configured: ${svc.bucketEnvKey}`);
+      }
+      return binding;
+    }
+  }
+  throw new Error(`Unknown R2 bucket: ${bucketName} (not in SERVICES map)`);
 }
+
+// ─── Object operations (R2 binding) ───────────────────────────────────────────
+
+export async function headObject(
+  env: CloudflareBindings,
+  bucket: string,
+  key: string
+): Promise<R2ObjectMeta | null> {
+  const obj = await bindingByBucketName(env, bucket).head(key);
+  return obj ? { size: obj.size } : null;
+}
+
+export async function deleteObject(
+  env: CloudflareBindings,
+  bucket: string,
+  key: string
+): Promise<void> {
+  await bindingByBucketName(env, bucket).delete(key);
+}
+
+// ─── Presigned URLs (aws4fetch SigV4) ─────────────────────────────────────────
 
 export async function generatePresignedPutUrl(
   env: CloudflareBindings,
   bucket: string,
   key: string,
-  contentType: string,
+  _contentType: string,
   expiresInSeconds = 3600
 ): Promise<PresignedUploadResult> {
-  const client = createS3Client(env);
-  const command = new PutObjectCommand({
-    Bucket: bucket,
-    Key: key,
-    ContentType: contentType,
-  });
-
-  const presigned_url = await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
-  const expires_at = Math.floor(Date.now() / 1000) + expiresInSeconds;
-
-  return { presigned_url, storage_key: key, expires_at };
+  // Content-Type intentionally NOT signed — clients send their own at PUT time.
+  // SignedHeaders=host only.
+  const client = createR2SigningClient(env);
+  const presigned_url = await presign(client, r2ObjectUrl(env, bucket, key), 'PUT', expiresInSeconds);
+  return {
+    presigned_url,
+    storage_key: key,
+    expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
+  };
 }
 
 export async function generatePresignedGetUrl(
@@ -91,82 +112,29 @@ export async function generatePresignedGetUrl(
   key: string,
   expiresInSeconds = 900
 ): Promise<PresignedDownloadResult> {
-  const client = createS3Client(env);
-  const command = new GetObjectCommand({
-    Bucket: bucket,
-    Key: key,
-  });
-
-  const presigned_url = await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
-  const expires_at = Math.floor(Date.now() / 1000) + expiresInSeconds;
-
-  return { presigned_url, storage_key: key, expires_at };
-}
-
-export async function deleteObject(
-  env: CloudflareBindings,
-  bucket: string,
-  key: string
-): Promise<void> {
-  const client = createS3Client(env);
-  const command = new DeleteObjectCommand({
-    Bucket: bucket,
-    Key: key,
-  });
-
-  await client.send(command);
-}
-
-export async function headObject(
-  env: CloudflareBindings,
-  bucket: string,
-  key: string
-): Promise<R2ObjectMeta | null> {
-  const client = createS3Client(env);
-  try {
-    const result = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    return { size: result.ContentLength ?? 0 };
-  } catch (err: unknown) {
-    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
-    if (e.name === 'NoSuchKey' || e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) {
-      return null;
-    }
-    throw err;
-  }
+  const client = createR2SigningClient(env);
+  const presigned_url = await presign(client, r2ObjectUrl(env, bucket, key), 'GET', expiresInSeconds);
+  return {
+    presigned_url,
+    storage_key: key,
+    expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
+  };
 }
 
 // ─── Multipart Upload ─────────────────────────────────────────────────────────
 
-/**
- * Initiates an S3 multipart upload on R2. The returned `upload_id` (a.k.a. S3
- * UploadId) must be provided for every subsequent sign/complete/abort call.
- */
 export async function createMultipartUpload(
   env: CloudflareBindings,
   bucket: string,
   key: string,
   contentType: string
 ): Promise<MultipartCreateResult> {
-  const client = createS3Client(env);
-  const result = await client.send(
-    new CreateMultipartUploadCommand({
-      Bucket: bucket,
-      Key: key,
-      ContentType: contentType,
-    })
-  );
-
-  if (!result.UploadId) {
-    throw new Error('R2 did not return an UploadId for CreateMultipartUpload');
-  }
-
-  return { upload_id: result.UploadId };
+  const mpu = await bindingByBucketName(env, bucket).createMultipartUpload(key, {
+    httpMetadata: { contentType },
+  });
+  return { upload_id: mpu.uploadId };
 }
 
-/**
- * Generates a short-lived presigned PUT URL for uploading a single part.
- * Browser uploads the raw bytes directly against this URL.
- */
 export async function signUploadPart(
   env: CloudflareBindings,
   bucket: string,
@@ -175,23 +143,22 @@ export async function signUploadPart(
   partNumber: number,
   expiresInSeconds = 900
 ): Promise<MultipartSignPartResult> {
-  const client = createS3Client(env);
-  const command = new UploadPartCommand({
-    Bucket: bucket,
-    Key: key,
-    UploadId: uploadId,
-    PartNumber: partNumber,
-  });
-
-  const url = await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
-  const expires_at = Math.floor(Date.now() / 1000) + expiresInSeconds;
-
-  return { url, expires_at };
+  const client = createR2SigningClient(env);
+  const baseUrl = r2ObjectUrl(env, bucket, key);
+  const partUrl = `${baseUrl}?uploadId=${encodeURIComponent(uploadId)}&partNumber=${partNumber}`;
+  const url = await presign(client, partUrl, 'PUT', expiresInSeconds);
+  return {
+    url,
+    expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
+  };
 }
 
 /**
- * Lists parts already uploaded against a multipart UploadId. Used by Uppy's
- * Golden Retriever to resume after a browser crash / tab close.
+ * Recovery-only. Used by Uppy Golden Retriever resume after browser crash.
+ * Each page costs ~5–10 ms CPU on Workers Free plan — keep off the happy path.
+ *
+ * Hard cap: LIST_PARTS_MAX_PAGES (10). Over the cap → throw; client falls
+ * back to fresh upload.
  */
 export async function listUploadedParts(
   env: CloudflareBindings,
@@ -199,43 +166,43 @@ export async function listUploadedParts(
   key: string,
   uploadId: string
 ): Promise<MultipartUploadedPart[]> {
-  const client = createS3Client(env);
+  const client = createR2SigningClient(env);
+  const baseUrl = r2ObjectUrl(env, bucket, key);
   const parts: MultipartUploadedPart[] = [];
   let partNumberMarker: string | undefined = undefined;
 
-  // ListParts is paginated — at most 1000 parts per response.
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const result: ListPartsCommandOutput = await client.send(
-      new ListPartsCommand({
-        Bucket: bucket,
-        Key: key,
-        UploadId: uploadId,
-        PartNumberMarker: partNumberMarker,
-      })
-    );
+  for (let page = 0; page < LIST_PARTS_MAX_PAGES; page++) {
+    const u = new URL(baseUrl);
+    u.searchParams.set('uploadId', uploadId);
+    u.searchParams.set('max-parts', '1000');
+    if (partNumberMarker) u.searchParams.set('part-number-marker', partNumberMarker);
 
-    for (const part of result.Parts ?? []) {
-      if (part.PartNumber !== undefined && part.ETag) {
-        parts.push({
-          PartNumber: part.PartNumber,
-          ETag: part.ETag,
-          Size: part.Size ?? 0,
-        });
-      }
+    const response = await client.fetch(u.toString(), { method: 'GET' });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      const code = parseS3ErrorCode(body);
+      // Free up the resp body if not consumed — Cloudflare best practice.
+      response.body?.cancel().catch(() => undefined);
+      throw new Error(`ListParts failed: ${response.status}${code ? ' ' + code : ''}`);
     }
 
-    if (!result.IsTruncated) break;
-    partNumberMarker = result.NextPartNumberMarker;
-    if (!partNumberMarker) break;
+    const xml = await response.text();
+    const parsed = parseListPartsResponse(xml);
+    for (const p of parsed.parts) {
+      parts.push({ PartNumber: p.PartNumber, ETag: p.ETag, Size: p.Size });
+    }
+    if (!parsed.isTruncated || !parsed.nextPartNumberMarker) break;
+    partNumberMarker = parsed.nextPartNumberMarker;
+    if (page === LIST_PARTS_MAX_PAGES - 1) {
+      throw new Error(
+        `listUploadedParts exceeded max iterations (${LIST_PARTS_MAX_PAGES} pages × 1000 parts)`
+      );
+    }
   }
 
   return parts;
 }
 
-/**
- * Finalises a multipart upload. The `parts` array must be ordered by PartNumber.
- */
 export async function completeMultipartUpload(
   env: CloudflareBindings,
   bucket: string,
@@ -243,39 +210,48 @@ export async function completeMultipartUpload(
   uploadId: string,
   parts: MultipartPartInput[]
 ): Promise<MultipartCompleteResult> {
-  const client = createS3Client(env);
-  const ordered = [...parts].sort((a, b) => a.PartNumber - b.PartNumber);
+  validatePartsForComplete(parts);
 
-  const result = await client.send(
-    new CompleteMultipartUploadCommand({
-      Bucket: bucket,
-      Key: key,
-      UploadId: uploadId,
-      MultipartUpload: {
-        Parts: ordered.map((p) => ({ PartNumber: p.PartNumber, ETag: p.ETag })),
-      },
-    })
-  );
+  const ordered = parts
+    .slice()
+    .sort((a, b) => a.PartNumber - b.PartNumber)
+    .map((p) => ({
+      partNumber: p.PartNumber,
+      etag: p.ETag.replace(/^\"|\"$/g, ''),
+    }));
 
-  return { etag: result.ETag ?? null };
+  const mpu = bindingByBucketName(env, bucket).resumeMultipartUpload(key, uploadId);
+  const obj = await mpu.complete(ordered);
+  return { etag: obj.httpEtag ?? null };
 }
 
-/**
- * Aborts a multipart upload. R2 auto-aborts after 7 days anyway, but calling
- * this promptly releases reserved storage.
- */
 export async function abortMultipartUpload(
   env: CloudflareBindings,
   bucket: string,
   key: string,
   uploadId: string
 ): Promise<void> {
-  const client = createS3Client(env);
-  await client.send(
-    new AbortMultipartUploadCommand({
-      Bucket: bucket,
-      Key: key,
-      UploadId: uploadId,
-    })
-  );
+  const mpu = bindingByBucketName(env, bucket).resumeMultipartUpload(key, uploadId);
+  await mpu.abort();
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function validatePartsForComplete(parts: MultipartPartInput[]): void {
+  if (!Array.isArray(parts) || parts.length === 0) {
+    throw new Error('completeMultipartUpload: parts must be a non-empty array');
+  }
+  const seen = new Set<number>();
+  for (const p of parts) {
+    if (!Number.isInteger(p.PartNumber) || p.PartNumber < 1 || p.PartNumber > 10000) {
+      throw new Error(`completeMultipartUpload: PartNumber out of range (1..10000): ${p.PartNumber}`);
+    }
+    if (seen.has(p.PartNumber)) {
+      throw new Error(`completeMultipartUpload: duplicate PartNumber ${p.PartNumber}`);
+    }
+    seen.add(p.PartNumber);
+    if (typeof p.ETag !== 'string' || p.ETag.length === 0) {
+      throw new Error(`completeMultipartUpload: empty ETag for PartNumber ${p.PartNumber}`);
+    }
+  }
 }
