@@ -16,6 +16,16 @@ import {
 // as a Miniflare R2 binding. We use the matching SERVICES map id.
 const BUCKET = 'unisource';
 
+// CI runners do not have R2 creds in .dev.vars (it's gitignored). aws4fetch's
+// AwsClient throws on construction if accessKeyId/secretAccessKey are missing.
+// We override with dummy strings — tests only inspect URL shape, not real R2.
+const cfEnv = {
+  ...env,
+  R2_ACCOUNT_ID: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  R2_ACCESS_KEY_ID: 'AKIATESTKEY',
+  R2_SECRET_ACCESS_KEY: 'testsecret/testsecret/testsecret/testsecret',
+} as unknown as CloudflareBindings;
+
 const fixtures = {
   'empty.xml': `<?xml version="1.0" encoding="UTF-8"?>
 <ListPartsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -106,17 +116,17 @@ describe('headObject (Miniflare R2 binding)', () => {
 
   it('returns size for existing object', async () => {
     await env.PRIMARY_BUCKET.put('hello.txt', 'hello world');
-    const result = await headObject(env, BUCKET, 'hello.txt');
+    const result = await headObject(cfEnv,BUCKET, 'hello.txt');
     expect(result).toEqual({ size: 11 });
   });
 
   it('returns null for missing object (NO throw)', async () => {
-    const result = await headObject(env, BUCKET, 'does-not-exist.bin');
+    const result = await headObject(cfEnv,BUCKET, 'does-not-exist.bin');
     expect(result).toBeNull();
   });
 
   it('throws for unknown bucket name', async () => {
-    await expect(headObject(env, 'no-such-bucket', 'x')).rejects.toThrow(/Unknown R2 bucket/);
+    await expect(headObject(cfEnv,'no-such-bucket', 'x')).rejects.toThrow(/Unknown R2 bucket/);
   });
 });
 
@@ -125,12 +135,12 @@ describe('deleteObject (Miniflare R2 binding)', () => {
 
   it('removes existing object', async () => {
     await env.PRIMARY_BUCKET.put('to-delete.txt', 'bye');
-    await deleteObject(env, BUCKET, 'to-delete.txt');
+    await deleteObject(cfEnv,BUCKET, 'to-delete.txt');
     expect(await env.PRIMARY_BUCKET.head('to-delete.txt')).toBeNull();
   });
 
   it('is idempotent for missing object', async () => {
-    await expect(deleteObject(env, BUCKET, 'never-existed.txt')).resolves.toBeUndefined();
+    await expect(deleteObject(cfEnv,BUCKET, 'never-existed.txt')).resolves.toBeUndefined();
   });
 });
 
@@ -138,9 +148,9 @@ describe('createMultipartUpload + abortMultipartUpload (Miniflare R2 binding)', 
   beforeEach(clearBucket);
 
   it('returns non-empty upload_id and is abortable', async () => {
-    const { upload_id } = await createMultipartUpload(env, BUCKET, 'big.bin', 'application/octet-stream');
+    const { upload_id } = await createMultipartUpload(cfEnv,BUCKET, 'big.bin', 'application/octet-stream');
     expect(upload_id).toBeTruthy();
-    await expect(abortMultipartUpload(env, BUCKET, 'big.bin', upload_id)).resolves.toBeUndefined();
+    await expect(abortMultipartUpload(cfEnv,BUCKET, 'big.bin', upload_id)).resolves.toBeUndefined();
   });
 });
 
@@ -148,12 +158,12 @@ describe('completeMultipartUpload (Miniflare R2 binding)', () => {
   beforeEach(clearBucket);
 
   it('strips quoted ETags and writes a real object (happy path, 2 parts)', async () => {
-    const { upload_id } = await createMultipartUpload(env, BUCKET, 'merged.bin', 'application/octet-stream');
+    const { upload_id } = await createMultipartUpload(cfEnv,BUCKET, 'merged.bin', 'application/octet-stream');
     const mpu = env.PRIMARY_BUCKET.resumeMultipartUpload('merged.bin', upload_id);
     const partA = await mpu.uploadPart(1, new Uint8Array(5 * 1024 * 1024).fill(0xaa));
     const partB = await mpu.uploadPart(2, new Uint8Array(1024).fill(0xbb));
 
-    const result = await completeMultipartUpload(env, BUCKET, 'merged.bin', upload_id, [
+    const result = await completeMultipartUpload(cfEnv,BUCKET, 'merged.bin', upload_id, [
       { PartNumber: 1, ETag: `"${partA.etag}"` },
       { PartNumber: 2, ETag: `"${partB.etag}"` },
     ]);
@@ -165,13 +175,13 @@ describe('completeMultipartUpload (Miniflare R2 binding)', () => {
   });
 
   it('sorts unordered parts by PartNumber before complete', async () => {
-    const { upload_id } = await createMultipartUpload(env, BUCKET, 'sorted.bin', 'application/octet-stream');
+    const { upload_id } = await createMultipartUpload(cfEnv,BUCKET, 'sorted.bin', 'application/octet-stream');
     const mpu = env.PRIMARY_BUCKET.resumeMultipartUpload('sorted.bin', upload_id);
     const p1 = await mpu.uploadPart(1, new Uint8Array(5 * 1024 * 1024).fill(0x11));
     const p2 = await mpu.uploadPart(2, new Uint8Array(1024).fill(0x22));
 
     await expect(
-      completeMultipartUpload(env, BUCKET, 'sorted.bin', upload_id, [
+      completeMultipartUpload(cfEnv,BUCKET, 'sorted.bin', upload_id, [
         { PartNumber: 2, ETag: p2.etag },
         { PartNumber: 1, ETag: p1.etag },
       ])
@@ -179,14 +189,14 @@ describe('completeMultipartUpload (Miniflare R2 binding)', () => {
   });
 
   it('throws on empty parts', async () => {
-    await expect(completeMultipartUpload(env, BUCKET, 'x.bin', 'fake-upload', [])).rejects.toThrow(
+    await expect(completeMultipartUpload(cfEnv,BUCKET, 'x.bin', 'fake-upload', [])).rejects.toThrow(
       /non-empty array/
     );
   });
 
   it('throws on duplicate PartNumber', async () => {
     await expect(
-      completeMultipartUpload(env, BUCKET, 'x.bin', 'fake-upload', [
+      completeMultipartUpload(cfEnv,BUCKET, 'x.bin', 'fake-upload', [
         { PartNumber: 1, ETag: 'a' },
         { PartNumber: 1, ETag: 'b' },
       ])
@@ -195,26 +205,26 @@ describe('completeMultipartUpload (Miniflare R2 binding)', () => {
 
   it('throws on PartNumber out of range', async () => {
     await expect(
-      completeMultipartUpload(env, BUCKET, 'x.bin', 'fake-upload', [{ PartNumber: 0, ETag: 'a' }])
+      completeMultipartUpload(cfEnv,BUCKET, 'x.bin', 'fake-upload', [{ PartNumber: 0, ETag: 'a' }])
     ).rejects.toThrow(/out of range/);
     await expect(
-      completeMultipartUpload(env, BUCKET, 'x.bin', 'fake-upload', [{ PartNumber: 10001, ETag: 'a' }])
+      completeMultipartUpload(cfEnv,BUCKET, 'x.bin', 'fake-upload', [{ PartNumber: 10001, ETag: 'a' }])
     ).rejects.toThrow(/out of range/);
   });
 
   it('throws on empty ETag', async () => {
     await expect(
-      completeMultipartUpload(env, BUCKET, 'x.bin', 'fake-upload', [{ PartNumber: 1, ETag: '' }])
+      completeMultipartUpload(cfEnv,BUCKET, 'x.bin', 'fake-upload', [{ PartNumber: 1, ETag: '' }])
     ).rejects.toThrow(/empty ETag/);
   });
 
   it('does NOT call globalThis.fetch (no aws4fetch on happy path)', async () => {
-    const { upload_id } = await createMultipartUpload(env, BUCKET, 'no-fetch.bin', 'application/octet-stream');
+    const { upload_id } = await createMultipartUpload(cfEnv,BUCKET, 'no-fetch.bin', 'application/octet-stream');
     const mpu = env.PRIMARY_BUCKET.resumeMultipartUpload('no-fetch.bin', upload_id);
     const part = await mpu.uploadPart(1, new Uint8Array(5 * 1024 * 1024).fill(0x33));
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     try {
-      await completeMultipartUpload(env, BUCKET, 'no-fetch.bin', upload_id, [
+      await completeMultipartUpload(cfEnv,BUCKET, 'no-fetch.bin', upload_id, [
         { PartNumber: 1, ETag: part.etag },
       ]);
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -239,7 +249,7 @@ describe('listUploadedParts (mocked fetch)', () => {
       new Response(fixtures['single-page.xml'], { status: 200, headers: { 'content-type': 'application/xml' } })
     ) as unknown as typeof globalThis.fetch;
 
-    const parts = await listUploadedParts(env, BUCKET, 'k', 'U1');
+    const parts = await listUploadedParts(cfEnv,BUCKET, 'k', 'U1');
     expect(parts).toHaveLength(3);
     expect(parts[0]!.ETag).toMatch(/^".+"$/);
   });
@@ -253,7 +263,7 @@ describe('listUploadedParts (mocked fetch)', () => {
       });
     }) as unknown as typeof globalThis.fetch;
 
-    const parts = await listUploadedParts(env, BUCKET, 'k', 'U1');
+    const parts = await listUploadedParts(cfEnv,BUCKET, 'k', 'U1');
     expect(calls).toBe(2);
     expect(parts).toHaveLength(2);
   });
@@ -263,7 +273,7 @@ describe('listUploadedParts (mocked fetch)', () => {
       new Response(fixtures['truncated.xml'], { status: 200 })
     ) as unknown as typeof globalThis.fetch;
 
-    await expect(listUploadedParts(env, BUCKET, 'k', 'U1')).rejects.toThrow(/exceeded max iterations/);
+    await expect(listUploadedParts(cfEnv,BUCKET, 'k', 'U1')).rejects.toThrow(/exceeded max iterations/);
   });
 
   it('throws with S3 error code on non-OK fetch', async () => {
@@ -271,7 +281,7 @@ describe('listUploadedParts (mocked fetch)', () => {
       new Response(fixtures['s3-error.xml'], { status: 404 })
     ) as unknown as typeof globalThis.fetch;
 
-    await expect(listUploadedParts(env, BUCKET, 'k', 'U1')).rejects.toThrow(/404 NoSuchUpload/);
+    await expect(listUploadedParts(cfEnv,BUCKET, 'k', 'U1')).rejects.toThrow(/404 NoSuchUpload/);
   });
 
   it('cancels response body on non-OK fetch', async () => {
@@ -284,14 +294,14 @@ describe('listUploadedParts (mocked fetch)', () => {
     } as unknown as Response;
     globalThis.fetch = vi.fn(async () => fakeResponse) as unknown as typeof globalThis.fetch;
 
-    await expect(listUploadedParts(env, BUCKET, 'k', 'U1')).rejects.toThrow();
+    await expect(listUploadedParts(cfEnv,BUCKET, 'k', 'U1')).rejects.toThrow();
     expect(cancel).toHaveBeenCalled();
   });
 });
 
 describe('generatePresignedPutUrl / generatePresignedGetUrl', () => {
   it('returns SigV4 query-style URL with X-Amz-* params (PUT, default 3600s)', async () => {
-    const result = await generatePresignedPutUrl(env, BUCKET, 'foo.bin', 'application/octet-stream');
+    const result = await generatePresignedPutUrl(cfEnv,BUCKET, 'foo.bin', 'application/octet-stream');
     const u = new URL(result.presigned_url);
     expect(u.searchParams.get('X-Amz-Algorithm')).toBe('AWS4-HMAC-SHA256');
     expect(u.searchParams.get('X-Amz-Expires')).toBe('3600');
@@ -300,7 +310,7 @@ describe('generatePresignedPutUrl / generatePresignedGetUrl', () => {
   });
 
   it('returns SigV4 query-style URL with custom expiresIn (GET, 900s)', async () => {
-    const result = await generatePresignedGetUrl(env, BUCKET, 'foo.bin', 900);
+    const result = await generatePresignedGetUrl(cfEnv,BUCKET, 'foo.bin', 900);
     const u = new URL(result.presigned_url);
     expect(u.searchParams.get('X-Amz-Expires')).toBe('900');
     expect(u.searchParams.get('X-Amz-SignedHeaders')).toBe('host');
@@ -309,7 +319,7 @@ describe('generatePresignedPutUrl / generatePresignedGetUrl', () => {
 
 describe('signUploadPart', () => {
   it('preserves uploadId+partNumber in query and signs only host', async () => {
-    const result = await signUploadPart(env, BUCKET, 'big.bin', 'ABC123', 7, 900);
+    const result = await signUploadPart(cfEnv,BUCKET, 'big.bin', 'ABC123', 7, 900);
     const u = new URL(result.url);
     expect(u.searchParams.get('uploadId')).toBe('ABC123');
     expect(u.searchParams.get('partNumber')).toBe('7');
