@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload, completeUploadAndCreateFile } from '../db/files';
 import { createFileRecord, createMainStorageFileRecord } from '../db/fileRecords';
 import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../db/services';
-import { rateLimitMiddleware } from '../middleware/ratelimit';
+import { rateLimit } from '../middleware/ratelimit';
 import {
   generatePresignedPutUrl,
   headObject,
@@ -80,7 +80,7 @@ function getDatePath(): string {
 /**
  * R2 Upload — Presigned PUT URL
  */
-upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequestSchema, validationErrorHook), async (c) => {
+upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2InitRequestSchema, validationErrorHook), async (c) => {
   const body = c.req.valid('json');
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
@@ -172,7 +172,7 @@ upload.post('/r2/init', rateLimitMiddleware, zValidator('json', uploadR2InitRequ
 /**
  * Appwrite Upload — Returns credentials for direct Appwrite SDK upload
  */
-upload.post('/appwrite/init', rateLimitMiddleware, zValidator('json', uploadAppwriteInitRequestSchema, validationErrorHook), async (c) => {
+upload.post('/appwrite/init', rateLimit('upload-init'), zValidator('json', uploadAppwriteInitRequestSchema, validationErrorHook), async (c) => {
   const body = c.req.valid('json');
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
@@ -455,7 +455,7 @@ async function getOwnedMultipartUpload(
  */
 upload.post(
   '/r2/multipart/create',
-  rateLimitMiddleware,
+  rateLimit('upload-init'),
   zValidator('json', multipartCreateRequestSchema, validationErrorHook),
   async (c) => {
     const body = c.req.valid('json');
