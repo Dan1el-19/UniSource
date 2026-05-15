@@ -3,7 +3,18 @@ declare interface CloudflareBindings {
   APP_DB: D1Database;
   PRIMARY_BUCKET: R2Bucket;
   SECONDARY_BUCKET: R2Bucket;
-  RATE_LIMITER: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
+  /**
+   * Cloudflare Rate Limiting bindings — one namespace per traffic class so
+   * different endpoint families don't share a counter. Configured in
+   * `wrangler.jsonc` under `ratelimits`. All are optional at the type level
+   * because tests / `wrangler dev` may run without them; the middleware
+   * passes through cleanly when a binding is absent.
+   */
+  RL_GENERAL?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
+  RL_UPLOAD_INIT?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
+  RL_PUBLIC_READ?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
+  RL_AUTH_FAIL?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
+  RL_SHARE_PASSWORD?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
   // Secrets injected at runtime via `wrangler secret put` — one API key per service
   SERVICE_API_KEY: string;
   SECONDARY_SERVICE_API_KEY: string;
