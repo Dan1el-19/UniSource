@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getAppwriteFileMeta } from '../src/services/appwrite';
+import { createAppwriteFileToken, getAppwriteFileMeta } from '../src/services/appwrite';
 
 const mockEnv = {
   APPWRITE_ENDPOINT: 'https://appwrite.example.com/v1',
@@ -59,5 +59,60 @@ describe('getAppwriteFileMeta', () => {
     expect(url).toContain('/storage/buckets/my-bucket/files/my-file');
     expect((options.headers as Record<string, string>)['X-Appwrite-Key']).toBe('key123');
     expect((options.headers as Record<string, string>)['X-Appwrite-Project']).toBe('proj123');
+  });
+});
+
+describe('createAppwriteFileToken', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('deletes expired Appwrite file tokens before creating a fresh download token', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-16T12:00:00.000Z'));
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          tokens: [
+            { $id: 'expired-token', expire: '2026-05-16T11:59:59.000Z' },
+            { $id: 'active-token', expire: '2026-05-16T12:10:00.000Z' },
+          ],
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        text: async () => '',
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({ secret: 'fresh-secret', expire: '2026-05-16T12:15:00.000Z' }),
+      } as unknown as Response);
+    global.fetch = fetchSpy;
+
+    const result = await createAppwriteFileToken(mockEnv, 'bucket-id', 'file-id', 900);
+
+    expect(result).toEqual({ secret: 'fresh-secret', expires_at: 1778933700 });
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'https://appwrite.example.com/v1/tokens/buckets/bucket-id/files/file-id?total=false',
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'https://appwrite.example.com/v1/tokens/expired-token',
+      expect.objectContaining({ method: 'DELETE' })
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'https://appwrite.example.com/v1/tokens/buckets/bucket-id/files/file-id',
+      expect.objectContaining({ method: 'POST' })
+    );
   });
 });

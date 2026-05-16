@@ -16,6 +16,11 @@ interface AppwriteFileTokenPayload {
   expire?: string | number | null;
 }
 
+interface AppwriteFileTokenListPayload {
+  tokens?: Array<{ $id?: string; expire?: string | number | null }>;
+  resourceTokens?: Array<{ $id?: string; expire?: string | number | null }>;
+}
+
 export interface AppwriteFileTokenResult {
   secret: string;
   expires_at: number;
@@ -93,6 +98,8 @@ export async function createAppwriteFileToken(
   const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
   const expire = new Date(expiresAt * 1000).toISOString();
 
+  await deleteExpiredAppwriteFileTokens(env, bucketId, fileId, Math.floor(Date.now() / 1000));
+
   const response = await fetch(targetUrl, {
     method: 'POST',
     headers: createAppwriteHeaders(env),
@@ -123,6 +130,70 @@ export async function createAppwriteFileToken(
     secret: payload.secret,
     expires_at: tokenExpiry,
   };
+}
+
+function parseAppwriteTokenExpiry(expire: string | number | null | undefined): number | null {
+  if (typeof expire === 'number' && Number.isFinite(expire)) {
+    return Math.floor(expire);
+  }
+
+  if (typeof expire === 'string') {
+    const parsed = Date.parse(expire);
+    if (!Number.isNaN(parsed)) {
+      return Math.floor(parsed / 1000);
+    }
+  }
+
+  return null;
+}
+
+export async function deleteExpiredAppwriteFileTokens(
+  env: CloudflareBindings,
+  bucketId: string,
+  fileId: string,
+  nowSeconds = Math.floor(Date.now() / 1000)
+): Promise<number> {
+  const baseUrl = getAppwriteApiBaseUrl(env);
+  const listUrl = new URL(
+    `${baseUrl}/tokens/buckets/${encodeURIComponent(bucketId)}/files/${encodeURIComponent(fileId)}`
+  );
+  listUrl.searchParams.set('total', 'false');
+
+  const response = await fetch(listUrl.toString(), {
+    method: 'GET',
+    headers: createAppwriteHeaders(env),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
+    console.error(`Appwrite list file tokens failed (${response.status}): ${errorBody}`);
+    return 0;
+  }
+
+  const payload = await response.json<AppwriteFileTokenListPayload>();
+  const tokens = payload.tokens ?? payload.resourceTokens ?? [];
+  let deletedCount = 0;
+
+  for (const token of tokens) {
+    if (!token.$id) continue;
+    const tokenExpiry = parseAppwriteTokenExpiry(token.expire);
+    if (tokenExpiry === null || tokenExpiry > nowSeconds) continue;
+
+    const deleteResponse = await fetch(`${baseUrl}/tokens/${encodeURIComponent(token.$id)}`, {
+      method: 'DELETE',
+      headers: createAppwriteHeaders(env),
+    });
+
+    if (deleteResponse.ok || deleteResponse.status === 404) {
+      deletedCount++;
+      continue;
+    }
+
+    const errorBody = await deleteResponse.text().catch(() => '');
+    console.error(`Appwrite delete expired file token failed (${deleteResponse.status}): ${errorBody}`);
+  }
+
+  return deletedCount;
 }
 
 export function buildAppwriteFileDownloadUrl(
