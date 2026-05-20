@@ -48,19 +48,63 @@ export interface ListFileRecordsResult {
   next_cursor: string | null;
 }
 
-function encodeFileCursor(record: Pick<FileRecord, 'created_at' | 'id'>): string {
-  return `${record.created_at}:${record.id}`;
+export interface ListFileRecordsV2Input {
+  user_id: string;
+  service_id: string;
+  folder_id?: string | null;
+  trashed_only?: boolean;
+  search?: string;
+  mime_type?: string;
+  sort_by?: 'created_at' | 'name' | 'size';
+  sort_dir?: 'asc' | 'desc';
+  limit: number;
+  cursor?: string | null;
 }
 
-function decodeFileCursor(cursor: string): { created_at: number; id: string } | null {
-  const separatorIndex = cursor.indexOf(':');
-  if (separatorIndex <= 0 || separatorIndex >= cursor.length - 1) return null;
+function encodeFileCursor(record: Pick<FileRecord, 'created_at' | 'filename' | 'size' | 'id'>, sortBy: 'created_at' | 'name' | 'size' = 'created_at'): string {
+  let val = '';
+  if (sortBy === 'name') {
+    val = record.filename;
+  } else if (sortBy === 'size') {
+    val = record.size.toString();
+  } else {
+    val = record.created_at.toString();
+  }
 
-  const createdAt = Number(cursor.slice(0, separatorIndex));
-  const id = cursor.slice(separatorIndex + 1);
+  const payload = JSON.stringify({ val, id: record.id });
+  return btoa(payload);
+}
 
-  if (!Number.isInteger(createdAt) || createdAt <= 0 || !id) return null;
-  return { created_at: createdAt, id };
+function decodeFileCursor(cursor: string, sortBy: 'created_at' | 'name' | 'size' = 'created_at'): { val: string | number; id: string } | null {
+  try {
+    const payload = JSON.parse(atob(cursor));
+    if (!payload || typeof payload !== 'object' || !payload.id || payload.val === undefined) return null;
+
+    if (sortBy === 'name') {
+      return { val: String(payload.val), id: payload.id };
+    }
+
+    const valNum = Number(payload.val);
+    if (!Number.isInteger(valNum) || valNum < 0) return null;
+
+    return { val: valNum, id: payload.id };
+  } catch {
+    // Fallback for v1 legacy cursors (e.g. "1712345678:some-uuid")
+    const separatorIndex = cursor.indexOf(':');
+    if (separatorIndex > 0 && separatorIndex < cursor.length - 1) {
+      const valStr = cursor.slice(0, separatorIndex);
+      const id = cursor.slice(separatorIndex + 1);
+
+      if (sortBy === 'name') {
+        return { val: valStr, id };
+      }
+      const valNum = Number(valStr);
+      if (Number.isInteger(valNum) && valNum > 0) {
+        return { val: valNum, id };
+      }
+    }
+    return null;
+  }
 }
 
 export async function createFileRecord(db: D1Database, input: CreateFileRecordInput): Promise<FileRecord> {
@@ -136,10 +180,10 @@ export async function listFileRecords(
   }
 
   if (input.cursor) {
-    const parsed = decodeFileCursor(input.cursor);
+    const parsed = decodeFileCursor(input.cursor, 'created_at');
     if (!parsed) throw new Error('Invalid cursor');
     whereClauses.push('(created_at < ? OR (created_at = ? AND id < ?))');
-    binds.push(parsed.created_at, parsed.created_at, parsed.id);
+    binds.push(parsed.val, parsed.val, parsed.id);
   }
 
   const fetchLimit = input.limit + 1;
@@ -159,8 +203,145 @@ export async function listFileRecords(
 
   return {
     items,
-    next_cursor: hasMore && lastItem ? encodeFileCursor(lastItem) : null,
+    next_cursor: hasMore && lastItem ? encodeFileCursor(lastItem, 'created_at') : null,
   };
+}
+
+export async function listFileRecordsV2(
+  db: D1Database,
+  input: ListFileRecordsV2Input
+): Promise<ListFileRecordsResult> {
+  const binds: (string | number | null)[] = [input.user_id, input.service_id];
+  const whereClauses: string[] = ['user_id = ?', 'service_id = ?'];
+
+  if (input.trashed_only) {
+    whereClauses.push('is_trashed = 1');
+  } else {
+    whereClauses.push('is_trashed = 0');
+    if ('folder_id' in input && input.folder_id !== undefined) {
+      if (input.folder_id === null) {
+        whereClauses.push('folder_id IS NULL');
+      } else {
+        whereClauses.push('folder_id = ?');
+        binds.push(input.folder_id);
+      }
+    }
+  }
+
+  if (input.search) {
+    whereClauses.push('filename LIKE ?');
+    binds.push(`%${input.search}%`);
+  }
+
+  if (input.mime_type) {
+    whereClauses.push('mime_type = ?');
+    binds.push(input.mime_type);
+  }
+
+  const sortBy = input.sort_by || 'created_at';
+  const sortDir = input.sort_dir || 'desc';
+  const op = sortDir === 'desc' ? '<' : '>';
+  let sortColumn = 'created_at';
+
+  if (sortBy === 'name') sortColumn = 'filename';
+  else if (sortBy === 'size') sortColumn = 'size';
+
+  if (input.cursor) {
+    const parsed = decodeFileCursor(input.cursor, sortBy);
+    if (!parsed) throw new Error('Invalid cursor');
+    whereClauses.push(`(${sortColumn} ${op} ? OR (${sortColumn} = ? AND id ${op} ?))`);
+    binds.push(parsed.val, parsed.val, parsed.id);
+  }
+
+  const fetchLimit = input.limit + 1;
+  const query = `
+    SELECT * FROM files
+    WHERE ${whereClauses.join(' AND ')}
+    ORDER BY ${sortColumn} ${sortDir.toUpperCase()}, id ${sortDir.toUpperCase()}
+    LIMIT ?
+  `;
+
+  const result = await db.prepare(query).bind(...binds, fetchLimit).all<FileRecord>();
+  const rows = result.results ?? [];
+
+  const hasMore = rows.length > input.limit;
+  const items = hasMore ? rows.slice(0, input.limit) : rows;
+  const lastItem = items[items.length - 1] ?? null;
+
+  return {
+    items,
+    next_cursor: hasMore && lastItem ? encodeFileCursor(lastItem, sortBy) : null,
+  };
+}
+
+export async function bulkTrashFileRecords(
+  db: D1Database,
+  ids: string[],
+  userId: string,
+  serviceId: string
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const now = Math.floor(Date.now() / 1000);
+
+  const stmts = ids.map(id => db.prepare(
+    `UPDATE files
+     SET is_trashed = 1, trashed_at = ?, updated_at = ?
+     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
+  ).bind(now, now, id, userId, serviceId));
+
+  const results = await db.batch(stmts);
+  const successIds: string[] = [];
+  results.forEach((r, idx) => {
+    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
+  });
+  return successIds;
+}
+
+export async function bulkRestoreFileRecords(
+  db: D1Database,
+  ids: string[],
+  userId: string,
+  serviceId: string
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const now = Math.floor(Date.now() / 1000);
+
+  const stmts = ids.map(id => db.prepare(
+    `UPDATE files
+     SET is_trashed = 0, trashed_at = NULL, updated_at = ?
+     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 1`
+  ).bind(now, id, userId, serviceId));
+
+  const results = await db.batch(stmts);
+  const successIds: string[] = [];
+  results.forEach((r, idx) => {
+    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
+  });
+  return successIds;
+}
+
+export async function bulkMoveFileRecords(
+  db: D1Database,
+  ids: string[],
+  userId: string,
+  serviceId: string,
+  newFolderId: string | null
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const now = Math.floor(Date.now() / 1000);
+
+  const stmts = ids.map(id => db.prepare(
+    `UPDATE files
+     SET folder_id = ?, updated_at = ?
+     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
+  ).bind(newFolderId, now, id, userId, serviceId));
+
+  const results = await db.batch(stmts);
+  const successIds: string[] = [];
+  results.forEach((r, idx) => {
+    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
+  });
+  return successIds;
 }
 
 export async function trashFileRecord(
@@ -334,10 +515,10 @@ export async function listMainStorageFileRecords(
   let cursorClause = '';
 
   if (input.cursor) {
-    const parsed = decodeFileCursor(input.cursor);
+    const parsed = decodeFileCursor(input.cursor, 'created_at');
     if (!parsed) throw new Error('Invalid cursor');
     cursorClause = 'AND (created_at < ? OR (created_at = ? AND id < ?))';
-    binds.push(parsed.created_at, parsed.created_at, parsed.id);
+    binds.push(parsed.val, parsed.val, parsed.id);
   }
 
   const fetchLimit = input.limit + 1;
@@ -358,6 +539,6 @@ export async function listMainStorageFileRecords(
   const last = page[page.length - 1];
   return {
     items: page,
-    next_cursor: hasMore && last ? `${last.created_at}:${last.id}` : null,
+    next_cursor: hasMore && last ? encodeFileCursor(last, 'created_at') : null,
   };
 }
