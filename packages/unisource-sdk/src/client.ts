@@ -41,6 +41,16 @@ import type {
   FolderRestoreResponse,
 } from './folders';
 import type {
+  FileRecordsListV2Query,
+  FolderListV2Query,
+  BulkFileIds,
+  BulkFileMoveRequest,
+  BulkFolderIds,
+  BulkFolderMoveRequest,
+  BulkOperationResponse,
+  FolderBreadcrumbsResponse,
+} from './v2';
+import type {
   ServiceDetailResponse,
   ServiceUsageResponse,
   AdminServiceUpdateRequest,
@@ -625,6 +635,50 @@ export class UnisourceClient {
     /** Delete a share link */
     delete: (id: string, signal?: AbortSignal): Promise<ShareLinkDeleteResponse> =>
       apiRequest(this.config, 'DELETE', `/shares/${id}`, { signal }),
+  };
+
+  // ─── V2 API Endpoints ───────────────────────────────────────────────────────
+
+  readonly v2 = {
+    files: {
+      /** List files with advanced search, sorting, and filtering capabilities */
+      list: (query?: FileRecordsListV2Query, signal?: AbortSignal, options?: { asUser?: string }): Promise<FileRecordsListResponse> =>
+        apiRequest(this.config, 'GET', '/v2/files', { query, signal, extraHeaders: this.withAsUser(options) }),
+
+      /** Move multiple files at once */
+      bulkMove: (body: BulkFileMoveRequest, signal?: AbortSignal, options?: { asUser?: string }): Promise<BulkOperationResponse> =>
+        apiRequest(this.config, 'POST', '/v2/files/bulk-move', { body, signal, extraHeaders: this.withAsUser(options) }),
+
+      /** Move multiple files to trash */
+      bulkTrash: (body: BulkFileIds, signal?: AbortSignal, options?: { asUser?: string }): Promise<BulkOperationResponse> =>
+        apiRequest(this.config, 'POST', '/v2/files/bulk-trash', { body, signal, extraHeaders: this.withAsUser(options) }),
+
+      /** Restore multiple files from trash */
+      bulkRestore: (body: BulkFileIds, signal?: AbortSignal, options?: { asUser?: string }): Promise<BulkOperationResponse> =>
+        apiRequest(this.config, 'POST', '/v2/files/bulk-restore', { body, signal, extraHeaders: this.withAsUser(options) }),
+    },
+
+    folders: {
+      /** List folders with advanced search, sorting, and filtering capabilities */
+      list: (query?: FolderListV2Query, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderListResponse> =>
+        apiRequest(this.config, 'GET', '/v2/folders', { query, signal, extraHeaders: this.withAsUser(options) }),
+
+      /** Get the breadcrumb hierarchy for a specific folder */
+      breadcrumbs: (id: string, signal?: AbortSignal, options?: { asUser?: string }): Promise<FolderBreadcrumbsResponse> =>
+        apiRequest(this.config, 'GET', `/v2/folders/${id}/breadcrumbs`, { signal, extraHeaders: this.withAsUser(options) }),
+
+      /** Move multiple folders at once */
+      bulkMove: (body: BulkFolderMoveRequest, signal?: AbortSignal, options?: { asUser?: string }): Promise<BulkOperationResponse> =>
+        apiRequest(this.config, 'POST', '/v2/folders/bulk-move', { body, signal, extraHeaders: this.withAsUser(options) }),
+
+      /** Move multiple folders to trash */
+      bulkTrash: (body: BulkFolderIds, signal?: AbortSignal, options?: { asUser?: string }): Promise<BulkOperationResponse> =>
+        apiRequest(this.config, 'POST', '/v2/folders/bulk-trash', { body, signal, extraHeaders: this.withAsUser(options) }),
+
+      /** Restore multiple folders from trash */
+      bulkRestore: (body: BulkFolderIds, signal?: AbortSignal, options?: { asUser?: string }): Promise<BulkOperationResponse> =>
+        apiRequest(this.config, 'POST', '/v2/folders/bulk-restore', { body, signal, extraHeaders: this.withAsUser(options) }),
+    }
   };
 
   // ─── App-facing endpoints (/app/*) — public release distribution ──────────────
