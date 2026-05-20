@@ -265,3 +265,25 @@ export {
   unlockPublicFile,
 } from './client';
 export type { UnisourceClientConfig } from './client';
+
+// ─── V2 API ───────────────────────────────────────────────────────────────────
+export {
+  fileRecordsListV2QuerySchema,
+  bulkFileIdsSchema,
+  bulkFileMoveRequestSchema,
+  bulkOperationResponseSchema,
+  folderListV2QuerySchema,
+  bulkFolderIdsSchema,
+  bulkFolderMoveRequestSchema,
+  folderBreadcrumbsResponseSchema,
+} from './v2';
+export type {
+  FileRecordsListV2Query,
+  BulkFileIds,
+  BulkFileMoveRequest,
+  BulkOperationResponse,
+  FolderListV2Query,
+  BulkFolderIds,
+  BulkFolderMoveRequest,
+  FolderBreadcrumbsResponse,
+} from './v2';
