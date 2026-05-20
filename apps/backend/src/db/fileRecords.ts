@@ -89,6 +89,20 @@ function decodeFileCursor(cursor: string, sortBy: 'created_at' | 'name' | 'size'
 
     return { val: valNum, id: payload.id };
   } catch {
+    // Fallback for v1 legacy cursors (e.g. "1712345678:some-uuid")
+    const separatorIndex = cursor.indexOf(':');
+    if (separatorIndex > 0 && separatorIndex < cursor.length - 1) {
+      const valStr = cursor.slice(0, separatorIndex);
+      const id = cursor.slice(separatorIndex + 1);
+
+      if (sortBy === 'name') {
+        return { val: valStr, id };
+      }
+      const valNum = Number(valStr);
+      if (Number.isInteger(valNum) && valNum > 0) {
+        return { val: valNum, id };
+      }
+    }
     return null;
   }
 }

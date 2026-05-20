@@ -149,6 +149,14 @@ foldersV2.post('/bulk-move', zValidator('json', bulkFolderMoveRequestSchema, val
     if (ids.includes(parent_id)) {
       return c.json({ error: 'Conflict', message: 'Cannot move a folder into itself' }, 409);
     }
+
+    // Cycle prevention: Check if the target parent_id is a descendant of ANY of the folders being moved
+    for (const folderId of ids) {
+      const descendants = await getDescendantFolderIds(c.env.APP_DB, folderId, userId, serviceId);
+      if (descendants.includes(parent_id)) {
+        return c.json({ error: 'Conflict', message: 'Cannot move a folder into its own descendant (cycle detected)' }, 409);
+      }
+    }
   }
 
   const successIds = await bulkMoveFolders(c.env.APP_DB, ids, userId, serviceId, parent_id ?? null);
