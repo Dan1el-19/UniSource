@@ -45,19 +45,17 @@ jobs:
         run: pnpm install --no-frozen-lockfile --config.link-workspace-packages=false
 
       - name: Apply D1 migrations
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           packageManager: pnpm
           workingDirectory: apps/backend
           command: d1 migrations apply app-db --remote
-          wranglerVersion: "4"
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           packageManager: pnpm
           workingDirectory: apps/backend
           command: deploy --minify
-          wranglerVersion: "4"
