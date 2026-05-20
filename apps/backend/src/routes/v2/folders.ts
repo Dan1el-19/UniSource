@@ -7,6 +7,7 @@ import {
   bulkRestoreFolders,
   bulkMoveFolders,
   getFolderForUser,
+  getDescendantFolderIds,
   type FolderRecord,
 } from '../../db/folders';
 import {
