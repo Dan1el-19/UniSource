@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'hono/utils/buffer';
+
 const PBKDF2_ITERATIONS = 100_000;
 const SALT_BYTES = 16;
 
@@ -44,5 +46,5 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const salt = fromHex(saltHex);
   const key = await importKey(password);
   const hash = await derive(key, salt);
-  return toHex(hash) === hashHex;
+  return await timingSafeEqual(toHex(hash), hashHex);
 }
