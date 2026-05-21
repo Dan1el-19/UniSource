@@ -175,7 +175,7 @@ export async function deactivateShareLinksForFile(
 /**
  * Atomically increments `download_count` only when the link is still under
  * the `max_downloads` cap. Returns true if the increment was applied — used
- * by the public download proxy to enforce the cap without a race condition
+ * by the public download redirect to enforce the cap without a race condition
  * (B5).
  */
 export async function incrementDownloadCount(

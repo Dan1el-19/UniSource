@@ -36,7 +36,8 @@ app.get('/releases/latest', zValidator('query', latestQuerySchema), async (c) =>
     c.env,
     svcConfig.bucketName,
     release.r2_key,
-    DOWNLOAD_URL_TTL_SECONDS
+    DOWNLOAD_URL_TTL_SECONDS,
+    release.name
   );
 
   return c.json({

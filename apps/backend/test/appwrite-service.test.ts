@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createAppwriteFileToken, getAppwriteFileMeta } from '../src/services/appwrite';
+import {
+  buildAppwriteFileDownloadUrl,
+  createAppwriteFileToken,
+  getAppwriteFileMeta,
+} from '../src/services/appwrite';
 
 const mockEnv = {
   APPWRITE_ENDPOINT: 'https://appwrite.example.com/v1',
@@ -114,5 +118,15 @@ describe('createAppwriteFileToken', () => {
       'https://appwrite.example.com/v1/tokens/buckets/bucket-id/files/file-id',
       expect.objectContaining({ method: 'POST' })
     );
+  });
+});
+
+describe('buildAppwriteFileDownloadUrl', () => {
+  it('includes the project query parameter required by browser Storage URLs', () => {
+    const url = new URL(buildAppwriteFileDownloadUrl(mockEnv, 'bucket-id', 'file-id', 'secret-token'));
+
+    expect(url.pathname).toBe('/v1/storage/buckets/bucket-id/files/file-id/download');
+    expect(url.searchParams.get('token')).toBe('secret-token');
+    expect(url.searchParams.get('project')).toBe('proj123');
   });
 });

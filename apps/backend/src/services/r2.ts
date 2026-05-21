@@ -54,17 +54,22 @@ const LIST_PARTS_MAX_PAGES = 10;
  * configured in the worker — defence-in-depth against accidental
  * cross-bucket access.
  */
-function bindingByBucketName(env: CloudflareBindings, bucketName: string): R2Bucket {
+function serviceByBucketName(bucketName: string) {
   for (const svc of Object.values(SERVICES)) {
     if (svc.bucketName === bucketName) {
-      const binding = (env as unknown as Record<string, R2Bucket | undefined>)[svc.bucketEnvKey];
-      if (!binding) {
-        throw new Error(`R2 binding not configured: ${svc.bucketEnvKey}`);
-      }
-      return binding;
+      return svc;
     }
   }
   throw new Error(`Unknown R2 bucket: ${bucketName} (not in SERVICES map)`);
+}
+
+function bindingByBucketName(env: CloudflareBindings, bucketName: string): R2Bucket {
+  const svc = serviceByBucketName(bucketName);
+  const binding = (env as unknown as Record<string, R2Bucket | undefined>)[svc.bucketEnvKey];
+  if (!binding) {
+    throw new Error(`R2 binding not configured: ${svc.bucketEnvKey}`);
+  }
+  return binding;
 }
 
 // ─── Object operations (R2 binding) ───────────────────────────────────────────
@@ -74,8 +79,11 @@ export async function headObject(
   bucket: string,
   key: string
 ): Promise<R2ObjectMeta | null> {
-  const obj = await bindingByBucketName(env, bucket).head(key);
-  return obj ? { size: obj.size } : null;
+  const svc = serviceByBucketName(bucket);
+  const binding = (env as unknown as Record<string, R2Bucket | undefined>)[svc.bucketEnvKey];
+  const obj = binding ? await binding.head(key) : null;
+  if (obj) return { size: obj.size };
+  return headObjectViaS3(env, bucket, key);
 }
 
 export async function deleteObject(
@@ -110,15 +118,48 @@ export async function generatePresignedGetUrl(
   env: CloudflareBindings,
   bucket: string,
   key: string,
-  expiresInSeconds = 900
+  expiresInSeconds = 900,
+  filename?: string
 ): Promise<PresignedDownloadResult> {
   const client = createR2SigningClient(env);
-  const presigned_url = await presign(client, r2ObjectUrl(env, bucket, key), 'GET', expiresInSeconds);
+  const url = new URL(r2ObjectUrl(env, bucket, key));
+  if (filename) {
+    url.searchParams.set('response-content-disposition', buildAttachmentDisposition(filename));
+  }
+  const presigned_url = await presign(client, url.toString(), 'GET', expiresInSeconds);
   return {
     presigned_url,
     storage_key: key,
     expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
   };
+}
+
+async function headObjectViaS3(
+  env: CloudflareBindings,
+  bucket: string,
+  key: string
+): Promise<R2ObjectMeta | null> {
+  const client = createR2SigningClient(env);
+  const url = await presign(client, r2ObjectUrl(env, bucket, key), 'HEAD', 60);
+  const response = await fetch(url, { method: 'HEAD' });
+
+  if (response.status === 404) {
+    response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+
+  if (!response.ok) {
+    response.body?.cancel().catch(() => undefined);
+    throw new Error(`HeadObject failed: ${response.status}`);
+  }
+
+  const contentLength = response.headers.get('Content-Length');
+  const size = Number(contentLength);
+  if (!Number.isFinite(size) || size < 0) {
+    throw new Error('HeadObject failed: missing or invalid Content-Length');
+  }
+
+  return { size };
 }
 
 // ─── Multipart Upload ─────────────────────────────────────────────────────────
@@ -254,4 +295,9 @@ function validatePartsForComplete(parts: MultipartPartInput[]): void {
       throw new Error(`completeMultipartUpload: empty ETag for PartNumber ${p.PartNumber}`);
     }
   }
+}
+
+function buildAttachmentDisposition(filename: string): string {
+  const fallback = filename.replace(/[^\x20-\x7E]+/g, '_').replace(/["\\]/g, '_') || 'download';
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }

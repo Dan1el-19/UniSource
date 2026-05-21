@@ -66,16 +66,12 @@ function parseLabels(value: string[] | undefined): string[] | undefined {
   return [...new Set(value.map((label) => label.trim()).filter(Boolean))];
 }
 
-function syncAdminLabel(labels: string[], role: string | undefined): string[] {
-  if (role === 'admin') {
-    return labels.includes('admin') ? labels : [...labels, 'admin'];
-  }
-
-  if (role && role !== 'admin') {
-    return labels.filter((label) => label !== 'admin');
-  }
-
-  return labels;
+function syncRoleLabels(labels: string[], role: string | undefined): string[] {
+  if (role === undefined) return labels;
+  const filtered = labels.filter((l) => l !== 'admin' && l !== 'plus');
+  if (role === 'admin') return [...filtered, 'admin'];
+  if (role === 'plus') return [...filtered, 'plus'];
+  return filtered;
 }
 
 function mapAdminUser(
@@ -344,7 +340,7 @@ admin.patch(
 
     const normalizedLabels = parseLabels(body.labels);
     if (normalizedLabels || body.role !== undefined) {
-      const syncedLabels = syncAdminLabel(normalizedLabels ?? user.labels, body.role);
+      const syncedLabels = syncRoleLabels(normalizedLabels ?? user.labels, body.role);
       user = await updateAppwriteUserLabels(c.env, userId, syncedLabels);
     }
 
@@ -408,7 +404,7 @@ admin.patch(
     if (!service) return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
 
     let user = await getAppwriteUser(c.env, userId);
-    const syncedLabels = syncAdminLabel(user.labels, role);
+    const syncedLabels = syncRoleLabels(user.labels, role);
     if (syncedLabels.join(',') !== user.labels.join(',')) {
       user = await updateAppwriteUserLabels(c.env, userId, syncedLabels);
     }
