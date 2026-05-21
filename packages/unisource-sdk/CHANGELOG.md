@@ -1,5 +1,11 @@
 # @unisource/sdk
 
+## 0.8.0
+
+### Minor Changes
+
+- Export v2 file and folder schemas required by backend deploy builds.
+
 ## 0.7.0
 
 ### Minor Changes
