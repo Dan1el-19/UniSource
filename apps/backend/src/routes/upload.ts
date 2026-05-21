@@ -293,7 +293,9 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
     return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
   }
 
-  // Verify the file physically exists in storage with the correct size
+  // Verify the file physically exists in storage with the correct size.
+  // Use record.bucket (captured at init) not service.default_bucket — admin may
+  // have changed the service's default bucket after this upload was created.
   let physicalSize: number | null = null;
   if (record.destination === 'r2') {
     const meta = await headObject(c.env, record.bucket, record.storage_key);

@@ -1,7 +1,7 @@
 import { exports } from 'cloudflare:workers'
 import { describe, expect, it, beforeAll } from 'vitest'
 import { applyD1Migrations, env } from 'cloudflare:test'
-import type { D1Migration } from '@cloudflare/vitest-pool-workers/config'
+import type { D1Migration } from '@cloudflare/vitest-pool-workers'
 
 const TEST_TIMEOUT_MS = 15000
 
@@ -11,9 +11,11 @@ const workerExports = exports as typeof exports & {
   }
 }
 
-declare module 'cloudflare:test' {
-  interface ProvidedEnv extends CloudflareBindings {
-    TEST_MIGRATIONS: D1Migration[]
+declare global {
+  namespace Cloudflare {
+    interface Env extends CloudflareBindings {
+      TEST_MIGRATIONS: D1Migration[]
+    }
   }
 }
 
