@@ -49,9 +49,20 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'defaul
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
-    c.set('serviceId', serviceId as WorkerVariables['serviceId']);
     c.set('authType', 'apikey' as WorkerVariables['authType']);
     c.set('isAdmin', isAdmin as WorkerVariables['isAdmin']);
+    c.set('service', {
+      id: serviceId,
+      name: serviceId,
+      default_bucket: serviceId === 'service-b' ? 'service-b' : 'unisource',
+      max_storage_bytes: 1000000000,
+      current_used_bytes: 0,
+      main_used_bytes: 0,
+      max_file_size_bytes: 500000000,
+      recommended_upload_destination: 'r2',
+      object_key_prefix: serviceId === 'service-b' ? '' : serviceId,
+      created_at: 0,
+    } as WorkerVariables['service']);
     await next();
   });
   app.route('/releases', releasesRouter);
@@ -547,9 +558,20 @@ describe('releases routes — admin enforcement', () => {
     const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
     app.use('*', async (c, next) => {
       c.set('userId', 'user-123' as WorkerVariables['userId']);
-      c.set('serviceId', 'default' as WorkerVariables['serviceId']);
       c.set('authType', 'jwt' as WorkerVariables['authType']);
       c.set('isAdmin', false as WorkerVariables['isAdmin']);
+      c.set('service', {
+        id: 'default',
+        name: 'default',
+        default_bucket: 'unisource',
+        max_storage_bytes: 1000000000,
+        current_used_bytes: 0,
+        main_used_bytes: 0,
+        max_file_size_bytes: 500000000,
+        recommended_upload_destination: 'r2',
+        object_key_prefix: 'default',
+        created_at: 0,
+      } as WorkerVariables['service']);
       await next();
     });
     app.use('/releases/*', requireAdminMiddleware);
