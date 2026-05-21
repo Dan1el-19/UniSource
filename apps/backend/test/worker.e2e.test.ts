@@ -1,5 +1,5 @@
 import { exports } from 'cloudflare:workers'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeAll } from 'vitest'
 
 const TEST_TIMEOUT_MS = 15000
 
@@ -10,6 +10,17 @@ const workerExports = exports as typeof exports & {
 }
 
 describe('usrc-backend worker', () => {
+  beforeAll(async () => {
+    // The test environment should have migrations run automatically.
+    // If the services table doesn't exist, that's a test environment issue.
+    // For now, we just ensure the worker is initialized.
+    try {
+      await workerExports.default.fetch(new Request('http://localhost/health'))
+    } catch {
+      // Ignore errors during initialization
+    }
+  }, TEST_TIMEOUT_MS)
+
   it('serves the health route', async () => {
     const response = await workerExports.default.fetch(new Request('http://localhost/health'))
     const payload = await response.json<{ status: string; timestamp: number }>()
