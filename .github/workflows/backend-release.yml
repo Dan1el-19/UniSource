@@ -43,6 +43,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Require SDK changeset
+        run: node scripts/require-sdk-changeset.mjs
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
