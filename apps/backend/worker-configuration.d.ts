@@ -1,3 +1,5 @@
+/// <reference path="./src/types/worker.d.ts" />
+
 // Cloudflare Worker bindings (injected by Wrangler)
 declare interface CloudflareBindings {
   usrc_d1: D1Database;
@@ -55,20 +57,4 @@ declare interface CloudflareBindings {
    * When set to "true", enables legacy env-var API key fallback in auth middleware.
    */
   LEGACY_API_KEYS_ENABLED?: string;
-}
-
-// Context variables set by authMiddleware — used as Hono Variables generic
-declare interface WorkerVariables {
-  userId: string;
-  serviceId: string;
-  authType: 'appwrite' | 'apikey';
-  isAdmin: boolean;
-  /**
-   * Role of the authenticated user against the resolved service. `system`
-   * indicates an API-key authenticated request (server-to-server).
-   */
-  serviceRole?: 'user' | 'plus' | 'admin' | 'system';
-  actorId?: string;
-  /** The Appwrite JWT used to authenticate this request. Set only for JWT-authenticated requests. */
-  appwriteJwt?: string;
 }
