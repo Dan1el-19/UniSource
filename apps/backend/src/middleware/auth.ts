@@ -1,4 +1,5 @@
 import { createMiddleware } from 'hono/factory';
+import { timingSafeEqual } from 'hono/utils/buffer';
 import { Client, Account } from 'node-appwrite';
 import { checkUserServiceAccess } from '../db/services';
 import { isKnownServiceId, getServiceConfig, DEFAULT_SERVICE_ID } from '../config/services';
@@ -199,7 +200,7 @@ export const authMiddleware = createMiddleware<{
       const config = getServiceConfig(serviceId)!;
       const expectedKey = (c.env as unknown as Record<string, string | undefined>)[config.apiKeyEnvVar];
 
-      if (expectedKey && apiKeyToken === expectedKey) {
+      if (expectedKey && apiKeyToken && await timingSafeEqual(apiKeyToken, expectedKey)) {
         c.set('userId', 'system');
         c.set('serviceId', serviceId);
         c.set('authType', 'apikey');
