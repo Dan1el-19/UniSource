@@ -1,4 +1,3 @@
-import { SERVICES } from '../config/services';
 import {
   createR2SigningClient,
   r2ObjectUrl,
@@ -49,25 +48,21 @@ export interface MultipartCompleteResult {
 const LIST_PARTS_MAX_PAGES = 10;
 
 /**
- * Resolve the R2Bucket binding for a given bucket name by walking the
- * SERVICES map. Throws if the bucket is unknown or the binding is not
- * configured in the worker — defence-in-depth against accidental
- * cross-bucket access.
+ * Map a bucket name to its Cloudflare Workers R2 binding env-var key.
+ * Convention: 'unisource' → 'PRIMARY_BUCKET' (legacy), everything else → uppercased + non-alphanumeric → '_' + '_BUCKET'.
  */
-function serviceByBucketName(bucketName: string) {
-  for (const svc of Object.values(SERVICES)) {
-    if (svc.bucketName === bucketName) {
-      return svc;
-    }
+function getBucketEnvKey(bucketName: string): string {
+  if (bucketName === 'unisource') {
+    return 'PRIMARY_BUCKET';
   }
-  throw new Error(`Unknown R2 bucket: ${bucketName} (not in SERVICES map)`);
+  return bucketName.toUpperCase().replace(/[^A-Z0-9]/g, '_') + '_BUCKET';
 }
 
 function bindingByBucketName(env: CloudflareBindings, bucketName: string): R2Bucket {
-  const svc = serviceByBucketName(bucketName);
-  const binding = (env as unknown as Record<string, R2Bucket | undefined>)[svc.bucketEnvKey];
+  const envKey = getBucketEnvKey(bucketName);
+  const binding = (env as unknown as Record<string, R2Bucket | undefined>)[envKey];
   if (!binding) {
-    throw new Error(`R2 binding not configured: ${svc.bucketEnvKey}`);
+    throw new Error(`R2 binding not configured: ${envKey} for bucket: ${bucketName}`);
   }
   return binding;
 }
@@ -79,10 +74,13 @@ export async function headObject(
   bucket: string,
   key: string
 ): Promise<R2ObjectMeta | null> {
-  const svc = serviceByBucketName(bucket);
-  const binding = (env as unknown as Record<string, R2Bucket | undefined>)[svc.bucketEnvKey];
-  const obj = binding ? await binding.head(key) : null;
-  if (obj) return { size: obj.size };
+  try {
+    const binding = bindingByBucketName(env, bucket);
+    const obj = await binding.head(key);
+    if (obj) return { size: obj.size };
+  } catch {
+    // Fall through to S3 — binding may be missing in tests or transiently fail.
+  }
   return headObjectViaS3(env, bucket, key);
 }
 
