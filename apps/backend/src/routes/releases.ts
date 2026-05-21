@@ -14,7 +14,8 @@ import {
   updateRelease,
   upsertReleaseSync,
 } from '../db/releases';
-import { buildReleaseStorageKey, getReleaseStoragePrefix, getServiceConfig } from '../config/services';
+import type { ServiceRecord } from '../db/services';
+import { buildReleaseStorageKey, getReleaseStoragePrefix } from '../services/storageKeys';
 import {
   abortMultipartUpload,
   completeMultipartUpload,
@@ -140,19 +141,15 @@ const multipartAbortBodySchema = z.object({
 });
 
 releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validationErrorHook), async (c) => {
-  const serviceId = c.get('serviceId');
+  const service = c.get('service')!;
   const userId = c.get('userId');
-  const svcConfig = getServiceConfig(serviceId);
-  if (!svcConfig) {
-    return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-  }
 
   const body = c.req.valid('json');
   const releaseId = crypto.randomUUID();
-  const r2Key = buildReleaseStorageKey(serviceId, body.filename);
+  const r2Key = buildReleaseStorageKey(service.object_key_prefix, body.filename);
   const { presigned_url, expires_at } = await generatePresignedPutUrl(
     c.env,
-    svcConfig.bucketName,
+    service.default_bucket,
     r2Key,
     'application/octet-stream',
     RELEASE_UPLOAD_TTL_SECONDS
@@ -160,7 +157,7 @@ releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validatio
 
   const release = await createRelease(c.env.usrc_d1, {
     id: releaseId,
-    service_id: serviceId,
+    service_id: service.id,
     name: body.name,
     size: 0,
     r2_key: r2Key,
@@ -184,9 +181,9 @@ releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validatio
 });
 
 releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, validationErrorHook), async (c) => {
-  const serviceId = c.get('serviceId');
+  const service = c.get('service')!;
   const { release_id, size } = c.req.valid('json');
-  const release = await getRelease(c.env.usrc_d1, release_id, serviceId);
+  const release = await getRelease(c.env.usrc_d1, release_id, service.id);
 
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
@@ -196,12 +193,7 @@ releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, v
     return c.json({ success: true, release_id, status: 'completed' });
   }
 
-  const svcConfig = getServiceConfig(serviceId);
-  if (!svcConfig) {
-    return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-  }
-
-  const meta = await headObject(c.env, svcConfig.bucketName, release.r2_key);
+  const meta = await headObject(c.env, service.default_bucket, release.r2_key);
   if (!meta) {
     await failRelease(c.env.usrc_d1, release_id);
     return c.json({ error: 'Conflict', message: 'Release object not found in storage' }, 409);
@@ -217,14 +209,14 @@ releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, v
     return c.json({ error: 'Conflict', message: 'Release could not be completed — it may have been cancelled' }, 409);
   }
 
-  await updateRelease(c.env.usrc_d1, release_id, serviceId, { size });
+  await updateRelease(c.env.usrc_d1, release_id, service.id, { size });
   return c.json({ success: true, release_id, status: 'completed' });
 });
 
 releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, validationErrorHook), async (c) => {
-  const serviceId = c.get('serviceId');
+  const service = c.get('service')!;
   const { release_id } = c.req.valid('json');
-  const release = await getRelease(c.env.usrc_d1, release_id, serviceId);
+  const release = await getRelease(c.env.usrc_d1, release_id, service.id);
 
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
@@ -240,7 +232,7 @@ releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, validatio
 
   const failed = await failRelease(c.env.usrc_d1, release_id);
   if (!failed) {
-    const current = await getRelease(c.env.usrc_d1, release_id, serviceId);
+    const current = await getRelease(c.env.usrc_d1, release_id, service.id);
     if (!current) {
       return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
     }
@@ -260,11 +252,11 @@ releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, validatio
  * before any sign/list/complete/abort operation.
  */
 async function getOwnedMultipartRelease(
-  c: { env: CloudflareBindings; get: (k: 'serviceId') => string },
+  c: { env: CloudflareBindings; get: (k: 'service') => ServiceRecord },
   uploadId: string
 ) {
-  const serviceId = c.get('serviceId');
-  const ctx = await getReleaseMultipartContext(c.env.usrc_d1, uploadId, serviceId);
+  const service = c.get('service');
+  const ctx = await getReleaseMultipartContext(c.env.usrc_d1, uploadId, service.id);
   if (!ctx) return { error: 'not_found' as const };
   return { ctx };
 }
@@ -279,20 +271,16 @@ releases.post(
   '/upload/multipart/create',
   zValidator('json', multipartCreateBodySchema, validationErrorHook),
   async (c) => {
-    const serviceId = c.get('serviceId');
+    const service = c.get('service')!;
     const userId = c.get('userId');
-    const svcConfig = getServiceConfig(serviceId);
-    if (!svcConfig) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-    }
 
     const body = c.req.valid('json');
     const releaseId = crypto.randomUUID();
-    const r2Key = buildReleaseStorageKey(serviceId, body.filename);
+    const r2Key = buildReleaseStorageKey(service.object_key_prefix, body.filename);
 
     let r2UploadId: string;
     try {
-      const result = await createMultipartUpload(c.env, svcConfig.bucketName, r2Key, body.mime_type);
+      const result = await createMultipartUpload(c.env, service.default_bucket, r2Key, body.mime_type);
       r2UploadId = result.upload_id;
     } catch (err) {
       console.error('[releases.multipart/create] R2 CreateMultipartUpload failed', err);
@@ -308,7 +296,7 @@ releases.post(
     try {
       await createMultipartRelease(c.env.usrc_d1, {
         id: releaseId,
-        service_id: serviceId,
+        service_id: service.id,
         name: body.name,
         r2_key: r2Key,
         tags: body.tags,
@@ -319,7 +307,7 @@ releases.post(
       });
     } catch (err) {
       // Release the orphaned R2 multipart upload if D1 insert fails.
-      await abortMultipartUpload(c.env, svcConfig.bucketName, r2Key, r2UploadId).catch(() => undefined);
+      await abortMultipartUpload(c.env, service.default_bucket, r2Key, r2UploadId).catch(() => undefined);
       throw err;
     }
 
@@ -331,7 +319,7 @@ releases.post(
         upload_id: releaseId,
         r2_upload_id: r2UploadId,
         key: r2Key,
-        bucket: svcConfig.bucketName,
+        bucket: service.default_bucket,
         expires_at,
       },
       201
@@ -349,7 +337,7 @@ releases.get(
   zValidator('query', multipartSignPartQuerySchema, validationErrorHook),
   async (c) => {
     const { upload_id, part_number } = c.req.valid('query');
-    const serviceId = c.get('serviceId');
+    const service = c.get('service')!;
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
@@ -361,14 +349,9 @@ releases.get(
       return c.json({ error: 'Conflict', message: `Release is in state: ${ctx.upload_status}` }, 409);
     }
 
-    const svcConfig = getServiceConfig(serviceId);
-    if (!svcConfig) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-    }
-
     const signed = await signUploadPart(
       c.env,
-      svcConfig.bucketName,
+      service.default_bucket,
       ctx.r2_key,
       ctx.r2_upload_id,
       part_number,
@@ -389,7 +372,7 @@ releases.get(
   zValidator('query', multipartListPartsQuerySchema, validationErrorHook),
   async (c) => {
     const { upload_id } = c.req.valid('query');
-    const serviceId = c.get('serviceId');
+    const service = c.get('service')!;
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
@@ -397,14 +380,9 @@ releases.get(
     }
     const { ctx } = result;
 
-    const svcConfig = getServiceConfig(serviceId);
-    if (!svcConfig) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-    }
-
     const parts = await listUploadedParts(
       c.env,
-      svcConfig.bucketName,
+      service.default_bucket,
       ctx.r2_key,
       ctx.r2_upload_id
     );
@@ -424,7 +402,7 @@ releases.post(
   zValidator('json', multipartCompleteBodySchema, validationErrorHook),
   async (c) => {
     const { upload_id, parts } = c.req.valid('json');
-    const serviceId = c.get('serviceId');
+    const service = c.get('service')!;
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
@@ -439,15 +417,10 @@ releases.post(
       return c.json({ error: 'Conflict', message: `Release is in state: ${ctx.upload_status}` }, 409);
     }
 
-    const svcConfig = getServiceConfig(serviceId);
-    if (!svcConfig) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-    }
-
     try {
       await completeMultipartUpload(
         c.env,
-        svcConfig.bucketName,
+        service.default_bucket,
         ctx.r2_key,
         ctx.r2_upload_id,
         parts
@@ -460,7 +433,7 @@ releases.post(
       );
     }
 
-    const meta = await headObject(c.env, svcConfig.bucketName, ctx.r2_key);
+    const meta = await headObject(c.env, service.default_bucket, ctx.r2_key);
     if (!meta) {
       await failRelease(c.env.usrc_d1, upload_id);
       return c.json({ error: 'Conflict', message: 'Release object not found in storage' }, 409);
@@ -468,7 +441,7 @@ releases.post(
 
     const completed = await completeRelease(c.env.usrc_d1, upload_id);
     if (!completed) {
-      const refreshed = await getRelease(c.env.usrc_d1, upload_id, serviceId);
+      const refreshed = await getRelease(c.env.usrc_d1, upload_id, service.id);
       if (refreshed?.upload_status === 'completed') {
         return c.json({ success: true, release_id: upload_id, status: 'completed' });
       }
@@ -478,7 +451,7 @@ releases.post(
       );
     }
 
-    await updateRelease(c.env.usrc_d1, upload_id, serviceId, { size: meta.size });
+    await updateRelease(c.env.usrc_d1, upload_id, service.id, { size: meta.size });
     return c.json({ success: true, release_id: upload_id, status: 'completed' });
   }
 );
@@ -492,7 +465,7 @@ releases.delete(
   zValidator('json', multipartAbortBodySchema, validationErrorHook),
   async (c) => {
     const { upload_id } = c.req.valid('json');
-    const serviceId = c.get('serviceId');
+    const service = c.get('service')!;
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
@@ -507,14 +480,9 @@ releases.delete(
       return c.json({ error: 'Conflict', message: `Release is already in state: ${ctx.upload_status}` }, 409);
     }
 
-    const svcConfig = getServiceConfig(serviceId);
-    if (!svcConfig) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-    }
-
     await abortMultipartUpload(
       c.env,
-      svcConfig.bucketName,
+      service.default_bucket,
       ctx.r2_key,
       ctx.r2_upload_id
     ).catch(() => undefined);
@@ -526,7 +494,8 @@ releases.delete(
 );
 
 releases.get('/latest', async (c) => {
-  const release = await getLatestRelease(c.env.usrc_d1, c.get('serviceId'));
+  const service = c.get('service')!;
+  const release = await getLatestRelease(c.env.usrc_d1, service.id);
   if (!release) {
     return c.json({ error: 'Not Found', message: 'No completed release found' }, 404);
   }
@@ -534,8 +503,9 @@ releases.get('/latest', async (c) => {
 });
 
 releases.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
+  const service = c.get('service')!;
   const query = c.req.valid('query');
-  const result = await listReleases(c.env.usrc_d1, c.get('serviceId'), {
+  const result = await listReleases(c.env.usrc_d1, service.id, {
     limit: query.limit,
     cursor: query.cursor,
   });
@@ -543,7 +513,8 @@ releases.get('/', zValidator('query', listQuerySchema, validationErrorHook), asy
 });
 
 releases.get('/:id', async (c) => {
-  const release = await getRelease(c.env.usrc_d1, c.req.param('id'), c.get('serviceId'));
+  const service = c.get('service')!;
+  const release = await getRelease(c.env.usrc_d1, c.req.param('id'), service.id);
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
   }
@@ -551,7 +522,8 @@ releases.get('/:id', async (c) => {
 });
 
 releases.patch('/:id', zValidator('json', updateBodySchema, validationErrorHook), async (c) => {
-  const updated = await updateRelease(c.env.usrc_d1, c.req.param('id'), c.get('serviceId'), c.req.valid('json'));
+  const service = c.get('service')!;
+  const updated = await updateRelease(c.env.usrc_d1, c.req.param('id'), service.id, c.req.valid('json'));
   if (!updated) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
   }
@@ -559,31 +531,27 @@ releases.patch('/:id', zValidator('json', updateBodySchema, validationErrorHook)
 });
 
 releases.delete('/:id', async (c) => {
-  const serviceId = c.get('serviceId');
+  const service = c.get('service')!;
   const releaseId = c.req.param('id');
-  const release = await getRelease(c.env.usrc_d1, releaseId, serviceId);
+  const release = await getRelease(c.env.usrc_d1, releaseId, service.id);
 
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
   }
 
   if (release.upload_status === 'completed') {
-    const svcConfig = getServiceConfig(serviceId);
-    if (!svcConfig) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-    }
-    await deleteObject(c.env, svcConfig.bucketName, release.r2_key);
+    await deleteObject(c.env, service.default_bucket, release.r2_key);
   }
 
-  await deleteRelease(c.env.usrc_d1, releaseId, serviceId);
+  await deleteRelease(c.env.usrc_d1, releaseId, service.id);
   return c.json({ success: true, release_id: releaseId });
 });
 
 releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), async (c) => {
-  const serviceId = c.get('serviceId');
+  const service = c.get('service')!;
   const userId = c.get('userId');
   const body = c.req.valid('json');
-  const storagePrefix = getReleaseStoragePrefix(serviceId);
+  const storagePrefix = getReleaseStoragePrefix(service.object_key_prefix);
   const results = [];
 
   // S7: enforce that the prefix is meaningfully scoped to the service. When
@@ -607,7 +575,7 @@ releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), 
     const releaseId = manifest.id ?? crypto.randomUUID();
     await upsertReleaseSync(c.env.usrc_d1, {
       id: releaseId,
-      service_id: serviceId,
+      service_id: service.id,
       name: manifest.name,
       size: manifest.size,
       r2_key: manifest.r2_key,
