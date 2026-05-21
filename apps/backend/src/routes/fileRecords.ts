@@ -20,7 +20,6 @@ import {
   deleteAppwriteFile,
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
-import { getServiceConfig } from '../config/services';
 import { deactivateShareLinksForFile } from '../db/shareLinks';
 import {
   FILES_DEFAULT_LIMIT,
@@ -184,10 +183,9 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validati
 
   if (record.storage_destination === 'r2') {
     try {
-      const svcConfig = getServiceConfig(serviceId)!;
       const { presigned_url, expires_at } = await generatePresignedGetUrl(
         c.env,
-        svcConfig.bucketName,  // use config, not stored bucket name from DB
+        record.bucket,
         record.storage_key,
         DOWNLOAD_URL_TTL_SECONDS,
         record.filename
@@ -246,8 +244,7 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
   if (permanent) {
     try {
       if (record.storage_destination === 'r2') {
-        const svcConfig = getServiceConfig(serviceId)!;
-        await deleteObject(c.env, svcConfig.bucketName, record.storage_key);
+        await deleteObject(c.env, record.bucket, record.storage_key);
       } else {
         const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
         if (!appwriteFileId) {

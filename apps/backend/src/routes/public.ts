@@ -11,7 +11,6 @@ import {
   createAppwriteFileToken,
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
-import { getServiceConfig } from '../config/services';
 import { createSignedToken, verifySignedToken } from '../utils/signedTokens';
 import { rateLimit } from '../middleware/ratelimit';
 
@@ -41,10 +40,9 @@ async function generateDownloadUrl(
   filename: string
 ): Promise<{ download_url: string; url_expires_at: number }> {
   if (storageDestination === 'r2') {
-    const svcConfig = getServiceConfig(serviceId)!;
     const { presigned_url, expires_at } = await generatePresignedGetUrl(
       env,
-      svcConfig.bucketName,
+      bucket,
       storageKey,
       DOWNLOAD_URL_TTL,
       filename
