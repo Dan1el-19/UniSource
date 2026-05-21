@@ -1,5 +1,7 @@
 import { exports } from 'cloudflare:workers'
 import { describe, expect, it, beforeAll } from 'vitest'
+import { applyD1Migrations, env } from 'cloudflare:test'
+import type { D1Migration } from '@cloudflare/vitest-pool-workers/config'
 
 const TEST_TIMEOUT_MS = 15000
 
@@ -9,16 +11,15 @@ const workerExports = exports as typeof exports & {
   }
 }
 
+declare module 'cloudflare:test' {
+  interface ProvidedEnv extends CloudflareBindings {
+    TEST_MIGRATIONS: D1Migration[]
+  }
+}
+
 describe('app-backend worker', () => {
   beforeAll(async () => {
-    // The test environment should have migrations run automatically.
-    // If the services table doesn't exist, that's a test environment issue.
-    // For now, we just ensure the worker is initialized.
-    try {
-      await workerExports.default.fetch(new Request('http://localhost/health'))
-    } catch {
-      // Ignore errors during initialization
-    }
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS)
   }, TEST_TIMEOUT_MS)
 
   it('serves the health route', async () => {
