@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { UploadRecord } from '../src/db/files';
+import type { ServiceRecord } from '../src/db/services';
 
 // Module mocks — must be declared before imports of the mocked modules
 vi.mock('../src/services/r2', async (importOriginal) => {
@@ -112,11 +113,39 @@ const baseEnv = {
   SECONDARY_SERVICE_API_KEY: 'blok-api-key',
 } as unknown as CloudflareBindings;
 
+const defaultServiceRecord: ServiceRecord = {
+  id: 'default',
+  name: 'UniSource',
+  default_bucket: 'unisource',
+  max_storage_bytes: 16106127360,
+  current_used_bytes: 0,
+  main_used_bytes: 0,
+  max_file_size_bytes: 5_368_709_120,
+  recommended_upload_destination: 'r2',
+  object_key_prefix: 'default',
+  created_at: 0,
+};
+
+const blokServiceRecord: ServiceRecord = {
+  id: 'service-b',
+  name: 'Service B',
+  default_bucket: 'service-b',
+  max_storage_bytes: 107374182400,
+  current_used_bytes: 0,
+  main_used_bytes: 0,
+  max_file_size_bytes: 2147483648,
+  recommended_upload_destination: 'r2',
+  object_key_prefix: '',
+  created_at: 0,
+};
+
 function buildUploadApp(userId = 'system', serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+  const service = serviceId === 'default' ? defaultServiceRecord : blokServiceRecord;
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
     c.set('serviceId', serviceId as WorkerVariables['serviceId']);
+    c.set('service', service);
     c.set('authType', 'apikey' as WorkerVariables['authType']);
     c.set('isAdmin', true as WorkerVariables['isAdmin']);
     await next();

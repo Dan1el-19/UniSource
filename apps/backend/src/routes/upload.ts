@@ -14,7 +14,7 @@ import {
   abortMultipartUpload,
 } from '../services/r2';
 import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
-import { getServiceConfig, buildStorageKey, buildAppwriteStorageKey } from '../config/services';
+import { buildStorageKey, buildAppwriteStorageKey } from '../services/storageKeys';
 import { canWriteMainStorage, mainStorageForbiddenResponse } from '../middleware/mainStorageGuard';
 import {
   type UploadAppwriteInitResponse,
@@ -84,6 +84,7 @@ upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2Ini
   const body = c.req.valid('json');
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
+  const service = c.get('service')!;
 
   // S1: only admin/plus/system can target main storage.
   if (body.is_main_storage === true && !canWriteMainStorage(c)) {
@@ -123,21 +124,20 @@ upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2Ini
     );
   }
 
-  const svcConfig = getServiceConfig(serviceId)!;
-  if (size > svcConfig.maxFileSizeBytes) {
+  if (size > service.max_file_size_bytes) {
     return c.json(
-      { error: 'Payload Too Large', message: `File exceeds maximum size of ${svcConfig.maxFileSizeBytes} bytes` },
+      { error: 'Payload Too Large', message: `File exceeds maximum size of ${service.max_file_size_bytes} bytes` },
       413
     );
   }
 
   const uploadId = crypto.randomUUID();
   const ext = filename.includes('.') ? filename.split('.').pop() : '';
-  const storageKey = buildStorageKey(serviceId, getDatePath(), uploadId, ext ?? '');
+  const storageKey = buildStorageKey(service.object_key_prefix, getDatePath(), uploadId, ext ?? '');
 
   const { presigned_url, expires_at } = await generatePresignedPutUrl(
     c.env,
-    svcConfig.bucketName,    // from config — clients cannot override bucket
+    service.default_bucket,    // from config — clients cannot override bucket
     storageKey,
     mime_type,
     UPLOAD_TTL_SECONDS
@@ -153,7 +153,7 @@ upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2Ini
     mime_type,
     destination: 'r2',
     storage_key: storageKey,
-    bucket: svcConfig.bucketName,
+    bucket: service.default_bucket,
     presigned_url,
     expires_at,
     is_main_storage: body.is_main_storage === true,
@@ -164,7 +164,7 @@ upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2Ini
     destination: 'r2',
     presigned_url,
     storage_key: storageKey,
-    bucket: svcConfig.bucketName,
+    bucket: service.default_bucket,
     expires_at,
   }, 201);
 });
@@ -176,6 +176,7 @@ upload.post('/appwrite/init', rateLimit('upload-init'), zValidator('json', uploa
   const body = c.req.valid('json');
   const serviceId = c.get('serviceId');
   const userId = c.get('userId');
+  const service = c.get('service')!;
 
   // S1: only admin/plus/system can target main storage.
   if (body.is_main_storage === true && !canWriteMainStorage(c)) {
@@ -220,7 +221,7 @@ upload.post('/appwrite/init', rateLimit('upload-init'), zValidator('json', uploa
   // share the same `<prefix>/uploads/<datePath>/<id>` shape as R2 so
   // extractAppwriteFileIdFromStorageKey() keeps working.
   const fileId = crypto.randomUUID();
-  const storageKey = buildAppwriteStorageKey(serviceId, getDatePath(), fileId);
+  const storageKey = buildAppwriteStorageKey(service.object_key_prefix, getDatePath(), fileId);
 
   const config = getAppwriteUploadConfig(c.env, fileId, UPLOAD_TTL_SECONDS);
 
@@ -295,8 +296,7 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   // Verify the file physically exists in storage with the correct size
   let physicalSize: number | null = null;
   if (record.destination === 'r2') {
-    const svcConfig = getServiceConfig(record.service_id)!;
-    const meta = await headObject(c.env, svcConfig.bucketName, record.storage_key);
+    const meta = await headObject(c.env, record.bucket, record.storage_key);
     physicalSize = meta?.size ?? null;
   } else {
     const fileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
@@ -461,6 +461,7 @@ upload.post(
     const body = c.req.valid('json');
     const serviceId = c.get('serviceId');
     const userId = c.get('userId');
+    const service = c.get('service')!;
 
     // S1: only admin/plus/system can target main storage.
     if (body.is_main_storage === true && !canWriteMainStorage(c)) {
@@ -469,10 +470,9 @@ upload.post(
 
     const { filename, size, mime_type, folder_id } = body;
 
-    const svcConfig = getServiceConfig(serviceId)!;
-    if (size > svcConfig.maxFileSizeBytes) {
+    if (size > service.max_file_size_bytes) {
       return c.json(
-        { error: 'Payload Too Large', message: `File exceeds maximum size of ${svcConfig.maxFileSizeBytes} bytes` },
+        { error: 'Payload Too Large', message: `File exceeds maximum size of ${service.max_file_size_bytes} bytes` },
         413
       );
     }
@@ -511,11 +511,11 @@ upload.post(
 
     const uploadRecordId = crypto.randomUUID();
     const ext = filename.includes('.') ? filename.split('.').pop() : '';
-    const storageKey = buildStorageKey(serviceId, getDatePath(), uploadRecordId, ext ?? '');
+    const storageKey = buildStorageKey(service.object_key_prefix, getDatePath(), uploadRecordId, ext ?? '');
 
     let r2UploadId: string;
     try {
-      const result = await createMultipartUpload(c.env, svcConfig.bucketName, storageKey, mime_type);
+      const result = await createMultipartUpload(c.env, service.default_bucket, storageKey, mime_type);
       r2UploadId = result.upload_id;
     } catch (err) {
       // Release quota if R2 CreateMultipartUpload fails.
@@ -540,7 +540,7 @@ upload.post(
       mime_type,
       destination: 'r2',
       storage_key: storageKey,
-      bucket: svcConfig.bucketName,
+      bucket: service.default_bucket,
       presigned_url: null,
       expires_at,
       is_main_storage: body.is_main_storage === true,
@@ -553,7 +553,7 @@ upload.post(
         upload_id: uploadRecordId,
         r2_upload_id: r2UploadId,
         key: storageKey,
-        bucket: svcConfig.bucketName,
+        bucket: service.default_bucket,
         expires_at,
       },
       201
