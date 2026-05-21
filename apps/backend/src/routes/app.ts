@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { getLatestReleaseByTag } from '../db/releases';
-import { getServiceConfig } from '../config/services';
 import { generatePresignedGetUrl } from '../services/r2';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
@@ -16,9 +15,9 @@ const latestQuerySchema = z.object({
 const app = new Hono<HonoEnv>();
 
 app.get('/releases/latest', zValidator('query', latestQuerySchema), async (c) => {
-  const serviceId = c.get('serviceId');
   const { channel } = c.req.valid('query');
 
+  const serviceId = c.get('serviceId');
   const release = await getLatestReleaseByTag(c.env.APP_DB, serviceId, channel);
   if (!release) {
     return c.json(
@@ -27,14 +26,10 @@ app.get('/releases/latest', zValidator('query', latestQuerySchema), async (c) =>
     );
   }
 
-  const svcConfig = getServiceConfig(serviceId);
-  if (!svcConfig) {
-    return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
-  }
-
+  const service = c.get('service')!;
   const { presigned_url, expires_at } = await generatePresignedGetUrl(
     c.env,
-    svcConfig.bucketName,
+    service.default_bucket,
     release.r2_key,
     DOWNLOAD_URL_TTL_SECONDS,
     release.name
