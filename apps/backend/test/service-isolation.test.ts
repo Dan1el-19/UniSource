@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { describe, it, expect } from 'vitest';
 import type { UploadRecord } from '../src/db/files';
+import type { ServiceRecord } from '../src/db/services';
 import files from '../src/routes/files';
 import upload from '../src/routes/upload';
 
@@ -26,15 +27,46 @@ function mockD1WithRecord(record: UploadRecord | null): D1Database {
 }
 
 // ---------------------------------------------------------------------------
+// Service fixtures
+// ---------------------------------------------------------------------------
+const usrcServiceRecord: ServiceRecord = {
+	id: 'usrc',
+	name: 'UniSource',
+	default_bucket: 'unisource',
+	max_storage_bytes: 16106127360,
+	current_used_bytes: 0,
+	main_used_bytes: 0,
+	max_file_size_bytes: 5_368_709_120,
+	recommended_upload_destination: 'r2',
+	object_key_prefix: 'usrc',
+	created_at: 0,
+};
+
+const blokServiceRecord: ServiceRecord = {
+	id: 'chmura-blokserwis',
+	name: 'Chmura Blokserwis',
+	default_bucket: 'chmura-blokserwis',
+	max_storage_bytes: 107374182400,
+	current_used_bytes: 0,
+	main_used_bytes: 0,
+	max_file_size_bytes: 2147483648,
+	recommended_upload_destination: 'r2',
+	object_key_prefix: '',
+	created_at: 0,
+};
+
+// ---------------------------------------------------------------------------
 // Helpers: build a test Hono app with pre-set serviceId / userId in context
 // ---------------------------------------------------------------------------
 function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+	const service = serviceId === 'usrc' ? usrcServiceRecord : blokServiceRecord;
 
 	// Inject auth context the same way the real authMiddleware would
 	app.use('*', async (c, next) => {
 		c.set('serviceId', serviceId as WorkerVariables['serviceId']);
 		c.set('userId', userId as WorkerVariables['userId']);
+		c.set('service', service);
 		c.set('authType', 'apikey' as WorkerVariables['authType']);
 		await next();
 	});
@@ -47,10 +79,12 @@ function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 
 function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+	const service = serviceId === 'usrc' ? usrcServiceRecord : blokServiceRecord;
 
 	app.use('*', async (c, next) => {
 		c.set('serviceId', serviceId as WorkerVariables['serviceId']);
 		c.set('userId', userId as WorkerVariables['userId']);
+		c.set('service', service);
 		c.set('authType', 'apikey' as WorkerVariables['authType']);
 		await next();
 	});
