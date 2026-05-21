@@ -30,6 +30,18 @@
         <input id="default_bucket" name="default_bucket" type="text" required value={s.default_bucket} />
       </div>
       <div class="field">
+        <label for="object_key_prefix">Object Key Prefix <span class="hint">(optional)</span></label>
+        <input
+          id="object_key_prefix"
+          name="object_key_prefix"
+          type="text"
+          pattern="[a-z0-9_/-]*"
+          maxlength="64"
+          value={s.object_key_prefix}
+        />
+        <span class="hint">Changing this affects only NEW uploads. Existing files keep their stored keys.</span>
+      </div>
+      <div class="field">
         <label for="max_storage_bytes">Max Storage (bytes) <span class="hint">= {fmtBytes(s.max_storage_bytes)}</span></label>
         <input id="max_storage_bytes" name="max_storage_bytes" type="number" required min="1" value={s.max_storage_bytes} />
       </div>

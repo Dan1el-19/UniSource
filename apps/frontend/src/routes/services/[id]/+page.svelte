@@ -29,6 +29,10 @@
         <dd>{s.default_bucket}</dd>
       </div>
       <div class="setting-row">
+        <dt>Object key prefix</dt>
+        <dd>{s.object_key_prefix || '(none)'}</dd>
+      </div>
+      <div class="setting-row">
         <dt>Max file size</dt>
         <dd>{fmtBytes(s.max_file_size_bytes)}</dd>
       </div>

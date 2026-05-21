@@ -5,6 +5,7 @@ import { fail, redirect } from '@sveltejs/kit';
 export const actions: Actions = {
   default: async ({ request }) => {
     const form = await request.formData();
+    const object_key_prefix = (form.get('object_key_prefix') as string | null)?.trim() || '';
     const body = {
       id: form.get('id') as string,
       name: form.get('name') as string,
@@ -12,6 +13,7 @@ export const actions: Actions = {
       max_storage_bytes: Number(form.get('max_storage_bytes')),
       max_file_size_bytes: Number(form.get('max_file_size_bytes')),
       recommended_upload_destination: (form.get('recommended_upload_destination') as 'r2' | 'appwrite' | 'hybrid') || 'r2',
+      object_key_prefix,
     };
 
     if (!body.id || !body.name || !body.default_bucket) {

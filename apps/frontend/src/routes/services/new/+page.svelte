@@ -12,6 +12,12 @@
     <div class="alert-error">{form.error}</div>
   {/if}
 
+  <div class="alert-warn">
+    <strong>Important:</strong> After creating a service, register the matching R2 bucket binding in <code>apps/backend/wrangler.jsonc</code>
+    and redeploy the backend, otherwise uploads will fail with <code>R2 binding not configured</code>.
+    The binding key follows the convention <code>&lt;BUCKET_NAME&gt;_BUCKET</code> (uppercased, non-alphanumerics replaced with <code>_</code>).
+  </div>
+
   <form method="POST" class="card form-card">
     <div class="form-grid">
       <div class="field">
@@ -26,6 +32,18 @@
       <div class="field">
         <label for="default_bucket">Default R2 Bucket</label>
         <input id="default_bucket" name="default_bucket" type="text" required placeholder="my-bucket" />
+      </div>
+      <div class="field">
+        <label for="object_key_prefix">Object Key Prefix <span class="hint">(optional)</span></label>
+        <input
+          id="object_key_prefix"
+          name="object_key_prefix"
+          type="text"
+          pattern="[a-z0-9_/-]*"
+          maxlength="64"
+          placeholder="e.g. tenant1 (leave empty for none)"
+        />
+        <span class="hint">Lowercase, digits, hyphens, underscores, and slashes only. Files are stored under <code>&lt;prefix&gt;/uploads/...</code></span>
       </div>
       <div class="field">
         <label for="max_storage_bytes">Max Storage (bytes)</label>
@@ -76,5 +94,8 @@
       width: 100%;
       justify-content: center;
     }
+  }
+  :global(.alert-warn) {
+    margin-bottom: 16px;
   }
 </style>

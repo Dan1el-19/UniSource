@@ -20,6 +20,7 @@ export interface Service {
   main_used_bytes: number;
   max_file_size_bytes: number;
   recommended_upload_destination: 'r2' | 'appwrite' | 'hybrid';
+  object_key_prefix: string;
   cloudflare_config: Record<string, unknown> | null;
   created_at: number;
 }
