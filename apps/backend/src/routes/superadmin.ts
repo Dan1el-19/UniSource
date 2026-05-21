@@ -42,6 +42,7 @@ superadmin.get('/services', async (c) => {
       main_used_bytes: number;
       max_file_size_bytes: number;
       recommended_upload_destination: string;
+      object_key_prefix: string;
       cloudflare_config: string | null;
       created_at: number;
     }>();
@@ -61,6 +62,7 @@ const createServiceSchema = z.object({
   max_storage_bytes: z.number().int().positive(),
   max_file_size_bytes: z.number().int().positive(),
   recommended_upload_destination: z.enum(['r2', 'appwrite', 'hybrid']).optional().default('r2'),
+  object_key_prefix: z.string().max(64).regex(/^[a-z0-9_/-]*$/).optional().default(''),
 });
 
 superadmin.post('/services', zValidator('json', createServiceSchema), async (c) => {
@@ -70,10 +72,10 @@ superadmin.post('/services', zValidator('json', createServiceSchema), async (c) 
   try {
     await c.env.usrc_d1
       .prepare(
-        `INSERT INTO services (id, name, default_bucket, max_storage_bytes, current_used_bytes, main_used_bytes, max_file_size_bytes, recommended_upload_destination, created_at)
-         VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)`
+        `INSERT INTO services (id, name, default_bucket, max_storage_bytes, current_used_bytes, main_used_bytes, max_file_size_bytes, recommended_upload_destination, object_key_prefix, created_at)
+         VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`
       )
-      .bind(body.id, body.name, body.default_bucket, body.max_storage_bytes, body.max_file_size_bytes, body.recommended_upload_destination, now)
+      .bind(body.id, body.name, body.default_bucket, body.max_storage_bytes, body.max_file_size_bytes, body.recommended_upload_destination, body.object_key_prefix, now)
       .run();
   } catch (e: unknown) {
     if (e instanceof Error && e.message.includes('UNIQUE')) {
@@ -97,6 +99,7 @@ const patchServiceSchema = z.object({
   max_storage_bytes: z.number().int().positive().optional(),
   max_file_size_bytes: z.number().int().positive().optional(),
   recommended_upload_destination: z.enum(['r2', 'appwrite', 'hybrid']).optional(),
+  object_key_prefix: z.string().max(64).regex(/^[a-z0-9_/-]*$/).optional(),
 });
 
 superadmin.patch('/services/:id', zValidator('json', patchServiceSchema), async (c) => {
@@ -110,6 +113,7 @@ superadmin.patch('/services/:id', zValidator('json', patchServiceSchema), async 
   if (body.max_storage_bytes !== undefined) { sets.push('max_storage_bytes = ?'); vals.push(body.max_storage_bytes); }
   if (body.max_file_size_bytes !== undefined) { sets.push('max_file_size_bytes = ?'); vals.push(body.max_file_size_bytes); }
   if (body.recommended_upload_destination !== undefined) { sets.push('recommended_upload_destination = ?'); vals.push(body.recommended_upload_destination); }
+  if (body.object_key_prefix !== undefined) { sets.push('object_key_prefix = ?'); vals.push(body.object_key_prefix); }
 
   if (sets.length === 0) {
     const service = await getServiceDetails(c.env.usrc_d1, id);
