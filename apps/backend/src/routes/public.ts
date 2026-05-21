@@ -33,7 +33,6 @@ function validationErrorHook(
 
 async function generateDownloadUrl(
   env: CloudflareBindings,
-  serviceId: string,
   storageDestination: string,
   storageKey: string,
   bucket: string,
@@ -121,7 +120,6 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
   try {
     const { url_expires_at } = await generateDownloadUrl(
       c.env,
-      link.service_id,
       file.storage_destination,
       file.storage_key,
       file.bucket,
@@ -181,7 +179,6 @@ publicRouter.post(
     try {
       const { url_expires_at } = await generateDownloadUrl(
         c.env,
-        link.service_id,
         file.storage_destination,
         file.storage_key,
         file.bucket,
@@ -245,7 +242,6 @@ publicRouter.get(
     try {
       const { download_url } = await generateDownloadUrl(
         c.env,
-        link.service_id,
         file.storage_destination,
         file.storage_key,
         file.bucket,
