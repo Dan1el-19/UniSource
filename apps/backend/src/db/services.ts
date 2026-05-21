@@ -42,6 +42,7 @@ export interface ServiceRecord {
   main_used_bytes: number;
   max_file_size_bytes: number;
   recommended_upload_destination: 'r2' | 'appwrite' | 'hybrid';
+  object_key_prefix: string;
   created_at: number;
 }
 
