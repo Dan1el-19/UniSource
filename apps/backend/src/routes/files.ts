@@ -173,7 +173,8 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validation
 				c.env,
 				record.bucket,
 				record.storage_key,
-				DOWNLOAD_URL_TTL_SECONDS
+				DOWNLOAD_URL_TTL_SECONDS,
+				record.filename
 			);
 
 			c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

@@ -33,7 +33,7 @@ export function r2ObjectUrl(env: CloudflareBindings, bucket: string, key: string
 export async function presign(
   client: AwsClient,
   url: string,
-  method: 'GET' | 'PUT',
+  method: 'GET' | 'HEAD' | 'PUT',
   expiresInSeconds: number
 ): Promise<string> {
   const u = new URL(url);

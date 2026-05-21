@@ -208,6 +208,7 @@ export function buildAppwriteFileDownloadUrl(
   );
 
   downloadUrl.searchParams.set('token', token);
+  downloadUrl.searchParams.set('project', env.APPWRITE_PROJECT_ID);
   return downloadUrl.toString();
 }
 

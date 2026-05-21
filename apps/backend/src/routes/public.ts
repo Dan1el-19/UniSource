@@ -37,7 +37,8 @@ async function generateDownloadUrl(
   serviceId: string,
   storageDestination: string,
   storageKey: string,
-  bucket: string
+  bucket: string,
+  filename: string
 ): Promise<{ download_url: string; url_expires_at: number }> {
   if (storageDestination === 'r2') {
     const svcConfig = getServiceConfig(serviceId)!;
@@ -45,7 +46,8 @@ async function generateDownloadUrl(
       env,
       svcConfig.bucketName,
       storageKey,
-      DOWNLOAD_URL_TTL
+      DOWNLOAD_URL_TTL,
+      filename
     );
     return { download_url: presigned_url, url_expires_at: expires_at };
   }
@@ -86,11 +88,6 @@ async function createPublicDownloadUrl(
   return downloadUrl.toString();
 }
 
-function buildAttachmentDisposition(filename: string): string {
-  const fallback = filename.replace(/[^\x20-\x7E]+/g, '_').replace(/["\\]/g, '_') || 'download';
-  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
-}
-
 const publicRouter = new Hono<HonoEnv>();
 
 publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugParam, validationErrorHook), async (c) => {
@@ -129,7 +126,8 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
       link.service_id,
       file.storage_destination,
       file.storage_key,
-      file.bucket
+      file.bucket,
+      file.filename
     );
 
     c.header('Cache-Control', 'no-store');
@@ -188,7 +186,8 @@ publicRouter.post(
         link.service_id,
         file.storage_destination,
         file.storage_key,
-        file.bucket
+        file.bucket,
+        file.filename
       );
 
       c.header('Cache-Control', 'no-store');
@@ -251,16 +250,12 @@ publicRouter.get(
         link.service_id,
         file.storage_destination,
         file.storage_key,
-        file.bucket
+        file.bucket,
+        file.filename
       );
 
-      const upstream = await fetch(download_url);
-      if (!upstream.ok || !upstream.body) {
-        return c.json({ error: 'Bad Gateway', message: 'Unable to stream download' }, 502);
-      }
-
-      // Audit logging is best-effort and does not block the response.
-      c.executionCtx.waitUntil(
+      // Audit logging is best-effort and does not block the redirect.
+      const auditLog = Promise.resolve(
         logServiceEvent(c.env.usrc_d1, {
           serviceId: link.service_id,
           userId: link.user_id,
@@ -271,25 +266,19 @@ publicRouter.get(
           ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
         })
       );
-
-      const headers = new Headers();
-      headers.set('Cache-Control', 'no-store');
-      headers.set('Content-Disposition', buildAttachmentDisposition(file.filename));
-      headers.set('Content-Type', upstream.headers.get('content-type') ?? file.mime_type);
-
-      const contentLength = upstream.headers.get('content-length');
-      if (contentLength) {
-        headers.set('Content-Length', contentLength);
+      try {
+        c.executionCtx.waitUntil(auditLog);
+      } catch {
+        auditLog.catch(() => undefined);
       }
 
-      const etag = upstream.headers.get('etag');
-      if (etag) {
-        headers.set('ETag', etag);
-      }
-
-      return new Response(upstream.body, {
-        status: 200,
-        headers,
+      c.header('Cache-Control', 'no-store');
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: download_url,
+          'Cache-Control': 'no-store',
+        },
       });
     } catch {
       return c.json({ error: 'Bad Gateway', message: 'Unable to generate download URL' }, 502);

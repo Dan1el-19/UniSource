@@ -112,6 +112,14 @@ async function clearBucket() {
 }
 
 describe('headObject (Miniflare R2 binding)', () => {
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
   beforeEach(clearBucket);
 
   it('returns size for existing object', async () => {
@@ -121,8 +129,24 @@ describe('headObject (Miniflare R2 binding)', () => {
   });
 
   it('returns null for missing object (NO throw)', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 })) as unknown as typeof globalThis.fetch;
+
     const result = await headObject(cfEnv,BUCKET, 'does-not-exist.bin');
     expect(result).toBeNull();
+  });
+
+  it('falls back to S3 HEAD when the local binding does not see a directly uploaded object', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(null, { status: 200, headers: { 'Content-Length': '1234' } })
+    ) as unknown as typeof globalThis.fetch;
+
+    const result = await headObject(cfEnv,BUCKET, 'direct-upload.bin');
+
+    expect(result).toEqual({ size: 1234 });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/unisource/direct-upload.bin?'),
+      expect.objectContaining({ method: 'HEAD' })
+    );
   });
 
   it('throws for unknown bucket name', async () => {
@@ -314,6 +338,13 @@ describe('generatePresignedPutUrl / generatePresignedGetUrl', () => {
     const u = new URL(result.presigned_url);
     expect(u.searchParams.get('X-Amz-Expires')).toBe('900');
     expect(u.searchParams.get('X-Amz-SignedHeaders')).toBe('host');
+  });
+
+  it('can force browser downloads with a signed Content-Disposition override', async () => {
+    const result = await generatePresignedGetUrl(cfEnv,BUCKET, 'foo.bin', 900, 'raport ą.pdf');
+    const u = new URL(result.presigned_url);
+    expect(u.searchParams.get('response-content-disposition')).toContain('attachment');
+    expect(u.searchParams.get('response-content-disposition')).toContain("filename*=UTF-8''raport%20%C4%85.pdf");
   });
 });
 

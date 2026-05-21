@@ -162,7 +162,7 @@ export async function listFileRecords(
   input: ListFileRecordsInput
 ): Promise<ListFileRecordsResult> {
   const binds: (string | number | null)[] = [input.user_id, input.service_id];
-  const whereClauses: string[] = ['user_id = ?', 'service_id = ?'];
+  const whereClauses: string[] = ['user_id = ?', 'service_id = ?', 'is_main_storage = 0'];
 
   if (input.trashed_only) {
     whereClauses.push('is_trashed = 1');
