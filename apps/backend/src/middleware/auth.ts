@@ -1,8 +1,7 @@
 import { createMiddleware } from 'hono/factory';
-import { timingSafeEqual } from 'hono/utils/buffer';
 import { Client, Account } from 'node-appwrite';
-import { checkUserServiceAccess } from '../db/services';
-import { isKnownServiceId, getServiceConfig, DEFAULT_SERVICE_ID } from '../config/services';
+import { checkUserServiceAccess, getServiceDetails, type ServiceRecord } from '../db/services';
+import { DEFAULT_SERVICE_ID } from '../config/services';
 import { validateApiKeyByHash } from '../db/apiKeys';
 import { consumeRateLimit } from './ratelimit';
 
@@ -123,12 +122,13 @@ export const authMiddleware = createMiddleware<{
 
   // Derive service from header — treat as hint, ALWAYS verify access below
   const rawServiceId = c.req.header('X-Service-ID')?.trim().toLowerCase();
-
-  if (rawServiceId && !isKnownServiceId(rawServiceId)) {
-    return c.json({ error: 'Bad Request', message: `Unknown service: ${rawServiceId}` }, 400);
-  }
-
   const serviceId = rawServiceId ?? DEFAULT_SERVICE_ID;
+
+  const service = await getServiceDetails(c.env.APP_DB, serviceId);
+  if (!service) {
+    return c.json({ error: 'Bad Request', message: `Unknown service: ${serviceId}` }, 400);
+  }
+  c.set('service', service);
 
   if (jwtToken) {
     const authenticatedUser = await authenticateAppwriteJwt(c.env, jwtToken);
@@ -190,24 +190,6 @@ export const authMiddleware = createMiddleware<{
       c.set('isAdmin', d1Key.permissions.includes('admin'));
       c.set('serviceRole', 'system');
       return next();
-    }
-
-    // Step 2: Legacy env-var API key fallback (only when LEGACY_API_KEYS_ENABLED=true)
-    const legacyEnabled =
-      (c.env as unknown as Record<string, string | undefined>).LEGACY_API_KEYS_ENABLED === 'true';
-
-    if (legacyEnabled) {
-      const config = getServiceConfig(serviceId)!;
-      const expectedKey = (c.env as unknown as Record<string, string | undefined>)[config.apiKeyEnvVar];
-
-      if (expectedKey && apiKeyToken && await timingSafeEqual(apiKeyToken, expectedKey)) {
-        c.set('userId', 'system');
-        c.set('serviceId', serviceId);
-        c.set('authType', 'apikey');
-        c.set('isAdmin', true);
-        c.set('serviceRole', 'system');
-        return next();
-      }
     }
   }
 
