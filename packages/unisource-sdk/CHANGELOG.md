@@ -1,5 +1,11 @@
 # @unisource/sdk
 
+## 1.0.0
+
+### Major Changes
+
+- Release `@unisource/sdk` 1.0.0 as the stable public API.
+
 ## 0.8.0
 
 ### Minor Changes

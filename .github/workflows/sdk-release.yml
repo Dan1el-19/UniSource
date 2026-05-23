@@ -64,4 +64,3 @@ jobs:
           title: "chore(sdk): version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "false"
