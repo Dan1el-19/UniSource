@@ -14,12 +14,16 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./v2": {
+      "types": "./dist/v2/index.d.mts",
+      "import": "./dist/v2/index.mjs",
+      "default": "./dist/v2/index.mjs"
+    },
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.mts",
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsdown",
