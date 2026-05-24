@@ -10,7 +10,8 @@
     "frontend": "pnpm --filter ./apps/frontend dev",
     "release:sdk": "pnpm run changeset:version && pnpm --filter @unisource/sdk build && pnpm run changeset:publish",
     "sdk:deps:workspace": "node scripts/set-app-sdk-source.mjs workspace",
-    "sdk:deps:npm": "node scripts/set-app-sdk-source.mjs npm"
+    "sdk:deps:npm": "node scripts/set-app-sdk-source.mjs npm",
+    "sdk:deps:npm-exact": "node scripts/set-app-sdk-source.mjs npm-exact"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
