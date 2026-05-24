@@ -24,3 +24,6 @@ APPWRITE_API_KEY=
 
 # Comma-separated allowed browser origins for CORS.
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4321,http://localhost:8788
+
+# HMAC secret for signing v2 API cursors (generate: openssl rand -base64 32)
+CURSOR_HMAC_SECRET=replace-with-32-bytes-base64-secret

@@ -56,4 +56,13 @@ declare interface CloudflareBindings {
    * When set to "true", enables legacy env-var API key fallback in auth middleware.
    */
   LEGACY_API_KEYS_ENABLED?: string;
+  /**
+   * HMAC secret for signing v2 API cursors. Must be at least 32 characters.
+   * Set via `wrangler secret put CURSOR_HMAC_SECRET`.
+   */
+  CURSOR_HMAC_SECRET?: string;
+  /**
+   * V2 API logging sample rate (0.0-1.0). Errors always logged. Default: 0.1
+   */
+  V2_LOG_SAMPLE_RATE?: string;
 }
