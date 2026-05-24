@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   release:
+    if: github.ref_name == 'beta'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -64,4 +65,4 @@ jobs:
           git add packages/unisource-sdk/package.json
           git commit -m "chore(sdk): release beta ${{ steps.bump.outputs.version }}"
           git tag "sdk-v${{ steps.bump.outputs.version }}"
-          git push origin HEAD:main --tags
+          git push origin HEAD:beta --tags

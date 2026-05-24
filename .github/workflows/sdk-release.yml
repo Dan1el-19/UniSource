@@ -23,6 +23,7 @@ env:
 
 jobs:
   release:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     name: Release
 
@@ -54,6 +55,9 @@ jobs:
 
       - name: Verify SDK
         run: pnpm --filter @unisource/sdk typecheck && pnpm --filter @unisource/sdk test
+
+      - name: Require stable SDK version
+        run: node scripts/require-sdk-stable-on-deploy.mjs
 
       - name: Publish or open Version PR
         uses: changesets/action@v1
