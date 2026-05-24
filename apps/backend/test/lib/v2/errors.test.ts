@@ -43,6 +43,12 @@ describe('V2Error', () => {
     const err = new V2Error('cursor_invalid', 400)
     expect(err.message).toBe('cursor_invalid')
   })
+
+  it('accepts not_found code', () => {
+    const err = new V2Error('not_found', 404, 'Resource not found')
+    expect(err.code).toBe('not_found')
+    expect(err.status).toBe(404)
+  })
 })
 
 describe('errorResponse', () => {
