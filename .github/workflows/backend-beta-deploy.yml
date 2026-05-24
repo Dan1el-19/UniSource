@@ -1,0 +1,84 @@
+name: Deploy Backend Beta
+
+on:
+  push:
+    branches:
+      - beta
+    paths:
+      - 'apps/backend/**'
+      - 'packages/unisource-sdk/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.github/workflows/backend-beta-deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: workers-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  deploy:
+    if: github.ref_name == 'beta'
+    runs-on: ubuntu-latest
+    name: Deploy beta
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.0.5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK
+        run: pnpm --filter @unisource/sdk build
+
+      - name: Check backend
+        run: pnpm --filter backend check
+
+      - name: Generate Wrangler config
+        run: pnpm --filter backend generate:wrangler
+        env:
+          WORKER_NAME: ${{ secrets.BACKEND_BETA_WORKER_NAME }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_NAME: ${{ secrets.BACKEND_BETA_D1_DATABASE_NAME }}
+          D1_DATABASE_ID: ${{ secrets.BACKEND_BETA_D1_DATABASE_ID }}
+          PRIMARY_R2_BUCKET_NAME: ${{ secrets.BACKEND_BETA_PRIMARY_R2_BUCKET_NAME }}
+          SECONDARY_R2_BUCKET_NAME: ${{ secrets.BACKEND_BETA_SECONDARY_R2_BUCKET_NAME }}
+          BACKEND_ROUTE_PATTERN: ${{ secrets.BACKEND_BETA_ROUTE_PATTERN }}
+          BACKEND_ROUTE_ZONE_NAME: ${{ secrets.BACKEND_BETA_ROUTE_ZONE_NAME }}
+
+      - name: Apply beta D1 migrations
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          packageManager: pnpm
+          workingDirectory: apps/backend
+          command: d1 migrations apply ${{ secrets.BACKEND_BETA_D1_DATABASE_NAME }} --remote --config wrangler.generated.jsonc
+
+      - name: Deploy beta Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          packageManager: pnpm
+          workingDirectory: apps/backend
+          command: deploy --minify --config wrangler.generated.jsonc
