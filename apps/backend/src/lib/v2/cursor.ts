@@ -1,32 +1,30 @@
 import { V2Error } from './errors'
-import type { SortBy, SortDir } from './pagination'
+import type { SortDir } from './pagination'
+import type { ResourceConfig } from './resource'
+import type { FilesFilterSet } from './resource'
 
 export interface CursorPayload {
   v: 1
-  sb: SortBy
+  sb: string  // SortBy<S> w wywołaniu — string tutaj dla generic encode/decode
   sd: SortDir
   lv: string | number
   li: string
   fp: string
 }
 
-export interface FilterSet {
-  user_id: string
-  service_id: string
-  folder_id: string | null | undefined
-  trash: 'active' | 'trashed' | 'all'
-  search: string | undefined
-  mime_type: string | undefined
-}
+/**
+ * @deprecated Use FilesFilterSet from './resource'.
+ */
+export type FilterSet = FilesFilterSet
 
 let cachedKey: CryptoKey | null = null
 let cachedSecret: string | null = null
 
 function fnv1a32(s: string): number {
-  let h = 0x811c9dc5 // FNV offset basis
+  let h = 0x811c9dc5
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i)
-    h = Math.imul(h, 0x01000193) // FNV prime
+    h = Math.imul(h, 0x01000193)
   }
   return h >>> 0
 }
@@ -40,8 +38,7 @@ function fromBase64Url(s: string): Uint8Array {
   const padded = s.replace(/-/g, '+').replace(/_/g, '/')
   const b64 = padded + '='.repeat((4 - (padded.length % 4)) % 4)
   const bin = atob(b64)
-  return new Uint8Array(bin.length)
-    .map((_, i) => bin.charCodeAt(i))
+  return new Uint8Array(bin.length).map((_, i) => bin.charCodeAt(i))
 }
 
 async function getKey(secret: string): Promise<CryptoKey> {
@@ -66,16 +63,26 @@ async function getKey(secret: string): Promise<CryptoKey> {
   return key
 }
 
-export function fingerprint(input: FilterSet): string {
-  const canonical = [
-    input.user_id,
-    input.service_id,
-    input.folder_id === undefined ? '*' : input.folder_id ?? '__root__',
-    input.trash,
-    input.search ?? '',
-    input.mime_type ?? '',
-  ].join('\0')
-  return fnv1a32(canonical).toString(16)
+/** Deterministyczna serializacja jednej wartości pola filtra. */
+function canonicalize(value: unknown): string {
+  if (value === undefined) return '*'      // brak filtra / wildcard
+  if (value === null) return '__null__'    // explicit null (np. parent_id IS NULL = root)
+  return String(value)
+}
+
+export function fingerprint<S extends string, F extends Record<string, unknown>>(
+  config: ResourceConfig<S, F>,
+  input: F & { trash: 'active' | 'trashed' | 'all' }
+): string {
+  const parts: string[] = []
+  for (const key of config.fingerprintKeys) {
+    if (key === 'trash') {
+      parts.push(canonicalize(input.trash))
+    } else {
+      parts.push(canonicalize(input[key]))
+    }
+  }
+  return fnv1a32(parts.join('\0')).toString(16)
 }
 
 export async function encodeCursor(secret: string, payload: CursorPayload): Promise<string> {
@@ -93,7 +100,7 @@ export async function encodeCursor(secret: string, payload: CursorPayload): Prom
 export async function decodeCursor(
   secret: string,
   encoded: string,
-  expected: { sb: SortBy; sd: SortDir; fp: string }
+  expected: { sb: string; sd: SortDir; fp: string }
 ): Promise<CursorPayload> {
   try {
     const parts = encoded.split('.')
