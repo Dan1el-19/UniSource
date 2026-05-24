@@ -5,7 +5,7 @@ import { v2RequestIdGuard } from '../../src/middleware/v2RequestIdGuard'
 const VALID_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function makeApp() {
-  const app = new Hono()
+  const app = new Hono<{ Variables: { requestId: string } }>()
   app.use('*', v2RequestIdGuard)
   app.get('/', (c) => c.json({ requestId: c.var.requestId }))
   return app
