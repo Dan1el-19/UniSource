@@ -5,6 +5,7 @@ import { FILES_MAX_LIMIT } from '@unisource/sdk'
 import { listFilesV2 } from '../../db/v2/files'
 import { V2Error } from '../../lib/v2/errors'
 import { logV2Request } from '../../lib/v2/log'
+import { v2ValidationHook } from '../../lib/v2/zodHook'
 
 type V2Env = { Bindings: CloudflareBindings; Variables: WorkerVariables }
 
@@ -22,17 +23,6 @@ const querySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(FILES_MAX_LIMIT).default(25),
 })
-
-function v2ValidationHook(
-  result: { success: boolean; error?: { issues: Array<{ message: string }> } },
-  _c: unknown
-) {
-  if (result.success) return
-  const err = result.error!
-  const tooLong = err.issues.find((i) => i.message === 'search_too_long')
-  if (tooLong) throw new V2Error('search_too_long', 400, 'Search query too long')
-  throw new V2Error('validation_error', 400, 'Invalid request', err.issues)
-}
 
 const filesV2 = new Hono<V2Env>()
 
