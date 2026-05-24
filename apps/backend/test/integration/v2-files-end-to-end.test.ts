@@ -99,14 +99,14 @@ describe('GET /v2/files — end-to-end pagination', () => {
 
       try {
         const allIds = new Set<string>()
-        let cursor: string | null | undefined
+        let cursor: string | undefined
         let pageCount = 0
 
         // Paginate through all pages
         for (let page = 0; page < 3; page++) {
           const response = await client.files.list({
             limit: PAGE_LIMIT,
-            cursor,
+            ...(cursor ? { cursor } : {}),
           })
 
           pageCount++
@@ -123,14 +123,15 @@ describe('GET /v2/files — end-to-end pagination', () => {
             allIds.add(file.id)
           }
 
-          cursor = response.page.next_cursor
+          const nextCursor = response.page.next_cursor
 
           // Last page should have no next_cursor
           if (page === 2) {
-            expect(cursor).toBeNull()
+            expect(nextCursor).toBeNull()
           } else {
-            expect(cursor).toBeTruthy()
+            expect(nextCursor).toBeTruthy()
           }
+          cursor = nextCursor ?? undefined
         }
 
         // Verify total count

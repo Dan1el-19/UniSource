@@ -73,6 +73,24 @@ describe('UnisourceV2Client.files.list', () => {
     await expect(client.files.list({ cursor: 'bad' })).rejects.toThrow(UnisourceV2Error)
   })
 
+  it('falls back to status text when error response body is malformed', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      headers: { get: () => 'req-502' },
+      json: () => Promise.resolve(null),
+    }))
+    const client = new UnisourceV2Client(mockConfig)
+    await expect(client.files.list()).rejects.toMatchObject({
+      name: 'UnisourceV2Error',
+      message: 'Bad Gateway',
+      status: 502,
+      code: 'unknown',
+      requestId: 'req-502',
+    })
+  })
+
   it('AbortSignal is passed to fetch', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
