@@ -9,24 +9,24 @@
 //   node smoke-r2.mjs --path=b  # only Path B
 //
 // Env (all required for the path you run):
-//   SMOKE_BACKEND_URL            e.g. https://<version>-unisource.<sub>.workers.dev
-//   SMOKE_API_KEY                Bearer token (CHMURA_BLOKSERWIS_API_KEY value)
-//   SMOKE_SERVICE_ID             default: chmura-blokserwis
+//   SMOKE_BACKEND_URL            e.g. https://<version>-worker.<sub>.workers.dev
+//   SMOKE_API_KEY                Bearer token for the target service
+//   SMOKE_SERVICE_ID             default: service-b
 //   SMOKE_R2_ACCOUNT_ID
 //   SMOKE_R2_ACCESS_KEY_ID
 //   SMOKE_R2_SECRET_ACCESS_KEY
-//   SMOKE_R2_BUCKET              default: chmura-blokserwis
+//   SMOKE_R2_BUCKET              default: service-b
 
 import { AwsClient } from 'aws4fetch';
 
 const {
   SMOKE_BACKEND_URL,
   SMOKE_API_KEY,
-  SMOKE_SERVICE_ID = 'chmura-blokserwis',
+  SMOKE_SERVICE_ID = 'service-b',
   SMOKE_R2_ACCOUNT_ID,
   SMOKE_R2_ACCESS_KEY_ID,
   SMOKE_R2_SECRET_ACCESS_KEY,
-  SMOKE_R2_BUCKET = 'chmura-blokserwis',
+  SMOKE_R2_BUCKET = 'service-b',
 } = process.env;
 
 const arg = process.argv.find((a) => a.startsWith('--path='));
@@ -162,7 +162,7 @@ async function pathA() {
   console.log(`   OK status=${completed.status}`);
 
   console.log('\nPath A: PASSED');
-  console.log(`Cleanup hint:  pnpm --filter usrc-backend wrangler r2 object delete ${SMOKE_R2_BUCKET}/${created.key}`);
+  console.log(`Cleanup hint:  pnpm --filter default-backend wrangler r2 object delete ${SMOKE_R2_BUCKET}/${created.key}`);
   return true;
 }
 

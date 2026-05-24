@@ -95,12 +95,12 @@ upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2Ini
 
   // Quota check and reserve before creating presigned URL (atomic)
   const quotaResult = body.is_main_storage
-    ? await reserveMainStorageQuota(c.env.usrc_d1, serviceId, size)
-    : await reserveQuota(c.env.usrc_d1, serviceId, size, userId === 'system' ? null : userId);
+    ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
+    : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
   if (!quotaResult.ok) {
     if (userId !== 'system') {
       c.executionCtx.waitUntil(
-        logServiceEvent(c.env.usrc_d1, {
+        logServiceEvent(c.env.APP_DB, {
           serviceId,
           userId,
           action: 'quota_exceeded',
@@ -143,7 +143,7 @@ upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2Ini
     UPLOAD_TTL_SECONDS
   );
 
-  await createUpload(c.env.usrc_d1, {
+  await createUpload(c.env.APP_DB, {
     id: uploadId,
     service_id: serviceId,
     user_id: userId === 'system' ? null : userId,
@@ -187,12 +187,12 @@ upload.post('/appwrite/init', rateLimit('upload-init'), zValidator('json', uploa
 
   // Quota check and reserve (atomic)
   const quotaResult = body.is_main_storage
-    ? await reserveMainStorageQuota(c.env.usrc_d1, serviceId, size)
-    : await reserveQuota(c.env.usrc_d1, serviceId, size, userId === 'system' ? null : userId);
+    ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
+    : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
   if (!quotaResult.ok) {
     if (userId !== 'system') {
       c.executionCtx.waitUntil(
-        logServiceEvent(c.env.usrc_d1, {
+        logServiceEvent(c.env.APP_DB, {
           serviceId,
           userId,
           action: 'quota_exceeded',
@@ -225,7 +225,7 @@ upload.post('/appwrite/init', rateLimit('upload-init'), zValidator('json', uploa
 
   const config = getAppwriteUploadConfig(c.env, fileId, UPLOAD_TTL_SECONDS);
 
-  await createUpload(c.env.usrc_d1, {
+  await createUpload(c.env.APP_DB, {
     id: uploadId,
     service_id: serviceId,
     user_id: userId === 'system' ? null : userId,
@@ -266,8 +266,8 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   // Bug #15: use getUploadForUser to prevent cross-user upload hijacking
   // API key path (userId='system') uses getUpload without owner restriction
   const record = userId === 'system'
-    ? await getUpload(c.env.usrc_d1, upload_id)
-    : await getUploadForUser(c.env.usrc_d1, upload_id, userId, serviceId);
+    ? await getUpload(c.env.APP_DB, upload_id)
+    : await getUploadForUser(c.env.APP_DB, upload_id, userId, serviceId);
 
   if (!record) {
     return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
@@ -281,13 +281,13 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
 
   const now = Math.floor(Date.now() / 1000);
   if (record.expires_at < now) {
-    const updated = await failUpload(c.env.usrc_d1, upload_id);
+    const updated = await failUpload(c.env.APP_DB, upload_id);
     if (updated) {
       // Release quota since upload expired
       if (isMainStorage) {
-        await releaseMainStorageQuota(c.env.usrc_d1, record.service_id, record.size);
+        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
       } else {
-        await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
+        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
       }
     }
     return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
@@ -309,12 +309,12 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   }
 
   if (physicalSize === null || physicalSize !== record.size) {
-    const failed = await failUpload(c.env.usrc_d1, upload_id);
+    const failed = await failUpload(c.env.APP_DB, upload_id);
     if (failed) {
       if (isMainStorage) {
-        await releaseMainStorageQuota(c.env.usrc_d1, record.service_id, record.size);
+        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
       } else {
-        await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
+        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
       }
     }
     return c.json(
@@ -334,7 +334,7 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
   // Promote to confirmed file record. API-key uploads are promoted for main storage,
   // while regular per-user file records still require an authenticated user owner.
   if (userId !== 'system' || isMainStorage) {
-    const promotion = await completeUploadAndCreateFile(c.env.usrc_d1, {
+    const promotion = await completeUploadAndCreateFile(c.env.APP_DB, {
       uploadId: upload_id,
       file: {
         id: newFileId,
@@ -360,7 +360,7 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
 
     if (userId !== 'system' && promotion.completed) {
       c.executionCtx.waitUntil(
-        logServiceEvent(c.env.usrc_d1, {
+        logServiceEvent(c.env.APP_DB, {
           serviceId,
           userId,
           action: 'upload_completed',
@@ -373,7 +373,7 @@ upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, valida
     }
   } else {
     // Anonymous (system) non-main upload: just flip the upload row.
-    const updated = await completeUpload(c.env.usrc_d1, upload_id);
+    const updated = await completeUpload(c.env.APP_DB, upload_id);
     if (!updated) {
       return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
     }
@@ -390,8 +390,8 @@ upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validation
 
   // Mirror Bug #15 fix from /complete: verify ownership before allowing fail
   const record = userId === 'system'
-    ? await getUpload(c.env.usrc_d1, upload_id)
-    : await getUploadForUser(c.env.usrc_d1, upload_id, userId, serviceId);
+    ? await getUpload(c.env.APP_DB, upload_id)
+    : await getUploadForUser(c.env.APP_DB, upload_id, userId, serviceId);
 
   if (!record || record.service_id !== serviceId) {
     return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
@@ -403,13 +403,13 @@ upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validation
     return c.json({ error: 'Conflict', message: `Upload is already in state: ${record.status}` }, 409);
   }
 
-  const updated = await failUpload(c.env.usrc_d1, upload_id);
+  const updated = await failUpload(c.env.APP_DB, upload_id);
   // Release reserved quota
   if (updated) {
     if (isMainStorage) {
-      await releaseMainStorageQuota(c.env.usrc_d1, record.service_id, record.size);
+      await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
     } else {
-      await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
+      await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
     }
   }
   return c.json<UploadFailResponse>({ success: true, upload_id, status: 'failed' });
@@ -434,8 +434,8 @@ async function getOwnedMultipartUpload(
   const serviceId = c.get('serviceId');
 
   const record = userId === 'system'
-    ? await getUpload(c.env.usrc_d1, uploadId)
-    : await getUploadForUser(c.env.usrc_d1, uploadId, userId, serviceId);
+    ? await getUpload(c.env.APP_DB, uploadId)
+    : await getUploadForUser(c.env.APP_DB, uploadId, userId, serviceId);
 
   if (!record || record.service_id !== serviceId) {
     return { error: 'not_found' as const };
@@ -481,13 +481,13 @@ upload.post(
 
     // Reserve the full size up-front; releases on abort/fail/expiry.
     const quotaResult = body.is_main_storage
-      ? await reserveMainStorageQuota(c.env.usrc_d1, serviceId, size)
-      : await reserveQuota(c.env.usrc_d1, serviceId, size, userId === 'system' ? null : userId);
+      ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
+      : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
 
     if (!quotaResult.ok) {
       if (userId !== 'system') {
         c.executionCtx.waitUntil(
-          logServiceEvent(c.env.usrc_d1, {
+          logServiceEvent(c.env.APP_DB, {
             serviceId,
             userId,
             action: 'quota_exceeded',
@@ -522,9 +522,9 @@ upload.post(
     } catch (err) {
       // Release quota if R2 CreateMultipartUpload fails.
       if (body.is_main_storage) {
-        await releaseMainStorageQuota(c.env.usrc_d1, serviceId, size);
+        await releaseMainStorageQuota(c.env.APP_DB, serviceId, size);
       } else {
-        await releaseQuota(c.env.usrc_d1, serviceId, size, userId === 'system' ? null : userId);
+        await releaseQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
       }
       throw err;
     }
@@ -532,7 +532,7 @@ upload.post(
     // Multipart lifetime: R2 auto-aborts after 7 days. We mirror the limit.
     const expires_at = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
 
-    await createUpload(c.env.usrc_d1, {
+    await createUpload(c.env.APP_DB, {
       id: uploadRecordId,
       service_id: serviceId,
       user_id: userId === 'system' ? null : userId,
@@ -671,12 +671,12 @@ upload.post(
     const isMainStorage = record.is_main_storage === 1;
 
     if (record.expires_at < now) {
-      const failed = await failUpload(c.env.usrc_d1, upload_id);
+      const failed = await failUpload(c.env.APP_DB, upload_id);
       if (failed) {
         if (isMainStorage) {
-          await releaseMainStorageQuota(c.env.usrc_d1, record.service_id, record.size);
+          await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
         } else {
-          await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
+          await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
         }
         await abortMultipartUpload(c.env, record.bucket, record.storage_key, record.r2_upload_id!).catch((err) => {
           console.error('[multipart/complete] abortMultipartUpload after expiry failed', err);
@@ -706,12 +706,12 @@ upload.post(
     // Verify physical size matches the reserved size.
     const meta = await headObject(c.env, record.bucket, record.storage_key);
     if (!meta || meta.size !== record.size) {
-      const failed = await failUpload(c.env.usrc_d1, upload_id);
+      const failed = await failUpload(c.env.APP_DB, upload_id);
       if (failed) {
         if (isMainStorage) {
-          await releaseMainStorageQuota(c.env.usrc_d1, record.service_id, record.size);
+          await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
         } else {
-          await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
+          await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
         }
       }
       return c.json(
@@ -726,7 +726,7 @@ upload.post(
     const newFileId = crypto.randomUUID();
 
     if (userId !== 'system' || isMainStorage) {
-      const promotion = await completeUploadAndCreateFile(c.env.usrc_d1, {
+      const promotion = await completeUploadAndCreateFile(c.env.APP_DB, {
         uploadId: upload_id,
         file: {
           id: newFileId,
@@ -750,7 +750,7 @@ upload.post(
 
       if (userId !== 'system' && promotion.completed) {
         c.executionCtx.waitUntil(
-          logServiceEvent(c.env.usrc_d1, {
+          logServiceEvent(c.env.APP_DB, {
             serviceId,
             userId,
             action: 'upload_completed',
@@ -768,7 +768,7 @@ upload.post(
         );
       }
     } else {
-      const updated = await completeUpload(c.env.usrc_d1, upload_id);
+      const updated = await completeUpload(c.env.APP_DB, upload_id);
       if (!updated) {
         return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
       }
@@ -811,12 +811,12 @@ upload.delete(
       console.error('[multipart/abort] abortMultipartUpload failed', err);
     });
 
-    const updated = await failUpload(c.env.usrc_d1, upload_id);
+    const updated = await failUpload(c.env.APP_DB, upload_id);
     if (updated) {
       if (isMainStorage) {
-        await releaseMainStorageQuota(c.env.usrc_d1, record.service_id, record.size);
+        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
       } else {
-        await releaseQuota(c.env.usrc_d1, record.service_id, record.size, record.user_id);
+        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
       }
     }
 

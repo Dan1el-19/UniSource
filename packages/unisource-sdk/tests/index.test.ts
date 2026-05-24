@@ -40,7 +40,7 @@ describe('unisource-sdk schemas', () => {
       filename: 'raport.pdf',
       size: 1024,
       mime_type: 'application/pdf',
-      bucket: 'unisource',
+      bucket: 'primary',
     });
 
     expect(parsed.success).toBe(true);
@@ -60,7 +60,7 @@ describe('unisource-sdk schemas', () => {
     const parsed = uploadAppwriteInitResponseSchema.safeParse({
       upload_id: 'uuid-upload',
       destination: 'appwrite',
-      appwrite_endpoint: 'https://eu-central-1.cloud.appwrite.io/v1',
+      appwrite_endpoint: 'https://appwrite.example.com/v1',
       appwrite_project_id: 'project-id',
       appwrite_bucket_id: 'bucket-id',
       file_id: 'file-id',
@@ -73,7 +73,7 @@ describe('unisource-sdk schemas', () => {
   it('accepts valid file record', () => {
     const parsed = fileRecordSchema.safeParse({
       id: 'file-id',
-      service_id: 'usrc',
+      service_id: 'default',
       user_id: 'user-1',
       folder_id: null,
       upload_id: 'upload-id',
@@ -113,7 +113,7 @@ describe('unisource-sdk schemas', () => {
     const parsed = uploadRecordDetailResponseSchema.safeParse({
       upload: {
         id: 'upload-id',
-        service_id: 'usrc',
+        service_id: 'default',
         user_id: null,
         filename: 'raport.pdf',
         size: 1024,
@@ -181,7 +181,7 @@ describe('unisource-sdk schemas', () => {
     const parsed = mainStorageRenameResponseSchema.safeParse({
       file: {
         id: 'file-id',
-        service_id: 'usrc',
+        service_id: 'default',
         user_id: 'admin-user',
         folder_id: null,
         upload_id: 'upload-id',
@@ -254,7 +254,7 @@ describe('unisource-sdk HTTP helpers', () => {
           JSON.stringify({
             upload: {
               id: 'upload-1',
-              service_id: 'usrc',
+              service_id: 'default',
               user_id: null,
               filename: 'raport.pdf',
               size: 1024,
@@ -288,7 +288,7 @@ describe('unisource-sdk HTTP helpers', () => {
 
     const client = new UnisourceClient({
       baseUrl: 'https://api.example.com',
-      serviceId: 'usrc',
+      serviceId: 'default',
       getToken: async () => 'jwt-token',
     });
 
@@ -306,7 +306,7 @@ describe('unisource-sdk HTTP helpers', () => {
       expect.objectContaining({
         method: 'GET',
         headers: expect.objectContaining({
-          'X-Service-ID': 'usrc',
+          'X-Service-ID': 'default',
           Authorization: 'Bearer jwt-token',
         }),
       })
@@ -342,7 +342,7 @@ describe('unisource-sdk HTTP helpers', () => {
 
     const client = new UnisourceClient({
       baseUrl: 'https://api.example.com',
-      serviceId: 'usrc',
+      serviceId: 'default',
       getToken: async () => 'tok',
     });
 
@@ -356,7 +356,7 @@ describe('unisource-sdk HTTP helpers', () => {
 
     const client = new UnisourceClient({
       baseUrl: 'https://api.example.com',
-      serviceId: 'usrc',
+      serviceId: 'default',
       getToken: async () => 'tok',
     });
 
@@ -372,7 +372,7 @@ describe('unisource-sdk HTTP helpers', () => {
           JSON.stringify({
             file: {
               id: 'file-1',
-              service_id: 'usrc',
+              service_id: 'default',
               user_id: 'admin-user',
               folder_id: null,
               upload_id: 'upload-1',
@@ -403,7 +403,7 @@ describe('unisource-sdk HTTP helpers', () => {
 
     const client = new UnisourceClient({
       baseUrl: 'https://api.example.com',
-      serviceId: 'usrc',
+      serviceId: 'default',
       getToken: async () => 'admin-token',
     });
 
@@ -418,7 +418,7 @@ describe('unisource-sdk HTTP helpers', () => {
       expect.objectContaining({
         method: 'PATCH',
         headers: expect.objectContaining({
-          'X-Service-ID': 'usrc',
+          'X-Service-ID': 'default',
           Authorization: 'Bearer admin-token',
           'Content-Type': 'application/json',
         }),
@@ -431,7 +431,7 @@ describe('unisource-sdk HTTP helpers', () => {
       expect.objectContaining({
         method: 'DELETE',
         headers: expect.objectContaining({
-          'X-Service-ID': 'usrc',
+          'X-Service-ID': 'default',
           Authorization: 'Bearer admin-token',
         }),
       })

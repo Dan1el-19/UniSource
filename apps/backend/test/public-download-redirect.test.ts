@@ -39,13 +39,13 @@ function buildPublicApp() {
 }
 
 const env = {
-	usrc_d1: {},
+	APP_DB: {},
 	DOWNLOAD_TOKEN_SECRET: 'test-secret'
 } as unknown as CloudflareBindings;
 
 const activeLink = {
 	id: 'link-1',
-	service_id: 'usrc',
+	service_id: 'default',
 	user_id: 'user-1',
 	file_id: 'file-1',
 	slug: 'shared-file',
@@ -63,8 +63,8 @@ const r2File = {
 	size: 1234,
 	mime_type: 'application/pdf',
 	storage_destination: 'r2',
-	storage_key: 'usrc/uploads/report.pdf',
-	bucket: 'unisource',
+	storage_key: 'default/uploads/report.pdf',
+	bucket: 'primary',
 	is_trashed: 0
 };
 
@@ -77,7 +77,7 @@ describe('GET /public/:slug/download', () => {
 		vi.mocked(incrementDownloadCount).mockResolvedValue(true);
 		vi.mocked(generatePresignedGetUrl).mockResolvedValue({
 			presigned_url: 'https://storage.example/report.pdf?signature=abc',
-			storage_key: 'usrc/uploads/report.pdf',
+			storage_key: 'default/uploads/report.pdf',
 			expires_at: Math.floor(Date.now() / 1000) + 900
 		});
 	});
@@ -99,8 +99,8 @@ describe('GET /public/:slug/download', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(generatePresignedGetUrl).toHaveBeenLastCalledWith(
 			expect.anything(),
-			'unisource',
-			'usrc/uploads/report.pdf',
+			'primary',
+			'default/uploads/report.pdf',
 			expect.any(Number),
 			'report.pdf'
 		);

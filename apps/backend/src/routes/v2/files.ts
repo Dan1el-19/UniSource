@@ -60,7 +60,7 @@ filesV2.get('/', zValidator('query', fileRecordsListV2QuerySchema, validationErr
   const query = c.req.valid('query');
 
   try {
-    const result = await listFileRecordsV2(c.env.usrc_d1, {
+    const result = await listFileRecordsV2(c.env.APP_DB, {
       user_id: userId,
       service_id: serviceId,
       folder_id: query.folder_id,
@@ -92,7 +92,7 @@ filesV2.post('/bulk-trash', zValidator('json', bulkFileIdsSchema, validationErro
   const serviceId = c.get('serviceId');
   const { ids } = c.req.valid('json');
 
-  const successIds = await bulkTrashFileRecords(c.env.usrc_d1, ids, userId, serviceId);
+  const successIds = await bulkTrashFileRecords(c.env.APP_DB, ids, userId, serviceId);
   const failedIds = ids.filter(id => !successIds.includes(id));
 
   return c.json<BulkOperationResponse>({
@@ -108,7 +108,7 @@ filesV2.post('/bulk-restore', zValidator('json', bulkFileIdsSchema, validationEr
   const serviceId = c.get('serviceId');
   const { ids } = c.req.valid('json');
 
-  const successIds = await bulkRestoreFileRecords(c.env.usrc_d1, ids, userId, serviceId);
+  const successIds = await bulkRestoreFileRecords(c.env.APP_DB, ids, userId, serviceId);
   const failedIds = ids.filter(id => !successIds.includes(id));
 
   return c.json<BulkOperationResponse>({
@@ -125,7 +125,7 @@ filesV2.post('/bulk-move', zValidator('json', bulkFileMoveRequestSchema, validat
   const { ids, folder_id } = c.req.valid('json');
 
   if (folder_id) {
-    const targetFolder = await getFolderForUser(c.env.usrc_d1, folder_id, userId, serviceId);
+    const targetFolder = await getFolderForUser(c.env.APP_DB, folder_id, userId, serviceId);
     if (!targetFolder) {
       return c.json({ error: 'Not Found', message: 'Target folder not found' }, 404);
     }
@@ -134,7 +134,7 @@ filesV2.post('/bulk-move', zValidator('json', bulkFileMoveRequestSchema, validat
     }
   }
 
-  const successIds = await bulkMoveFileRecords(c.env.usrc_d1, ids, userId, serviceId, folder_id ?? null);
+  const successIds = await bulkMoveFileRecords(c.env.APP_DB, ids, userId, serviceId, folder_id ?? null);
   const failedIds = ids.filter(id => !successIds.includes(id));
 
   return c.json<BulkOperationResponse>({

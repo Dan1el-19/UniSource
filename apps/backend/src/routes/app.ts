@@ -18,7 +18,7 @@ app.get('/releases/latest', zValidator('query', latestQuerySchema), async (c) =>
   const { channel } = c.req.valid('query');
 
   const serviceId = c.get('serviceId');
-  const release = await getLatestReleaseByTag(c.env.usrc_d1, serviceId, channel);
+  const release = await getLatestReleaseByTag(c.env.APP_DB, serviceId, channel);
   if (!release) {
     return c.json(
       { error: 'Not Found', message: `No completed release found for channel "${channel}"` },

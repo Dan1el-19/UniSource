@@ -12,9 +12,7 @@ import {
   generatePresignedGetUrl,
 } from '../src/services/r2';
 
-// USRC_BUCKET is provisioned by wrangler.jsonc; vitest-pool-workers exposes it
-// as a Miniflare R2 binding. We use the matching SERVICES map id.
-const BUCKET = 'unisource';
+const BUCKET = 'primary';
 
 // CI runners do not have R2 creds in .dev.vars (it's gitignored). aws4fetch's
 // AwsClient throws on construction if accessKeyId/secretAccessKey are missing.
@@ -24,6 +22,8 @@ const cfEnv = {
   R2_ACCOUNT_ID: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   R2_ACCESS_KEY_ID: 'AKIATESTKEY',
   R2_SECRET_ACCESS_KEY: 'testsecret/testsecret/testsecret/testsecret',
+  R2_BUCKET_BINDINGS: JSON.stringify({ [BUCKET]: 'PRIMARY_BUCKET' }),
+  R2_BUCKET_NAMES: JSON.stringify({ [BUCKET]: 'storage-a' }),
 } as unknown as CloudflareBindings;
 
 const fixtures = {
@@ -105,9 +105,9 @@ const fixtures = {
 } as const;
 
 async function clearBucket() {
-  const list = await env.USRC_BUCKET.list();
+  const list = await env.PRIMARY_BUCKET.list();
   for (const obj of list.objects) {
-    await env.USRC_BUCKET.delete(obj.key);
+    await env.PRIMARY_BUCKET.delete(obj.key);
   }
 }
 
@@ -123,7 +123,7 @@ describe('headObject (Miniflare R2 binding)', () => {
   beforeEach(clearBucket);
 
   it('returns size for existing object', async () => {
-    await env.USRC_BUCKET.put('hello.txt', 'hello world');
+    await env.PRIMARY_BUCKET.put('hello.txt', 'hello world');
     const result = await headObject(cfEnv,BUCKET, 'hello.txt');
     expect(result).toEqual({ size: 11 });
   });
@@ -144,7 +144,7 @@ describe('headObject (Miniflare R2 binding)', () => {
 
     expect(result).toEqual({ size: 1234 });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/unisource/direct-upload.bin?'),
+      expect.stringContaining('/storage-a/direct-upload.bin?'),
       expect.objectContaining({ method: 'HEAD' })
     );
   });
@@ -160,9 +160,9 @@ describe('deleteObject (Miniflare R2 binding)', () => {
   beforeEach(clearBucket);
 
   it('removes existing object', async () => {
-    await env.USRC_BUCKET.put('to-delete.txt', 'bye');
+    await env.PRIMARY_BUCKET.put('to-delete.txt', 'bye');
     await deleteObject(cfEnv,BUCKET, 'to-delete.txt');
-    expect(await env.USRC_BUCKET.head('to-delete.txt')).toBeNull();
+    expect(await env.PRIMARY_BUCKET.head('to-delete.txt')).toBeNull();
   });
 
   it('is idempotent for missing object', async () => {
@@ -185,7 +185,7 @@ describe('completeMultipartUpload (Miniflare R2 binding)', () => {
 
   it('strips quoted ETags and writes a real object (happy path, 2 parts)', async () => {
     const { upload_id } = await createMultipartUpload(cfEnv,BUCKET, 'merged.bin', 'application/octet-stream');
-    const mpu = env.USRC_BUCKET.resumeMultipartUpload('merged.bin', upload_id);
+    const mpu = env.PRIMARY_BUCKET.resumeMultipartUpload('merged.bin', upload_id);
     const partA = await mpu.uploadPart(1, new Uint8Array(5 * 1024 * 1024).fill(0xaa));
     const partB = await mpu.uploadPart(2, new Uint8Array(1024).fill(0xbb));
 
@@ -195,14 +195,14 @@ describe('completeMultipartUpload (Miniflare R2 binding)', () => {
     ]);
 
     expect(result.etag).toBeTruthy();
-    const head = await env.USRC_BUCKET.head('merged.bin');
+    const head = await env.PRIMARY_BUCKET.head('merged.bin');
     expect(head).not.toBeNull();
     expect(head!.size).toBe(5 * 1024 * 1024 + 1024);
   });
 
   it('sorts unordered parts by PartNumber before complete', async () => {
     const { upload_id } = await createMultipartUpload(cfEnv,BUCKET, 'sorted.bin', 'application/octet-stream');
-    const mpu = env.USRC_BUCKET.resumeMultipartUpload('sorted.bin', upload_id);
+    const mpu = env.PRIMARY_BUCKET.resumeMultipartUpload('sorted.bin', upload_id);
     const p1 = await mpu.uploadPart(1, new Uint8Array(5 * 1024 * 1024).fill(0x11));
     const p2 = await mpu.uploadPart(2, new Uint8Array(1024).fill(0x22));
 
@@ -246,7 +246,7 @@ describe('completeMultipartUpload (Miniflare R2 binding)', () => {
 
   it('does NOT call globalThis.fetch (no aws4fetch on happy path)', async () => {
     const { upload_id } = await createMultipartUpload(cfEnv,BUCKET, 'no-fetch.bin', 'application/octet-stream');
-    const mpu = env.USRC_BUCKET.resumeMultipartUpload('no-fetch.bin', upload_id);
+    const mpu = env.PRIMARY_BUCKET.resumeMultipartUpload('no-fetch.bin', upload_id);
     const part = await mpu.uploadPart(1, new Uint8Array(5 * 1024 * 1024).fill(0x33));
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     try {

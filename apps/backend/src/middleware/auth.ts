@@ -124,7 +124,7 @@ export const authMiddleware = createMiddleware<{
   const rawServiceId = c.req.header('X-Service-ID')?.trim().toLowerCase();
   const serviceId = rawServiceId ?? DEFAULT_SERVICE_ID;
 
-  const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+  const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
     return c.json({ error: 'Bad Request', message: `Unknown service: ${serviceId}` }, 400);
   }
@@ -135,13 +135,13 @@ export const authMiddleware = createMiddleware<{
 
     if (authenticatedUser) {
       // Non-default services require explicit service_users membership
-      // This prevents a usrc.dev account from accessing blokserwis data
+      // This prevents a app.example.com account from accessing service-b data
       let serviceRole: 'user' | 'plus' | 'admin' = authenticatedUser.labels.includes('admin')
         ? 'admin'
         : 'user';
 
       if (serviceId !== DEFAULT_SERVICE_ID) {
-        const access = await checkUserServiceAccess(c.env.usrc_d1, serviceId, authenticatedUser.userId);
+        const access = await checkUserServiceAccess(c.env.APP_DB, serviceId, authenticatedUser.userId);
         if (!access) {
           return c.json({ error: 'Forbidden', message: 'Access to this service is not permitted' }, 403);
         }
@@ -151,7 +151,7 @@ export const authMiddleware = createMiddleware<{
         }
       } else {
         // Default service still benefits from a stored per-service role when present.
-        const access = await checkUserServiceAccess(c.env.usrc_d1, serviceId, authenticatedUser.userId);
+        const access = await checkUserServiceAccess(c.env.APP_DB, serviceId, authenticatedUser.userId);
         if (access && (access.role === 'admin' || access.role === 'plus' || access.role === 'user')) {
           serviceRole = access.role;
         }
@@ -181,7 +181,7 @@ export const authMiddleware = createMiddleware<{
   // Path B: API key authentication
   if (routeMode === 'dual' && apiKeyToken) {
     // Step 1: Try D1 api_keys lookup by SHA-256 hash
-    const d1Key = await validateApiKeyByHash(c.env.usrc_d1, apiKeyToken, serviceId);
+    const d1Key = await validateApiKeyByHash(c.env.APP_DB, apiKeyToken, serviceId);
 
     if (d1Key) {
       c.set('userId', 'system');

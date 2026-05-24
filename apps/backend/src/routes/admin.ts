@@ -105,7 +105,7 @@ function mapAdminUser(
 
 admin.get('/service', async (c) => {
   const serviceId = c.get('serviceId');
-  const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+  const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
     return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
   }
@@ -134,7 +134,7 @@ admin.patch(
   async (c) => {
     const serviceId = c.get('serviceId');
     const body = c.req.valid('json');
-    const service = await updateServiceDetails(c.env.usrc_d1, serviceId, body);
+    const service = await updateServiceDetails(c.env.APP_DB, serviceId, body);
 
     if (!service) {
       return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
@@ -166,7 +166,7 @@ admin.patch(
     const serviceId = c.get('serviceId');
     const body = c.req.valid('json');
 
-    const service = await updateServiceSettings(c.env.usrc_d1, serviceId, {
+    const service = await updateServiceSettings(c.env.APP_DB, serviceId, {
       recommended_upload_destination: body.recommended_upload_destination,
     });
 
@@ -190,7 +190,7 @@ admin.patch(
 
 admin.get('/service/usage', async (c) => {
   const serviceId = c.get('serviceId');
-  const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+  const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
     return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
   }
@@ -230,7 +230,7 @@ admin.get(
     const query = c.req.valid('query');
 
     try {
-      const result = await listAuditEvents(c.env.usrc_d1, serviceId, {
+      const result = await listAuditEvents(c.env.APP_DB, serviceId, {
         user_id: query.user_id,
         action: query.action,
         resource_type: query.resource_type,
@@ -269,7 +269,7 @@ const userListQuerySchema = z.object({
 admin.get('/users', zValidator('query', userListQuerySchema, validationErrorHook), async (c) => {
   const serviceId = c.get('serviceId');
   const query = c.req.valid('query');
-  const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+  const service = await getServiceDetails(c.env.APP_DB, serviceId);
 
   if (!service) {
     return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
@@ -281,8 +281,8 @@ admin.get('/users', zValidator('query', userListQuerySchema, validationErrorHook
       limit: query.limit,
       offset: query.offset,
     }),
-    listServiceUsersByService(c.env.usrc_d1, serviceId),
-    listUserStorageUsageByService(c.env.usrc_d1, serviceId),
+    listServiceUsersByService(c.env.APP_DB, serviceId),
+    listUserStorageUsageByService(c.env.APP_DB, serviceId),
   ]);
 
   const metadataByUserId = new Map(serviceUsers.map((item) => [item.user_id, item]));
@@ -318,7 +318,7 @@ admin.patch(
     const serviceId = c.get('serviceId');
     const { userId } = c.req.valid('param');
     const body = c.req.valid('json');
-    const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+    const service = await getServiceDetails(c.env.APP_DB, serviceId);
 
     if (!service) {
       return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
@@ -345,20 +345,20 @@ admin.patch(
     }
 
     if (body.role !== undefined || body.max_storage_bytes !== undefined) {
-      const currentSettings = await getServiceUser(c.env.usrc_d1, serviceId, userId);
-      await upsertServiceUserSettings(c.env.usrc_d1, {
+      const currentSettings = await getServiceUser(c.env.APP_DB, serviceId, userId);
+      await upsertServiceUserSettings(c.env.APP_DB, {
         serviceId,
         userId,
         role: body.role ?? currentSettings?.role ?? (user.labels.includes('admin') ? 'admin' : 'user'),
         max_storage_bytes: body.max_storage_bytes ?? currentSettings?.max_storage_bytes ?? null,
       });
     } else if (serviceId !== DEFAULT_SERVICE_ID) {
-      await ensureServiceUser(c.env.usrc_d1, serviceId, userId, user.labels.includes('admin') ? 'admin' : 'user');
+      await ensureServiceUser(c.env.APP_DB, serviceId, userId, user.labels.includes('admin') ? 'admin' : 'user');
     }
 
     const [metadata, currentUsedBytes] = await Promise.all([
-      getServiceUser(c.env.usrc_d1, serviceId, userId),
-      getUserStorageUsage(c.env.usrc_d1, serviceId, userId),
+      getServiceUser(c.env.APP_DB, serviceId, userId),
+      getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
     return c.json<AdminUserUpdateResponse>({
@@ -400,7 +400,7 @@ admin.patch(
     const serviceId = c.get('serviceId');
     const { userId } = c.req.valid('param');
     const { role } = c.req.valid('json');
-    const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+    const service = await getServiceDetails(c.env.APP_DB, serviceId);
     if (!service) return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
 
     let user = await getAppwriteUser(c.env, userId);
@@ -409,8 +409,8 @@ admin.patch(
       user = await updateAppwriteUserLabels(c.env, userId, syncedLabels);
     }
 
-    const currentSettings = await getServiceUser(c.env.usrc_d1, serviceId, userId);
-    await upsertServiceUserSettings(c.env.usrc_d1, {
+    const currentSettings = await getServiceUser(c.env.APP_DB, serviceId, userId);
+    await upsertServiceUserSettings(c.env.APP_DB, {
       serviceId,
       userId,
       role,
@@ -418,8 +418,8 @@ admin.patch(
     });
 
     const [metadata, currentUsedBytes] = await Promise.all([
-      getServiceUser(c.env.usrc_d1, serviceId, userId),
-      getUserStorageUsage(c.env.usrc_d1, serviceId, userId),
+      getServiceUser(c.env.APP_DB, serviceId, userId),
+      getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
     return c.json<AdminUserUpdateResponse>({
@@ -440,12 +440,12 @@ admin.patch(
     const serviceId = c.get('serviceId');
     const { userId } = c.req.valid('param');
     const { limit_bytes } = c.req.valid('json');
-    const service = await getServiceDetails(c.env.usrc_d1, serviceId);
+    const service = await getServiceDetails(c.env.APP_DB, serviceId);
     if (!service) return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
 
     const user = await getAppwriteUser(c.env, userId);
-    const currentSettings = await getServiceUser(c.env.usrc_d1, serviceId, userId);
-    await upsertServiceUserSettings(c.env.usrc_d1, {
+    const currentSettings = await getServiceUser(c.env.APP_DB, serviceId, userId);
+    await upsertServiceUserSettings(c.env.APP_DB, {
       serviceId,
       userId,
       role: currentSettings?.role ?? (user.labels.includes('admin') ? 'admin' : 'user'),
@@ -453,8 +453,8 @@ admin.patch(
     });
 
     const [metadata, currentUsedBytes] = await Promise.all([
-      getServiceUser(c.env.usrc_d1, serviceId, userId),
-      getUserStorageUsage(c.env.usrc_d1, serviceId, userId),
+      getServiceUser(c.env.APP_DB, serviceId, userId),
+      getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
     return c.json<AdminUserUpdateResponse>({
@@ -467,11 +467,11 @@ admin.post('/quota/reconcile', async (c) => {
   const serviceId = c.get('serviceId');
   const dryRun = c.req.query('dry_run') === 'true';
 
-  const result = await reconcileQuota(c.env.usrc_d1, serviceId, dryRun);
+  const result = await reconcileQuota(c.env.APP_DB, serviceId, dryRun);
 
   if (!dryRun && (result.service_drift_bytes !== 0 || result.users_fixed > 0)) {
     c.executionCtx.waitUntil(
-      logServiceEvent(c.env.usrc_d1, {
+      logServiceEvent(c.env.APP_DB, {
         serviceId,
         userId: c.get('userId'),
         action: 'quota_reconciled',

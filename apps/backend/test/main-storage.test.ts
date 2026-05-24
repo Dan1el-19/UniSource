@@ -31,17 +31,17 @@ describe('listMainStorageFileRecords', () => {
       mime_type: 'application/pdf',
       storage_destination: 'r2',
       storage_key: 'main/shared.pdf',
-      bucket: 'unisource',
+      bucket: 'primary',
       folder_id: null,
       is_trashed: 0,
       trashed_at: null,
       created_at: 1000,
       updated_at: 1000,
-      service_id: 'usrc',
+      service_id: 'default',
       upload_id: null,
     };
     const db = mockDbWithRecords([fakeFile]);
-    const result = await listMainStorageFileRecords(db, 'usrc', { limit: 25 });
+    const result = await listMainStorageFileRecords(db, 'default', { limit: 25 });
     expect(result.items).toHaveLength(1);
     expect(result.items[0]!.id).toBe('file-1');
   });

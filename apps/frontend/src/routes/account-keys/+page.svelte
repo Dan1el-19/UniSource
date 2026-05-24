@@ -103,7 +103,7 @@
           </div>
           <div class="field">
             <label for="ak-svcs">Service IDs</label>
-            <input id="ak-svcs" name="service_ids" type="text" placeholder="usrc, chmura-blokserwis" required />
+            <input id="ak-svcs" name="service_ids" type="text" placeholder="default, service-b" required />
           </div>
         </div>
         <div class="modal-footer">

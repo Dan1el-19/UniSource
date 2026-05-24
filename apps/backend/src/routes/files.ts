@@ -120,7 +120,7 @@ files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), a
 	const serviceId = c.get('serviceId');
 
 	try {
-		const result = await listUploads(c.env.usrc_d1, {
+		const result = await listUploads(c.env.APP_DB, {
 			limit: query.limit,
 			cursor: query.cursor,
 			destination: query.destination,
@@ -145,7 +145,7 @@ files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), a
 files.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
 	const { id } = c.req.valid('param');
 	const serviceId = c.get('serviceId');
-	const record = await getUpload(c.env.usrc_d1, id);
+	const record = await getUpload(c.env.APP_DB, id);
 
 	if (!record || record.service_id !== serviceId) {
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
@@ -157,7 +157,7 @@ files.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), a
 files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
 	const { id } = c.req.valid('param');
 	const serviceId = c.get('serviceId');
-	const record = await getUpload(c.env.usrc_d1, id);
+	const record = await getUpload(c.env.APP_DB, id);
 
 	if (!record || record.service_id !== serviceId) {
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
@@ -225,7 +225,7 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validation
 files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
 	const { id } = c.req.valid('param');
 	const serviceId = c.get('serviceId');
-	const record = await getUpload(c.env.usrc_d1, id);
+	const record = await getUpload(c.env.APP_DB, id);
 
 	if (!record || record.service_id !== serviceId) {
 		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
@@ -235,7 +235,7 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 	// dangling DB record that points at an already-removed object. If the
 	// physical delete fails, we resurrect the row (best-effort) so the next
 	// retry can complete the operation.
-	const recordDeleted = await deleteUploadRecord(c.env.usrc_d1, id);
+	const recordDeleted = await deleteUploadRecord(c.env.APP_DB, id);
 	if (!recordDeleted) {
 		return c.json({ error: 'Conflict', message: 'File record could not be deleted' }, 409);
 	}

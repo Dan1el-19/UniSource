@@ -248,7 +248,7 @@ export async function createAccountApiKey(
   const now = Math.floor(Date.now() / 1000);
 
   // Use first serviceId as the anchor service_id (required FK), but mark as account-level
-  const anchorServiceId = serviceIds[0] ?? 'usrc';
+  const anchorServiceId = serviceIds[0] ?? 'default';
 
   await db
     .prepare(

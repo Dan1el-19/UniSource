@@ -17,7 +17,7 @@ type FolderRow = {
 
 const trashedFolder: FolderRow = {
   id: 'folder-trash-1',
-  service_id: 'usrc',
+  service_id: 'default',
   user_id: 'user-1',
   parent_id: null,
   name: 'Kosz test',
@@ -32,7 +32,7 @@ function buildFoldersApp(db: D1Database) {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
   app.use('*', async (c, next) => {
-    c.set('serviceId', 'usrc' as WorkerVariables['serviceId']);
+    c.set('serviceId', 'default' as WorkerVariables['serviceId']);
     c.set('userId', 'user-1' as WorkerVariables['userId']);
     c.set('authType', 'jwt' as WorkerVariables['authType']);
     await next();
@@ -40,7 +40,7 @@ function buildFoldersApp(db: D1Database) {
 
   app.route('/folders', folders);
 
-  return { app, env: { usrc_d1: db } as unknown as CloudflareBindings };
+  return { app, env: { APP_DB: db } as unknown as CloudflareBindings };
 }
 
 function mockFoldersDb(): D1Database {

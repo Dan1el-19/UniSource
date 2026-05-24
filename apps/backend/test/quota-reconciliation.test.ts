@@ -43,34 +43,34 @@ function buildMockD1(serviceUsage: number, userUsages: Record<string, number>, s
 describe('reconcileQuota', () => {
   it('detects service-level drift when stored bytes differ from real usage', async () => {
     const db = buildMockD1(5000, {}, 3000, {});
-    const result = await reconcileQuota(db, 'usrc', true); // dry_run = true
+    const result = await reconcileQuota(db, 'default', true); // dry_run = true
     expect(result.service_drift_bytes).toBe(2000); // 5000 - 3000
     expect(result.users_fixed).toBe(0);
   });
 
   it('detects no drift when counters are accurate', async () => {
     const db = buildMockD1(3000, { 'user-1': 3000 }, 3000, { 'user-1': 3000 });
-    const result = await reconcileQuota(db, 'usrc', true);
+    const result = await reconcileQuota(db, 'default', true);
     expect(result.service_drift_bytes).toBe(0);
     expect(result.users_fixed).toBe(0);
   });
 
   it('detects per-user drift', async () => {
     const db = buildMockD1(3000, { 'user-1': 1500, 'user-2': 1500 }, 3000, { 'user-1': 1000, 'user-2': 1500 });
-    const result = await reconcileQuota(db, 'usrc', true);
+    const result = await reconcileQuota(db, 'default', true);
     expect(result.users_fixed).toBe(1); // user-1 has 500 byte drift
   });
 
   it('applies corrections when dry_run is false', async () => {
     const db = buildMockD1(5000, {}, 3000, {});
-    const result = await reconcileQuota(db, 'usrc', false);
+    const result = await reconcileQuota(db, 'default', false);
     expect(result.service_drift_bytes).toBe(2000);
     expect(result.service_corrected).toBe(true);
   });
 
   it('zeros out counter for user with no active files', async () => {
     const db = buildMockD1(0, {}, 0, { 'user-ghost': 500 });
-    const result = await reconcileQuota(db, 'usrc', true);
+    const result = await reconcileQuota(db, 'default', true);
     expect(result.users_fixed).toBe(1);
   });
 });

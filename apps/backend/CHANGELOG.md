@@ -1,4 +1,4 @@
-# usrc-backend
+# backend
 
 ## 0.0.7
 

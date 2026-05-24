@@ -31,7 +31,7 @@ const permissionsSchema = z.array(z.enum([...VALID_PERMISSIONS] as [Permission, 
 // ─── Services ─────────────────────────────────────────────────────────────────
 
 superadmin.get('/services', async (c) => {
-  const { results } = await c.env.usrc_d1
+  const { results } = await c.env.APP_DB
     .prepare(`SELECT * FROM services ORDER BY created_at ASC`)
     .all<{
       id: string;
@@ -70,7 +70,7 @@ superadmin.post('/services', zValidator('json', createServiceSchema), async (c) 
   const now = Math.floor(Date.now() / 1000);
 
   try {
-    await c.env.usrc_d1
+    await c.env.APP_DB
       .prepare(
         `INSERT INTO services (id, name, default_bucket, max_storage_bytes, current_used_bytes, main_used_bytes, max_file_size_bytes, recommended_upload_destination, object_key_prefix, created_at)
          VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`
@@ -84,12 +84,12 @@ superadmin.post('/services', zValidator('json', createServiceSchema), async (c) 
     throw e;
   }
 
-  const service = await getServiceDetails(c.env.usrc_d1, body.id);
+  const service = await getServiceDetails(c.env.APP_DB, body.id);
   return c.json({ service }, 201);
 });
 
 superadmin.get('/services/:id', async (c) => {
-  const service = await getServiceDetails(c.env.usrc_d1, c.req.param('id'));
+  const service = await getServiceDetails(c.env.APP_DB, c.req.param('id'));
   if (!service) return c.json({ error: 'Not found' }, 404);
   return c.json({ service });
 });
@@ -116,26 +116,26 @@ superadmin.patch('/services/:id', zValidator('json', patchServiceSchema), async 
   if (body.object_key_prefix !== undefined) { sets.push('object_key_prefix = ?'); vals.push(body.object_key_prefix); }
 
   if (sets.length === 0) {
-    const service = await getServiceDetails(c.env.usrc_d1, id);
+    const service = await getServiceDetails(c.env.APP_DB, id);
     if (!service) return c.json({ error: 'Not found' }, 404);
     return c.json({ service });
   }
 
   vals.push(id);
-  const result = await c.env.usrc_d1
+  const result = await c.env.APP_DB
     .prepare(`UPDATE services SET ${sets.join(', ')} WHERE id = ?`)
     .bind(...vals)
     .run();
 
   if ((result.meta.changes ?? 0) === 0) return c.json({ error: 'Not found' }, 404);
 
-  const service = await getServiceDetails(c.env.usrc_d1, id);
+  const service = await getServiceDetails(c.env.APP_DB, id);
   return c.json({ service });
 });
 
 superadmin.delete('/services/:id', async (c) => {
   const id = c.req.param('id');
-  const result = await c.env.usrc_d1
+  const result = await c.env.APP_DB
     .prepare(`DELETE FROM services WHERE id = ?`)
     .bind(id)
     .run();
@@ -146,7 +146,7 @@ superadmin.delete('/services/:id', async (c) => {
 // ─── Service API keys ─────────────────────────────────────────────────────────
 
 superadmin.get('/services/:id/api-keys', async (c) => {
-  const keys = await listServiceApiKeys(c.env.usrc_d1, c.req.param('id'));
+  const keys = await listServiceApiKeys(c.env.APP_DB, c.req.param('id'));
   return c.json({ keys });
 });
 
@@ -161,11 +161,11 @@ superadmin.post('/services/:id/api-keys', zValidator('json', createKeySchema), a
   const id = c.req.param('id');
   const body = c.req.valid('json');
 
-  const service = await getServiceDetails(c.env.usrc_d1, id);
+  const service = await getServiceDetails(c.env.APP_DB, id);
   if (!service) return c.json({ error: 'Service not found' }, 404);
 
   const result = await createServiceApiKey(
-    c.env.usrc_d1,
+    c.env.APP_DB,
     id,
     body.name,
     body.permissions as Permission[],
@@ -185,7 +185,7 @@ superadmin.patch('/services/:id/api-keys/:keyId', zValidator('json', patchKeySch
   const { id, keyId } = c.req.param();
   const body = c.req.valid('json');
 
-  const key = await updateApiKey(c.env.usrc_d1, keyId, id, {
+  const key = await updateApiKey(c.env.APP_DB, keyId, id, {
     name: body.name,
     permissions: body.permissions as Permission[] | undefined,
   });
@@ -195,14 +195,14 @@ superadmin.patch('/services/:id/api-keys/:keyId', zValidator('json', patchKeySch
 
 superadmin.delete('/services/:id/api-keys/:keyId', async (c) => {
   const { id, keyId } = c.req.param();
-  const revoked = await revokeApiKey(c.env.usrc_d1, keyId, id);
+  const revoked = await revokeApiKey(c.env.APP_DB, keyId, id);
   if (!revoked) return c.json({ error: 'Key not found or already revoked' }, 404);
   return c.json({ revoked: true });
 });
 
 superadmin.post('/services/:id/api-keys/:keyId/rotate', async (c) => {
   const { id, keyId } = c.req.param();
-  const result = await rotateApiKey(c.env.usrc_d1, keyId, id);
+  const result = await rotateApiKey(c.env.APP_DB, keyId, id);
   if (!result) return c.json({ error: 'Key not found or already revoked' }, 404);
   return c.json({ key: result });
 });
@@ -210,7 +210,7 @@ superadmin.post('/services/:id/api-keys/:keyId/rotate', async (c) => {
 // ─── Account-level keys ───────────────────────────────────────────────────────
 
 superadmin.get('/account-keys', async (c) => {
-  const keys = await listAccountApiKeys(c.env.usrc_d1);
+  const keys = await listAccountApiKeys(c.env.APP_DB);
   return c.json({ keys });
 });
 
@@ -224,7 +224,7 @@ const createAccountKeySchema = z.object({
 superadmin.post('/account-keys', zValidator('json', createAccountKeySchema), async (c) => {
   const body = c.req.valid('json');
   const result = await createAccountApiKey(
-    c.env.usrc_d1,
+    c.env.APP_DB,
     body.name,
     body.permissions as Permission[],
     body.service_ids,
@@ -242,7 +242,7 @@ const patchAccountKeySchema = z.object({
 superadmin.patch('/account-keys/:keyId', zValidator('json', patchAccountKeySchema), async (c) => {
   const { keyId } = c.req.param();
   const body = c.req.valid('json');
-  const key = await updateAccountApiKey(c.env.usrc_d1, keyId, {
+  const key = await updateAccountApiKey(c.env.APP_DB, keyId, {
     name: body.name,
     permissions: body.permissions as Permission[] | undefined,
     service_ids: body.service_ids,
@@ -252,7 +252,7 @@ superadmin.patch('/account-keys/:keyId', zValidator('json', patchAccountKeySchem
 });
 
 superadmin.delete('/account-keys/:keyId', async (c) => {
-  const revoked = await revokeAccountApiKey(c.env.usrc_d1, c.req.param('keyId'));
+  const revoked = await revokeAccountApiKey(c.env.APP_DB, c.req.param('keyId'));
   if (!revoked) return c.json({ error: 'Key not found or already revoked' }, 404);
   return c.json({ revoked: true });
 });
@@ -260,7 +260,7 @@ superadmin.delete('/account-keys/:keyId', async (c) => {
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
 superadmin.get('/services/:id/cors', async (c) => {
-  const origins = await getServiceCors(c.env.usrc_d1, c.req.param('id'));
+  const origins = await getServiceCors(c.env.APP_DB, c.req.param('id'));
   return c.json({ origins });
 });
 
@@ -272,17 +272,17 @@ superadmin.put('/services/:id/cors', zValidator('json', corsSchema), async (c) =
   const id = c.req.param('id');
   const { origins } = c.req.valid('json');
 
-  const service = await getServiceDetails(c.env.usrc_d1, id);
+  const service = await getServiceDetails(c.env.APP_DB, id);
   if (!service) return c.json({ error: 'Service not found' }, 404);
 
-  await replaceServiceCors(c.env.usrc_d1, id, origins);
+  await replaceServiceCors(c.env.APP_DB, id, origins);
   return c.json({ origins });
 });
 
 // ─── Cloudflare config ────────────────────────────────────────────────────────
 
 superadmin.get('/services/:id/cloudflare', async (c) => {
-  const row = await c.env.usrc_d1
+  const row = await c.env.APP_DB
     .prepare(`SELECT cloudflare_config FROM services WHERE id = ?`)
     .bind(c.req.param('id'))
     .first<{ cloudflare_config: string | null }>();
@@ -300,7 +300,7 @@ superadmin.patch('/services/:id/cloudflare', async (c) => {
     return c.json({ error: 'Invalid JSON' }, 400);
   }
 
-  const result = await c.env.usrc_d1
+  const result = await c.env.APP_DB
     .prepare(`UPDATE services SET cloudflare_config = ? WHERE id = ?`)
     .bind(JSON.stringify(body), id)
     .run();

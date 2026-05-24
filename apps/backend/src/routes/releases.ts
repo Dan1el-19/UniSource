@@ -155,7 +155,7 @@ releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validatio
     RELEASE_UPLOAD_TTL_SECONDS
   );
 
-  const release = await createRelease(c.env.usrc_d1, {
+  const release = await createRelease(c.env.APP_DB, {
     id: releaseId,
     service_id: service.id,
     name: body.name,
@@ -183,7 +183,7 @@ releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validatio
 releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, validationErrorHook), async (c) => {
   const service = c.get('service')!;
   const { release_id, size } = c.req.valid('json');
-  const release = await getRelease(c.env.usrc_d1, release_id, service.id);
+  const release = await getRelease(c.env.APP_DB, release_id, service.id);
 
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
@@ -195,28 +195,28 @@ releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, v
 
   const meta = await headObject(c.env, service.default_bucket, release.r2_key);
   if (!meta) {
-    await failRelease(c.env.usrc_d1, release_id);
+    await failRelease(c.env.APP_DB, release_id);
     return c.json({ error: 'Conflict', message: 'Release object not found in storage' }, 409);
   }
 
   if (meta.size !== size) {
-    await failRelease(c.env.usrc_d1, release_id);
+    await failRelease(c.env.APP_DB, release_id);
     return c.json({ error: 'Conflict', message: 'Release object size mismatch' }, 409);
   }
 
-  const completed = await completeRelease(c.env.usrc_d1, release_id);
+  const completed = await completeRelease(c.env.APP_DB, release_id);
   if (!completed) {
     return c.json({ error: 'Conflict', message: 'Release could not be completed — it may have been cancelled' }, 409);
   }
 
-  await updateRelease(c.env.usrc_d1, release_id, service.id, { size });
+  await updateRelease(c.env.APP_DB, release_id, service.id, { size });
   return c.json({ success: true, release_id, status: 'completed' });
 });
 
 releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, validationErrorHook), async (c) => {
   const service = c.get('service')!;
   const { release_id } = c.req.valid('json');
-  const release = await getRelease(c.env.usrc_d1, release_id, service.id);
+  const release = await getRelease(c.env.APP_DB, release_id, service.id);
 
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
@@ -230,9 +230,9 @@ releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, validatio
     return c.json({ error: 'Conflict', message: `Release is already in state: ${release.upload_status}` }, 409);
   }
 
-  const failed = await failRelease(c.env.usrc_d1, release_id);
+  const failed = await failRelease(c.env.APP_DB, release_id);
   if (!failed) {
-    const current = await getRelease(c.env.usrc_d1, release_id, service.id);
+    const current = await getRelease(c.env.APP_DB, release_id, service.id);
     if (!current) {
       return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
     }
@@ -256,7 +256,7 @@ async function getOwnedMultipartRelease(
   uploadId: string
 ) {
   const service = c.get('service');
-  const ctx = await getReleaseMultipartContext(c.env.usrc_d1, uploadId, service.id);
+  const ctx = await getReleaseMultipartContext(c.env.APP_DB, uploadId, service.id);
   if (!ctx) return { error: 'not_found' as const };
   return { ctx };
 }
@@ -294,7 +294,7 @@ releases.post(
     }
 
     try {
-      await createMultipartRelease(c.env.usrc_d1, {
+      await createMultipartRelease(c.env.APP_DB, {
         id: releaseId,
         service_id: service.id,
         name: body.name,
@@ -435,13 +435,13 @@ releases.post(
 
     const meta = await headObject(c.env, service.default_bucket, ctx.r2_key);
     if (!meta) {
-      await failRelease(c.env.usrc_d1, upload_id);
+      await failRelease(c.env.APP_DB, upload_id);
       return c.json({ error: 'Conflict', message: 'Release object not found in storage' }, 409);
     }
 
-    const completed = await completeRelease(c.env.usrc_d1, upload_id);
+    const completed = await completeRelease(c.env.APP_DB, upload_id);
     if (!completed) {
-      const refreshed = await getRelease(c.env.usrc_d1, upload_id, service.id);
+      const refreshed = await getRelease(c.env.APP_DB, upload_id, service.id);
       if (refreshed?.upload_status === 'completed') {
         return c.json({ success: true, release_id: upload_id, status: 'completed' });
       }
@@ -451,7 +451,7 @@ releases.post(
       );
     }
 
-    await updateRelease(c.env.usrc_d1, upload_id, service.id, { size: meta.size });
+    await updateRelease(c.env.APP_DB, upload_id, service.id, { size: meta.size });
     return c.json({ success: true, release_id: upload_id, status: 'completed' });
   }
 );
@@ -487,7 +487,7 @@ releases.delete(
       ctx.r2_upload_id
     ).catch(() => undefined);
 
-    await failRelease(c.env.usrc_d1, upload_id);
+    await failRelease(c.env.APP_DB, upload_id);
 
     return c.json({ success: true, release_id: upload_id, status: 'failed' });
   }
@@ -495,7 +495,7 @@ releases.delete(
 
 releases.get('/latest', async (c) => {
   const service = c.get('service')!;
-  const release = await getLatestRelease(c.env.usrc_d1, service.id);
+  const release = await getLatestRelease(c.env.APP_DB, service.id);
   if (!release) {
     return c.json({ error: 'Not Found', message: 'No completed release found' }, 404);
   }
@@ -505,7 +505,7 @@ releases.get('/latest', async (c) => {
 releases.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
   const service = c.get('service')!;
   const query = c.req.valid('query');
-  const result = await listReleases(c.env.usrc_d1, service.id, {
+  const result = await listReleases(c.env.APP_DB, service.id, {
     limit: query.limit,
     cursor: query.cursor,
   });
@@ -514,7 +514,7 @@ releases.get('/', zValidator('query', listQuerySchema, validationErrorHook), asy
 
 releases.get('/:id', async (c) => {
   const service = c.get('service')!;
-  const release = await getRelease(c.env.usrc_d1, c.req.param('id'), service.id);
+  const release = await getRelease(c.env.APP_DB, c.req.param('id'), service.id);
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
   }
@@ -523,7 +523,7 @@ releases.get('/:id', async (c) => {
 
 releases.patch('/:id', zValidator('json', updateBodySchema, validationErrorHook), async (c) => {
   const service = c.get('service')!;
-  const updated = await updateRelease(c.env.usrc_d1, c.req.param('id'), service.id, c.req.valid('json'));
+  const updated = await updateRelease(c.env.APP_DB, c.req.param('id'), service.id, c.req.valid('json'));
   if (!updated) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
   }
@@ -533,7 +533,7 @@ releases.patch('/:id', zValidator('json', updateBodySchema, validationErrorHook)
 releases.delete('/:id', async (c) => {
   const service = c.get('service')!;
   const releaseId = c.req.param('id');
-  const release = await getRelease(c.env.usrc_d1, releaseId, service.id);
+  const release = await getRelease(c.env.APP_DB, releaseId, service.id);
 
   if (!release) {
     return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
@@ -543,7 +543,7 @@ releases.delete('/:id', async (c) => {
     await deleteObject(c.env, service.default_bucket, release.r2_key);
   }
 
-  await deleteRelease(c.env.usrc_d1, releaseId, service.id);
+  await deleteRelease(c.env.APP_DB, releaseId, service.id);
   return c.json({ success: true, release_id: releaseId });
 });
 
@@ -555,7 +555,7 @@ releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), 
   const results = [];
 
   // S7: enforce that the prefix is meaningfully scoped to the service. When
-  // a service has objectKeyPrefix='' (e.g. chmura-blokserwis), the resulting
+  // a service has objectKeyPrefix='' (e.g. service-b), the resulting
   // prefix is just `releases/` which is shared across services — restricting
   // sync to the owning bucket is enough since each service has its own R2
   // bucket. We still reject any key that doesn't start with the prefix to
@@ -573,7 +573,7 @@ releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), 
 
   for (const manifest of body.releases) {
     const releaseId = manifest.id ?? crypto.randomUUID();
-    await upsertReleaseSync(c.env.usrc_d1, {
+    await upsertReleaseSync(c.env.APP_DB, {
       id: releaseId,
       service_id: service.id,
       name: manifest.name,
@@ -586,7 +586,7 @@ releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), 
       presigned_url: '',
       presigned_expires_at: Math.floor(Date.now() / 1000),
     });
-    await completeRelease(c.env.usrc_d1, releaseId);
+    await completeRelease(c.env.APP_DB, releaseId);
     results.push({ release_id: releaseId, success: true, status: 'completed' });
   }
 

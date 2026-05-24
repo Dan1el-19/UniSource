@@ -21,30 +21,7 @@ import appRouter from './routes/app';
 import superadminRouter from './routes/superadmin';
 import filesV2 from './routes/v2/files';
 import foldersV2 from './routes/v2/folders';
-
-/**
- * Default CORS allowlist used when ALLOWED_ORIGINS env var is empty.
- * Keeps the production deployment usable for first-party frontends without
- * configuration, while denying arbitrary origins.
- */
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://chmura.blokserwis.pl',
-  'https://chmura-blokserwis.pages.dev',
-  'https://usrc.dev',
-  'https://www.usrc.dev',
-  'http://localhost:5173',
-  'http://localhost:4321',
-  'http://localhost:8788'
-];
-
-function parseAllowedOrigins(env: CloudflareBindings): string[] {
-  const raw = (env as unknown as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS;
-  if (!raw) return DEFAULT_ALLOWED_ORIGINS;
-  return raw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-}
+import { parseAllowedOrigins } from './config/runtime';
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 

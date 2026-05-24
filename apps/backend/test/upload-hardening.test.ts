@@ -69,15 +69,15 @@ import publicRouter from '../src/routes/public';
 
 const pendingR2Record: UploadRecord = {
   id: 'upload-123',
-  service_id: 'usrc',
+  service_id: 'default',
   user_id: null,
   folder_id: null,
   filename: 'test.pdf',
   size: 1024,
   mime_type: 'application/pdf',
   destination: 'r2',
-  storage_key: 'usrc/uploads/2026/01/01/upload-123.pdf',
-  bucket: 'unisource',
+  storage_key: 'default/uploads/2026/01/01/upload-123.pdf',
+  bucket: 'primary',
   status: 'pending',
   presigned_url: null,
   expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -101,7 +101,7 @@ function mockD1(changes = 1): D1Database {
 }
 
 const baseEnv = {
-  usrc_d1: mockD1(),
+  APP_DB: mockD1(),
   R2_ACCOUNT_ID: 'acc',
   R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'secret',
@@ -109,27 +109,27 @@ const baseEnv = {
   APPWRITE_PROJECT_ID: 'proj',
   APPWRITE_BUCKET_ID: 'bucket',
   APPWRITE_API_KEY: 'ak',
-  USRC_API_KEY: 'test-api-key',
-  CHMURA_BLOKSERWIS_API_KEY: 'blok-api-key',
+  SERVICE_API_KEY: 'test-api-key',
+  SECONDARY_SERVICE_API_KEY: 'service-b-key',
 } as unknown as CloudflareBindings;
 
-const usrcServiceRecord: ServiceRecord = {
-  id: 'usrc',
-  name: 'UniSource',
-  default_bucket: 'unisource',
+const defaultServiceRecord: ServiceRecord = {
+  id: 'default',
+  name: 'primary',
+  default_bucket: 'primary',
   max_storage_bytes: 16106127360,
   current_used_bytes: 0,
   main_used_bytes: 0,
   max_file_size_bytes: 5_368_709_120,
   recommended_upload_destination: 'r2',
-  object_key_prefix: 'usrc',
+  object_key_prefix: 'default',
   created_at: 0,
 };
 
-const blokServiceRecord: ServiceRecord = {
-  id: 'chmura-blokserwis',
-  name: 'Chmura Blokserwis',
-  default_bucket: 'chmura-blokserwis',
+const secondaryServiceRecord: ServiceRecord = {
+  id: 'service-b',
+  name: 'Example Service B',
+  default_bucket: 'service-b',
   max_storage_bytes: 107374182400,
   current_used_bytes: 0,
   main_used_bytes: 0,
@@ -139,9 +139,9 @@ const blokServiceRecord: ServiceRecord = {
   created_at: 0,
 };
 
-function buildUploadApp(userId = 'system', serviceId = 'usrc') {
+function buildUploadApp(userId = 'system', serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-  const service = serviceId === 'usrc' ? usrcServiceRecord : blokServiceRecord;
+  const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
     c.set('serviceId', serviceId as WorkerVariables['serviceId']);
@@ -193,7 +193,7 @@ describe('POST /upload/complete — physical verification', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: 'upload-123' }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(409);
@@ -214,7 +214,7 @@ describe('POST /upload/complete — physical verification', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: 'upload-123' }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(409);
@@ -233,7 +233,7 @@ describe('POST /upload/complete — physical verification', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: 'upload-123' }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(200);
@@ -254,7 +254,7 @@ describe('POST /upload/complete — physical verification', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: 'upload-123' }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(200);
@@ -289,7 +289,7 @@ describe('POST /upload/r2/init', () => {
           is_main_storage: true,
         }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(201);
@@ -299,14 +299,14 @@ describe('POST /upload/r2/init', () => {
     );
   });
 
-  it('uses the chmura-blokserwis R2 bucket for chmura-blokserwis uploads', async () => {
+  it('uses the service-b R2 bucket for service-b uploads', async () => {
     vi.mocked(generatePresignedPutUrl).mockResolvedValue({
       presigned_url: 'https://example.com/put',
       storage_key: 'key',
       expires_at: 9999999999,
     });
 
-    const app = buildUploadApp('u1', 'chmura-blokserwis');
+    const app = buildUploadApp('u1', 'service-b');
     const res = await app.fetch(
       new Request('http://localhost/upload/r2/init', {
         method: 'POST',
@@ -318,13 +318,13 @@ describe('POST /upload/r2/init', () => {
           is_main_storage: true,
         }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(201);
     expect(vi.mocked(generatePresignedPutUrl)).toHaveBeenCalledWith(
       expect.anything(),
-      'chmura-blokserwis',
+      'service-b',
       expect.stringMatching(/^uploads\//),
       'image/jpeg',
       expect.any(Number)
@@ -334,14 +334,14 @@ describe('POST /upload/r2/init', () => {
 
 const pendingAppwriteRecord: UploadRecord = {
   id: 'upload-456',
-  service_id: 'usrc',
+  service_id: 'default',
   user_id: null,
   folder_id: null,
   filename: 'test.pdf',
   size: 1024,
   mime_type: 'application/pdf',
   destination: 'appwrite',
-  storage_key: 'usrc/uploads/2026/01/01/abcdef123456789',
+  storage_key: 'default/uploads/2026/01/01/abcdef123456789',
   bucket: 'appwrite-bucket-id',
   status: 'pending',
   presigned_url: null,
@@ -370,7 +370,7 @@ describe('POST /upload/complete — physical verification (Appwrite)', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: 'upload-456' }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(409);
@@ -391,7 +391,7 @@ describe('POST /upload/complete — physical verification (Appwrite)', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: 'upload-456' }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(409);
@@ -410,7 +410,7 @@ describe('POST /upload/complete — physical verification (Appwrite)', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: 'upload-456' }),
       }),
-      { ...baseEnv, usrc_d1: mockD1() }
+      { ...baseEnv, APP_DB: mockD1() }
     );
 
     expect(res.status).toBe(200);
@@ -444,7 +444,7 @@ describe('POST /public/:slug/unlock — rate limiting', () => {
     const passEnv = {
       ...baseEnv,
       RL_SHARE_PASSWORD: { limit: vi.fn().mockResolvedValue({ success: true }) },
-      usrc_d1: mockD1(0),
+      APP_DB: mockD1(0),
     } as unknown as CloudflareBindings;
 
     const app = buildPublicApp();
@@ -470,7 +470,7 @@ describe('POST /public/:slug/unlock — rate limiting', () => {
     const passEnv = {
       ...baseEnv,
       RL_SHARE_PASSWORD: { limit: limitMock },
-      usrc_d1: mockD1(0),
+      APP_DB: mockD1(0),
     } as unknown as CloudflareBindings;
 
     const app = buildPublicApp();
@@ -504,7 +504,7 @@ describe('rate-limit policy bypass when binding missing', () => {
   it('lets requests through when no RL_* binding is configured (e.g. local dev)', async () => {
     // Same as the "limit allows" case but with NO binding at all — covers
     // the test/local-dev codepath where wrangler hasn't injected limiters.
-    const noBindingEnv = { ...baseEnv, usrc_d1: mockD1(0) } as unknown as CloudflareBindings;
+    const noBindingEnv = { ...baseEnv, APP_DB: mockD1(0) } as unknown as CloudflareBindings;
 
     const app = buildPublicApp();
     const res = await app.fetch(

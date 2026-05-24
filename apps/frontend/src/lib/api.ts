@@ -1,6 +1,11 @@
 import { env } from '$env/dynamic/private';
 
-const API_BASE = () => `${env.API_BASE ?? 'https://api.usrc.dev'}/superadmin`;
+const API_BASE = () => {
+  if (!env.API_BASE) {
+    throw new Error('API_BASE is required');
+  }
+  return `${env.API_BASE}/superadmin`;
+};
 
 export type Permission =
   | 'upload'

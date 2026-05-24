@@ -8,7 +8,7 @@ export function requireRoleMiddleware(allowedRoles: string[]) {
 
       const userId = c.get('userId');
       const serviceId = c.get('serviceId');
-      const user = await getServiceUser(c.env.usrc_d1, serviceId, userId);
+      const user = await getServiceUser(c.env.APP_DB, serviceId, userId);
 
       if (!user || !allowedRoles.includes(user.role)) {
         return c.json({ error: 'Forbidden', message: 'Insufficient role' }, 403);

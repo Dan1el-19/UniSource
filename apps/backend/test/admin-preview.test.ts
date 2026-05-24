@@ -6,7 +6,7 @@ function buildPreviewApp(isAdmin: boolean) {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', 'admin-1' as WorkerVariables['userId']);
-    c.set('serviceId', 'usrc' as WorkerVariables['serviceId']);
+    c.set('serviceId', 'default' as WorkerVariables['serviceId']);
     c.set('authType', 'appwrite' as WorkerVariables['authType']);
     c.set('isAdmin', isAdmin as WorkerVariables['isAdmin']);
     await next();
@@ -16,7 +16,7 @@ function buildPreviewApp(isAdmin: boolean) {
   return app;
 }
 
-const env = { usrc_d1: {} } as unknown as CloudflareBindings;
+const env = { APP_DB: {} } as unknown as CloudflareBindings;
 
 describe('adminPreviewMiddleware', () => {
   it('substitutes userId when admin provides X-Target-User-ID', async () => {
@@ -52,7 +52,7 @@ describe('adminPreviewMiddleware', () => {
     const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
     app.use('*', async (c, next) => {
       c.set('userId', 'system' as WorkerVariables['userId']);
-      c.set('serviceId', 'usrc' as WorkerVariables['serviceId']);
+      c.set('serviceId', 'default' as WorkerVariables['serviceId']);
       c.set('authType', 'apikey' as WorkerVariables['authType']);
       c.set('isAdmin', false as WorkerVariables['isAdmin']);
       await next();

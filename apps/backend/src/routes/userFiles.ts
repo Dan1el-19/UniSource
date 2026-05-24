@@ -1,6 +1,6 @@
 /**
  * /files/:id — Plan 2 user-facing file endpoints
- * Mirrors /my-files/:id but under the /files/:id path expected by chmura-blokserwis.
+ * Mirrors /my-files/:id but under the /files/:id path expected by service-b.
  */
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
@@ -71,7 +71,7 @@ userFiles.get('/:id', zValidator('param', idParam, validationErrorHook), async (
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const record = await getFileRecordForUser(c.env.usrc_d1, id, userId, serviceId);
+  const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 
   return c.json<FileRecordDetailResponse>({ file: mapFileRecord(record) });
@@ -88,7 +88,7 @@ userFiles.patch(
     const { id } = c.req.valid('param');
     const { filename } = c.req.valid('json');
 
-    const file = await updateFileRecord(c.env.usrc_d1, id, userId, serviceId, { filename });
+    const file = await updateFileRecord(c.env.APP_DB, id, userId, serviceId, { filename });
     if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 
     return c.json<FileUpdateResponse>({ file: mapFileRecord(file) });
@@ -102,7 +102,7 @@ userFiles.delete('/:id', zValidator('param', idParam, validationErrorHook), asyn
   const { id } = c.req.valid('param');
   const permanent = c.req.query('permanent') === 'true';
 
-  const record = await getFileRecordForUser(c.env.usrc_d1, id, userId, serviceId);
+  const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 
   if (permanent) {
@@ -118,12 +118,12 @@ userFiles.delete('/:id', zValidator('param', idParam, validationErrorHook), asyn
       return c.json({ error: 'Bad Gateway', message: 'Unable to delete file from storage' }, 502);
     }
 
-    await deactivateShareLinksForFile(c.env.usrc_d1, id, serviceId);
-    await deleteFileRecordPermanently(c.env.usrc_d1, id, userId, serviceId);
-    await releaseQuota(c.env.usrc_d1, serviceId, record.size, record.user_id);
+    await deactivateShareLinksForFile(c.env.APP_DB, id, serviceId);
+    await deleteFileRecordPermanently(c.env.APP_DB, id, userId, serviceId);
+    await releaseQuota(c.env.APP_DB, serviceId, record.size, record.user_id);
 
     c.executionCtx.waitUntil(
-      logServiceEvent(c.env.usrc_d1, {
+      logServiceEvent(c.env.APP_DB, {
         serviceId,
         userId,
         action: 'file_deleted',
@@ -139,7 +139,7 @@ userFiles.delete('/:id', zValidator('param', idParam, validationErrorHook), asyn
     return c.json({ success: true, id, permanent: true });
   }
 
-  const trashed = await trashFileRecord(c.env.usrc_d1, id, userId, serviceId);
+  const trashed = await trashFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!trashed) return c.json({ error: 'Conflict', message: 'File already in trash' }, 409);
 
   return c.json({ success: true, id, permanent: false });
@@ -151,7 +151,7 @@ userFiles.post('/:id/restore', zValidator('param', idParam, validationErrorHook)
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const restored = await restoreFileRecord(c.env.usrc_d1, id, userId, serviceId);
+  const restored = await restoreFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!restored) return c.json({ error: 'Not Found', message: 'File not found or not in trash' }, 404);
 
   return c.json({ success: true, id });
@@ -163,7 +163,7 @@ userFiles.get('/:id/download-url', zValidator('param', idParam, validationErrorH
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const record = await getFileRecordForUser(c.env.usrc_d1, id, userId, serviceId);
+  const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
   if (record.is_trashed) return c.json({ error: 'Conflict', message: 'File is in trash' }, 409);
 

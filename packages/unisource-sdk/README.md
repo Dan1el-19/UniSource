@@ -20,8 +20,8 @@ import { UnisourceClient } from '@unisource/sdk';
 
 // 1. Konfiguracja klienta
 const client = new UnisourceClient({
-  baseUrl: 'https://api.usrc.dev',
-  serviceId: 'usrc',
+  baseUrl: 'https://api.example.com',
+  serviceId: 'default',
   getToken: async () => 'twoj-token-jwt-lub-api-key', // Zwróć null dla zapytań publicznych
 });
 
@@ -36,10 +36,10 @@ Zapytania o zasoby publiczne nie wymagają pełnej inicjalizacji klienta i posia
 import { getPublicFileInfo, unlockPublicFile } from '@unisource/sdk';
 
 // Pobranie metadanych udostępnionego pliku na podstawie slug'a
-const info = await getPublicFileInfo('https://api.usrc.dev', 'moj-unikalny-slug');
+const info = await getPublicFileInfo('https://api.example.com', 'moj-unikalny-slug');
 
 // Odblokowanie dostępu do pliku chronionego hasłem
-const unlocked = await unlockPublicFile('https://api.usrc.dev', 'moj-unikalny-slug', 'tajne-haslo123');
+const unlocked = await unlockPublicFile('https://api.example.com', 'moj-unikalny-slug', 'tajne-haslo123');
 ```
 
 ## Rozwój lokalny (Development)

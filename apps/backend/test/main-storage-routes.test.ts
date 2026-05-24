@@ -43,7 +43,7 @@ import { listMainStorageFileRecords, getFileRecord, trashFileRecord, deleteFileR
 import { releaseMainStorageQuota } from '../src/db/services';
 import mainStorageRouter from '../src/routes/mainStorage';
 
-function buildMainApp(userId = 'u1', serviceId = 'usrc') {
+function buildMainApp(userId = 'u1', serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
@@ -60,7 +60,7 @@ function mockD1(): D1Database {
   return { prepare: () => ({ bind: () => ({ run: () => Promise.resolve({ meta: { changes: 1 }, results: [] }) }) }) } as unknown as D1Database;
 }
 
-const env = { usrc_d1: mockD1() } as unknown as CloudflareBindings;
+const env = { APP_DB: mockD1() } as unknown as CloudflareBindings;
 
 describe('GET /main', () => {
   beforeEach(() => { vi.resetAllMocks(); });
@@ -93,14 +93,14 @@ describe('GET /main/:id', () => {
   });
 
   it('returns 200 when file exists in MAIN_STORAGE', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 0 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 0 } as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1'), env);
     expect(res.status).toBe(200);
   });
 
   it('returns 404 when file is trashed', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 1 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 1 } as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1'), env);
     expect(res.status).toBe(200);
@@ -122,7 +122,7 @@ describe('PATCH /main/:id', () => {
   });
 
   it('returns 404 when file is trashed', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 1 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 1 } as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1', {
       method: 'PATCH',
@@ -137,7 +137,7 @@ describe('DELETE /main/:id', () => {
   beforeEach(() => { vi.resetAllMocks(); });
 
   it('returns 200 on soft delete', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 0 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 0 } as any);
     vi.mocked(trashFileRecord).mockResolvedValue(undefined as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1', { method: 'DELETE' }), env);
@@ -149,7 +149,7 @@ describe('DELETE /main/:id', () => {
   it('returns 200 on permanent delete when ?permanent=true', async () => {
     vi.mocked(getFileRecord).mockResolvedValue({
       id: 'file-1',
-      service_id: 'usrc',
+      service_id: 'default',
       user_id: 'u1',
       is_main_storage: 1,
       is_trashed: 0,
@@ -164,11 +164,11 @@ describe('DELETE /main/:id', () => {
     const res = await app.fetch(new Request('http://localhost/main/file-1?permanent=true', { method: 'DELETE' }), env);
     expect(res.status).toBe(200);
     expect(vi.mocked(deleteFileRecordPermanently)).toHaveBeenCalled();
-    expect(vi.mocked(releaseMainStorageQuota)).toHaveBeenCalledWith(env.usrc_d1, 'usrc', 1024);
+    expect(vi.mocked(releaseMainStorageQuota)).toHaveBeenCalledWith(env.APP_DB, 'default', 1024);
   });
 
   it('does NOT call releaseMainStorageQuota on soft delete', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 0, size: 1024 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 0, size: 1024 } as any);
     vi.mocked(trashFileRecord).mockResolvedValue(undefined as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1', { method: 'DELETE' }), env);
@@ -181,14 +181,14 @@ describe('POST /main/:id/restore', () => {
   beforeEach(() => { vi.resetAllMocks(); });
 
   it('returns 404 when file is not trashed', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 0 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 0 } as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1/restore', { method: 'POST' }), env);
     expect(res.status).toBe(404);
   });
 
   it('returns 200 on successful restore', async () => {
-    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'usrc', is_main_storage: 1, is_trashed: 1 } as any);
+    vi.mocked(getFileRecord).mockResolvedValue({ id: 'file-1', service_id: 'default', is_main_storage: 1, is_trashed: 1 } as any);
     vi.mocked(restoreFileRecord).mockResolvedValue(undefined as any);
     const app = buildMainApp();
     const res = await app.fetch(new Request('http://localhost/main/file-1/restore', { method: 'POST' }), env);

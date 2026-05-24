@@ -66,7 +66,7 @@ const sharesRouter = new Hono<HonoEnv>();
 sharesRouter.get('/', async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
-  const links = await listShareLinksForUser(c.env.usrc_d1, userId, serviceId);
+  const links = await listShareLinksForUser(c.env.APP_DB, userId, serviceId);
   return c.json<ShareLinkListResponse>({ items: links.map(mapShareLink) });
 });
 
@@ -79,7 +79,7 @@ sharesRouter.post(
     const serviceId = c.get('serviceId');
     const body = c.req.valid('json');
 
-    const file = await getFileRecordForUser(c.env.usrc_d1, body.file_id, userId, serviceId);
+    const file = await getFileRecordForUser(c.env.APP_DB, body.file_id, userId, serviceId);
     if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
     if (file.is_trashed) return c.json({ error: 'Conflict', message: 'Cannot share a trashed file' }, 409);
 
@@ -87,7 +87,7 @@ sharesRouter.post(
     let slug: string | undefined;
     for (let attempt = 0; attempt < 5; attempt++) {
       const candidate = generateSlug();
-      const existing = await c.env.usrc_d1
+      const existing = await c.env.APP_DB
         .prepare('SELECT id FROM share_links WHERE slug = ?')
         .bind(candidate)
         .first();
@@ -98,7 +98,7 @@ sharesRouter.post(
     const password_hash = body.password ? await hashPassword(body.password) : null;
     const id = crypto.randomUUID();
 
-    const link = await createShareLink(c.env.usrc_d1, {
+    const link = await createShareLink(c.env.APP_DB, {
       id,
       service_id: serviceId,
       file_id: body.file_id,
@@ -120,7 +120,7 @@ sharesRouter.get('/:id', zValidator('param', idParam, validationErrorHook), asyn
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const link = await getShareLinkById(c.env.usrc_d1, id);
+  const link = await getShareLinkById(c.env.APP_DB, id);
   if (!link || link.user_id !== userId || link.service_id !== serviceId) {
     return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
   }
@@ -134,7 +134,7 @@ sharesRouter.delete('/:id', zValidator('param', idParam, validationErrorHook), a
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const deleted = await deleteShareLink(c.env.usrc_d1, id, userId, serviceId);
+  const deleted = await deleteShareLink(c.env.APP_DB, id, userId, serviceId);
   if (!deleted) return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
 
   return c.json({ success: true as const, id });

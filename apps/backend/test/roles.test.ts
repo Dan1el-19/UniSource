@@ -13,7 +13,7 @@ function buildRoleApp(allowedRoles: string[], userId: string, authType: 'appwrit
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
-    c.set('serviceId', 'usrc' as WorkerVariables['serviceId']);
+    c.set('serviceId', 'default' as WorkerVariables['serviceId']);
     c.set('authType', authType as WorkerVariables['authType']);
     c.set('isAdmin', false as WorkerVariables['isAdmin']);
     await next();
@@ -24,7 +24,7 @@ function buildRoleApp(allowedRoles: string[], userId: string, authType: 'appwrit
 }
 
 const mockDb = { prepare: vi.fn() } as unknown as D1Database;
-const env = { usrc_d1: mockDb } as unknown as CloudflareBindings;
+const env = { APP_DB: mockDb } as unknown as CloudflareBindings;
 
 describe('requireRoleMiddleware', () => {
   beforeEach(() => {
@@ -38,14 +38,14 @@ describe('requireRoleMiddleware', () => {
   });
 
   it('blocks user with insufficient role', async () => {
-    vi.mocked(getServiceUser).mockResolvedValue({ service_id: 'usrc', user_id: 'u1', role: 'user', max_storage_bytes: null, current_used_bytes: 0, created_at: 0 } as any);
+    vi.mocked(getServiceUser).mockResolvedValue({ service_id: 'default', user_id: 'u1', role: 'user', max_storage_bytes: null, current_used_bytes: 0, created_at: 0 } as any);
     const app = buildRoleApp(['plus', 'admin'], 'u1', 'appwrite');
     const res = await app.fetch(new Request('http://localhost/protected'), env);
     expect(res.status).toBe(403);
   });
 
   it('allows user with matching role', async () => {
-    vi.mocked(getServiceUser).mockResolvedValue({ service_id: 'usrc', user_id: 'u1', role: 'plus', max_storage_bytes: null, current_used_bytes: 0, created_at: 0 } as any);
+    vi.mocked(getServiceUser).mockResolvedValue({ service_id: 'default', user_id: 'u1', role: 'plus', max_storage_bytes: null, current_used_bytes: 0, created_at: 0 } as any);
     const app = buildRoleApp(['plus', 'admin'], 'u1', 'appwrite');
     const res = await app.fetch(new Request('http://localhost/protected'), env);
     expect(res.status).toBe(200);

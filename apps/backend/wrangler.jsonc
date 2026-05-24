@@ -1,7 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "unisource",
-	"account_id": "0435db96c4078cd58f12162e0b83cee0",
+	"name": "app-backend",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-05-11",
 	"compatibility_flags": ["nodejs_compat"],
@@ -25,27 +24,27 @@
 		"cwd": "../..",
 		"watch_dir": ["src", "../../packages/unisource-sdk/src"]
 	},
-	"routes": [
-		{ "pattern": "api.usrc.dev", "zone_name": "usrc.dev", "custom_domain": true }
-	],
 	"d1_databases": [
 		{
-			"binding": "usrc_d1",
-			"database_name": "usrc-d1",
-			"database_id": "fabfb0d8-ebe5-43ad-bc3e-67ed34af3a37",
+			"binding": "APP_DB",
+			"database_name": "app-db",
+			"database_id": "00000000-0000-0000-0000-000000000000",
 			"migrations_dir": "src/db/migrations"
 		}
 	],
 	"r2_buckets": [
 		{
-			"binding": "USRC_BUCKET",
-			"bucket_name": "unisource"
+			"binding": "PRIMARY_BUCKET",
+			"bucket_name": "storage-primary-placeholder"
 		},
 		{
-			"binding": "CHMURA_BLOKSERWIS_BUCKET",
-			"bucket_name": "chmura-blokserwis"
+			"binding": "SECONDARY_BUCKET",
+			"bucket_name": "storage-secondary-placeholder"
 		}
 	],
+	"vars": {
+		"R2_BUCKET_BINDINGS": "{\"primary\":\"PRIMARY_BUCKET\",\"secondary\":\"SECONDARY_BUCKET\"}"
+	},
 	"ratelimits": [
 		{
 			"name": "RL_GENERAL",

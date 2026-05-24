@@ -2,9 +2,9 @@
 
 // Cloudflare Worker bindings (injected by Wrangler)
 declare interface CloudflareBindings {
-  usrc_d1: D1Database;
-  USRC_BUCKET: R2Bucket;
-  CHMURA_BLOKSERWIS_BUCKET: R2Bucket;
+  APP_DB: D1Database;
+  PRIMARY_BUCKET: R2Bucket;
+  SECONDARY_BUCKET?: R2Bucket;
   /**
    * Cloudflare Rate Limiting bindings — one namespace per traffic class so
    * different endpoint families don't share a counter. Configured in
@@ -17,9 +17,8 @@ declare interface CloudflareBindings {
   RL_PUBLIC_READ?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
   RL_AUTH_FAIL?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
   RL_SHARE_PASSWORD?: { limit: (config: { key: string }) => Promise<{ success: boolean }> };
-  // Secrets injected at runtime via `wrangler secret put` — one API key per service
-  USRC_API_KEY: string;
-  CHMURA_BLOKSERWIS_API_KEY: string;
+  R2_BUCKET_BINDINGS: string;
+  R2_BUCKET_NAMES: string;
   R2_ACCOUNT_ID: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;

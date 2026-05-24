@@ -98,7 +98,7 @@ folders.post('/', zValidator('json', folderCreateRequestSchema, validationErrorH
   const body = c.req.valid('json');
 
   if (body.parent_id) {
-    const parent = await getFolderForUser(c.env.usrc_d1, body.parent_id, userId, serviceId);
+    const parent = await getFolderForUser(c.env.APP_DB, body.parent_id, userId, serviceId);
     if (!parent) {
       return c.json({ error: 'Not Found', message: 'Parent folder not found' }, 404);
     }
@@ -108,7 +108,7 @@ folders.post('/', zValidator('json', folderCreateRequestSchema, validationErrorH
   }
 
   const id = crypto.randomUUID();
-  const folder = await createFolder(c.env.usrc_d1, {
+  const folder = await createFolder(c.env.APP_DB, {
     id,
     service_id: serviceId,
     user_id: userId,
@@ -127,7 +127,7 @@ folders.get('/', zValidator('query', listQuerySchema, validationErrorHook), asyn
   const query = c.req.valid('query');
 
   try {
-    const result = await listFolders(c.env.usrc_d1, {
+    const result = await listFolders(c.env.APP_DB, {
       user_id: userId,
       service_id: serviceId,
       parent_id: query.parent_id ?? null,
@@ -155,7 +155,7 @@ folders.get('/:id', zValidator('param', folderIdParamSchema, validationErrorHook
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const folder = await getFolderForUser(c.env.usrc_d1, id, userId, serviceId);
+  const folder = await getFolderForUser(c.env.APP_DB, id, userId, serviceId);
   if (!folder) {
     return c.json({ error: 'Not Found', message: 'Folder not found' }, 404);
   }
@@ -174,7 +174,7 @@ folders.patch(
     const { id } = c.req.valid('param');
     const body = c.req.valid('json');
 
-    const updated = await updateFolder(c.env.usrc_d1, id, userId, serviceId, {
+    const updated = await updateFolder(c.env.APP_DB, id, userId, serviceId, {
       name: body.name,
       color_tag: body.color_tag,
     });
@@ -196,7 +196,7 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorH
 
   if (permanent) {
     // Get all descendant folder IDs (including this folder) via recursive CTE
-    const descendantIds = await getDescendantFolderIds(c.env.usrc_d1, id, userId, serviceId);
+    const descendantIds = await getDescendantFolderIds(c.env.APP_DB, id, userId, serviceId);
     if (descendantIds.length === 0) {
       return c.json({ error: 'Not Found', message: 'Folder not found' }, 404);
     }
@@ -204,22 +204,22 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorH
     // Mark all files in descendant folders as trashed (mark-for-deletion pattern).
     // Actual R2/Appwrite cleanup is handled by R2 lifecycle rules — backend
     // does not own physical cleanup of trashed files anymore (B4).
-    await trashFilesInFolders(c.env.usrc_d1, descendantIds, userId, serviceId);
+    await trashFilesInFolders(c.env.APP_DB, descendantIds, userId, serviceId);
 
     // B11: delete all descendant folders in a single D1 batch instead of
     // sequential per-folder DELETEs. Children-first iteration order keeps
     // the recursive CTE consistent with FK semantics.
     const deleteStmts = descendantIds.map((folderId) =>
-      c.env.usrc_d1
+      c.env.APP_DB
         .prepare('DELETE FROM folders WHERE id = ? AND user_id = ? AND service_id = ?')
         .bind(folderId, userId, serviceId)
     );
     if (deleteStmts.length > 0) {
-      await c.env.usrc_d1.batch(deleteStmts);
+      await c.env.APP_DB.batch(deleteStmts);
     }
 
     c.executionCtx.waitUntil(
-      logServiceEvent(c.env.usrc_d1, {
+      logServiceEvent(c.env.APP_DB, {
         serviceId,
         userId,
         action: 'folder_deleted',
@@ -235,7 +235,7 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorH
     return c.json<FolderDeleteResponse>({ success: true, id, permanent: true, folders_deleted: descendantIds.length });
   }
 
-  const trashed = await trashFolder(c.env.usrc_d1, id, userId, serviceId);
+  const trashed = await trashFolder(c.env.APP_DB, id, userId, serviceId);
   if (!trashed) {
     return c.json({ error: 'Not Found', message: 'Folder not found or already trashed' }, 404);
   }
@@ -249,7 +249,7 @@ folders.post('/:id/restore', zValidator('param', folderIdParamSchema, validation
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const restored = await restoreFolder(c.env.usrc_d1, id, userId, serviceId);
+  const restored = await restoreFolder(c.env.APP_DB, id, userId, serviceId);
   if (!restored) {
     return c.json({ error: 'Not Found', message: 'Folder not found or not in trash' }, 404);
   }

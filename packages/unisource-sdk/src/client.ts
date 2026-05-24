@@ -136,7 +136,7 @@ export class UnisourceNetworkError extends Error {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 export interface UnisourceClientConfig {
-  /** Base URL of the UniSource API, e.g. https://api.usrc.dev */
+  /** Base URL of the UniSource API, e.g. https://api.example.com */
   baseUrl: string;
   /** Service identifier — tells the backend which service this client belongs to */
   serviceId: string;

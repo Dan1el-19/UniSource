@@ -19,9 +19,9 @@ declare global {
   }
 }
 
-describe('usrc-backend worker', () => {
+describe('default-backend worker', () => {
   beforeAll(async () => {
-    await applyD1Migrations(env.usrc_d1, env.TEST_MIGRATIONS)
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS)
   }, TEST_TIMEOUT_MS)
 
   it('serves the health route', async () => {

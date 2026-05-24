@@ -13,9 +13,9 @@ INSERT OR IGNORE INTO services (
 )
 VALUES
   (
-    'usrc',
-    'UniSource Platform',
-    'unisource',
+    'default',
+    'Default Service',
+    'primary',
     16106127360,
     0,
     0,
@@ -24,9 +24,9 @@ VALUES
     unixepoch()
   ),
   (
-    'chmura-blokserwis',
-    'Chmura Blokserwis',
-    'chmura-blokserwis',
+    'service-b',
+    'Example Service B',
+    'service-b',
     107374182400,
     0,
     0,
@@ -57,32 +57,32 @@ WHERE storage_destination IS NULL
    OR storage_destination NOT IN ('r2', 'appwrite');
 
 UPDATE uploads
-SET service_id = 'usrc'
+SET service_id = 'default'
 WHERE service_id IS NULL
    OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = uploads.service_id);
 
 UPDATE folders
-SET service_id = 'usrc'
+SET service_id = 'default'
 WHERE service_id IS NULL
    OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = folders.service_id);
 
 UPDATE files
-SET service_id = 'usrc'
+SET service_id = 'default'
 WHERE service_id IS NULL
    OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = files.service_id);
 
 UPDATE share_links
-SET service_id = 'usrc'
+SET service_id = 'default'
 WHERE service_id IS NULL
    OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = share_links.service_id);
 
 UPDATE service_user_events
-SET service_id = 'usrc'
+SET service_id = 'default'
 WHERE service_id IS NULL
    OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = service_user_events.service_id);
 
 UPDATE releases
-SET service_id = 'usrc'
+SET service_id = 'default'
 WHERE service_id IS NULL
    OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = releases.service_id);
 
@@ -95,7 +95,7 @@ SELECT
   CASE
     WHEN service_id IS NULL
       OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = service_users.service_id)
-    THEN 'usrc'
+    THEN 'default'
     ELSE service_id
   END AS service_id,
   user_id,
@@ -112,7 +112,7 @@ GROUP BY
   CASE
     WHEN service_id IS NULL
       OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = service_users.service_id)
-    THEN 'usrc'
+    THEN 'default'
     ELSE service_id
   END,
   user_id;
@@ -123,7 +123,7 @@ SELECT
   CASE
     WHEN service_id IS NULL
       OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = service_user_events.service_id)
-    THEN 'usrc'
+    THEN 'default'
     ELSE service_id
   END AS service_id,
   user_id,
@@ -143,7 +143,7 @@ SELECT
   CASE
     WHEN service_id IS NULL
       OR NOT EXISTS (SELECT 1 FROM services WHERE services.id = releases.service_id)
-    THEN 'usrc'
+    THEN 'default'
     ELSE service_id
   END AS service_id,
   name,

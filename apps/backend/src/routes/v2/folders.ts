@@ -61,7 +61,7 @@ foldersV2.get('/', zValidator('query', folderListV2QuerySchema, validationErrorH
   const query = c.req.valid('query');
 
   try {
-    const result = await listFoldersV2(c.env.usrc_d1, {
+    const result = await listFoldersV2(c.env.APP_DB, {
       user_id: userId,
       service_id: serviceId,
       parent_id: query.parent_id,
@@ -92,12 +92,12 @@ foldersV2.get('/:id/breadcrumbs', zValidator('param', folderIdParamSchema, valid
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
-  const folder = await getFolderForUser(c.env.usrc_d1, id, userId, serviceId);
+  const folder = await getFolderForUser(c.env.APP_DB, id, userId, serviceId);
   if (!folder) {
     return c.json({ error: 'Not Found', message: 'Folder not found' }, 404);
   }
 
-  const breadcrumbs = await getFolderBreadcrumbs(c.env.usrc_d1, id, userId, serviceId);
+  const breadcrumbs = await getFolderBreadcrumbs(c.env.APP_DB, id, userId, serviceId);
   return c.json<FolderBreadcrumbsResponse>({ breadcrumbs: breadcrumbs.map(mapFolder) });
 });
 
@@ -107,7 +107,7 @@ foldersV2.post('/bulk-trash', zValidator('json', bulkFolderIdsSchema, validation
   const serviceId = c.get('serviceId');
   const { ids } = c.req.valid('json');
 
-  const successIds = await bulkTrashFolders(c.env.usrc_d1, ids, userId, serviceId);
+  const successIds = await bulkTrashFolders(c.env.APP_DB, ids, userId, serviceId);
   const failedIds = ids.filter(id => !successIds.includes(id));
 
   return c.json<BulkOperationResponse>({
@@ -123,7 +123,7 @@ foldersV2.post('/bulk-restore', zValidator('json', bulkFolderIdsSchema, validati
   const serviceId = c.get('serviceId');
   const { ids } = c.req.valid('json');
 
-  const successIds = await bulkRestoreFolders(c.env.usrc_d1, ids, userId, serviceId);
+  const successIds = await bulkRestoreFolders(c.env.APP_DB, ids, userId, serviceId);
   const failedIds = ids.filter(id => !successIds.includes(id));
 
   return c.json<BulkOperationResponse>({
@@ -140,7 +140,7 @@ foldersV2.post('/bulk-move', zValidator('json', bulkFolderMoveRequestSchema, val
   const { ids, parent_id } = c.req.valid('json');
 
   if (parent_id) {
-    const targetFolder = await getFolderForUser(c.env.usrc_d1, parent_id, userId, serviceId);
+    const targetFolder = await getFolderForUser(c.env.APP_DB, parent_id, userId, serviceId);
     if (!targetFolder) {
       return c.json({ error: 'Not Found', message: 'Target folder not found' }, 404);
     }
@@ -153,14 +153,14 @@ foldersV2.post('/bulk-move', zValidator('json', bulkFolderMoveRequestSchema, val
 
     // Cycle prevention: Check if the target parent_id is a descendant of ANY of the folders being moved
     for (const folderId of ids) {
-      const descendants = await getDescendantFolderIds(c.env.usrc_d1, folderId, userId, serviceId);
+      const descendants = await getDescendantFolderIds(c.env.APP_DB, folderId, userId, serviceId);
       if (descendants.includes(parent_id)) {
         return c.json({ error: 'Conflict', message: 'Cannot move a folder into its own descendant (cycle detected)' }, 409);
       }
     }
   }
 
-  const successIds = await bulkMoveFolders(c.env.usrc_d1, ids, userId, serviceId, parent_id ?? null);
+  const successIds = await bulkMoveFolders(c.env.APP_DB, ids, userId, serviceId, parent_id ?? null);
   const failedIds = ids.filter(id => !successIds.includes(id));
 
   return c.json<BulkOperationResponse>({

@@ -9,17 +9,39 @@ export function createR2SigningClient(env: CloudflareBindings): AwsClient {
   });
 }
 
+export function resolveR2BucketName(env: CloudflareBindings, bucketKey: string): string {
+  const raw = (env as unknown as { R2_BUCKET_NAMES?: string }).R2_BUCKET_NAMES;
+  if (!raw) {
+    throw new Error(`R2 bucket name not configured for bucket key: ${bucketKey}`);
+  }
+
+  let bucketNames: Record<string, string>;
+  try {
+    bucketNames = JSON.parse(raw) as Record<string, string>;
+  } catch {
+    throw new Error('R2_BUCKET_NAMES must be valid JSON');
+  }
+
+  const bucketName = bucketNames[bucketKey];
+  if (!bucketName) {
+    throw new Error(`R2 bucket name not configured for bucket key: ${bucketKey}`);
+  }
+
+  return bucketName;
+}
+
 /**
  * Build a path-style R2 object URL.
  * Each `/`-separated segment is URI-encoded; the slashes are preserved.
  */
-export function r2ObjectUrl(env: CloudflareBindings, bucket: string, key: string): string {
+export function r2ObjectUrl(env: CloudflareBindings, bucketKey: string, key: string): string {
+  const bucketName = resolveR2BucketName(env, bucketKey);
   const host = `${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
   const path = key
     .split('/')
     .map((s) => encodeURIComponent(s))
     .join('/');
-  return `https://${host}/${encodeURIComponent(bucket)}/${path}`;
+  return `https://${host}/${encodeURIComponent(bucketName)}/${path}`;
 }
 
 /**

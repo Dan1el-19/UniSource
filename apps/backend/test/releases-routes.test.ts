@@ -23,7 +23,7 @@ vi.mock('../src/services/r2', async (importOriginal) => {
     ...actual,
     generatePresignedPutUrl: vi.fn().mockResolvedValue({
       presigned_url: 'https://r2.example.com/put',
-      storage_key: 'releases/usrc/v1.0.0.zip',
+      storage_key: 'releases/default/v1.0.0.zip',
       expires_at: 9999999999,
     }),
     headObject: vi.fn().mockResolvedValue({ size: 4096 }),
@@ -45,7 +45,7 @@ import {
 import { deleteObject, generatePresignedPutUrl, headObject } from '../src/services/r2';
 import releasesRouter from '../src/routes/releases';
 
-function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'usrc') {
+function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
@@ -54,13 +54,13 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'usrc')
     c.set('service', {
       id: serviceId,
       name: serviceId,
-      default_bucket: serviceId === 'chmura-blokserwis' ? 'chmura-blokserwis' : 'unisource',
+      default_bucket: serviceId === 'service-b' ? 'service-b' : 'primary',
       max_storage_bytes: 1000000000,
       current_used_bytes: 0,
       main_used_bytes: 0,
       max_file_size_bytes: 500000000,
       recommended_upload_destination: 'r2',
-      object_key_prefix: serviceId === 'chmura-blokserwis' ? '' : serviceId,
+      object_key_prefix: serviceId === 'service-b' ? '' : serviceId,
       created_at: 0,
     } as WorkerVariables['service']);
     await next();
@@ -70,20 +70,20 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'usrc')
 }
 
 const relEnv = {
-  usrc_d1: { prepare: vi.fn(() => ({ bind: vi.fn(() => ({ run: vi.fn(), first: vi.fn(), all: vi.fn() })) })) },
+  APP_DB: { prepare: vi.fn(() => ({ bind: vi.fn(() => ({ run: vi.fn(), first: vi.fn(), all: vi.fn() })) })) },
   R2_ACCOUNT_ID: 'acc',
   R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'sec',
-  USRC_API_KEY: 'test-api-key',
-  CHMURA_BLOKSERWIS_API_KEY: 'blok-key',
+  SERVICE_API_KEY: 'test-api-key',
+  SECONDARY_SERVICE_API_KEY: 'service-b-key',
 } as unknown as CloudflareBindings;
 
 const completedRelease = {
   id: 'rel-1',
-  service_id: 'usrc',
+  service_id: 'default',
   name: 'v1.0.0',
   size: 4096,
-  r2_key: 'releases/usrc/v1.0.0.zip',
+  r2_key: 'releases/default/v1.0.0.zip',
   tags: [],
   notes: null,
   force_update: false,
@@ -113,7 +113,7 @@ beforeEach(() => {
   }));
   vi.mocked(generatePresignedPutUrl).mockResolvedValue({
     presigned_url: 'https://r2.example.com/put',
-    storage_key: 'releases/usrc/generated.zip',
+    storage_key: 'releases/default/generated.zip',
     expires_at: 9999999999,
   });
   vi.mocked(headObject).mockResolvedValue({ size: 4096 });
@@ -144,12 +144,12 @@ describe('POST /releases/upload/init', () => {
     expect(res.status).toBe(201);
     const body = await res.json() as { presigned_url: string; release_id: string; r2_key: string };
     expect(body.presigned_url).toBe('https://r2.example.com/put');
-    expect(body.r2_key).toBe('releases/usrc/app.zip');
+    expect(body.r2_key).toBe('releases/default/app.zip');
     expect(createRelease).toHaveBeenCalledWith(
-      relEnv.usrc_d1,
+      relEnv.APP_DB,
       expect.objectContaining({
         id: body.release_id,
-        service_id: 'usrc',
+        service_id: 'default',
         name: 'v1.0.0',
         r2_key: body.r2_key,
         tags: [],
@@ -158,15 +158,15 @@ describe('POST /releases/upload/init', () => {
     );
     expect(generatePresignedPutUrl).toHaveBeenCalledWith(
       relEnv,
-      'unisource',
+      'primary',
       body.r2_key,
       'application/octet-stream',
       3600
     );
   });
 
-  it('does not prefix release keys with service id for chmura-blokserwis bucket', async () => {
-    const app = buildReleasesApp('system', true, 'chmura-blokserwis');
+  it('does not prefix release keys with service id for service-b bucket', async () => {
+    const app = buildReleasesApp('system', true, 'service-b');
     const res = await app.fetch(
       new Request('http://localhost/releases/upload/init', {
         method: 'POST',
@@ -181,7 +181,7 @@ describe('POST /releases/upload/init', () => {
     expect(body.r2_key).toBe('releases/app.zip');
     expect(generatePresignedPutUrl).toHaveBeenCalledWith(
       relEnv,
-      'chmura-blokserwis',
+      'service-b',
       'releases/app.zip',
       'application/octet-stream',
       3600
@@ -247,7 +247,7 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(409);
-    expect(failRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-1');
+    expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
   });
 
   it('returns 409 and fails release when uploaded object size does not match requested size', async () => {
@@ -265,7 +265,7 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(409);
-    expect(failRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-1');
+    expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
     expect(completeRelease).not.toHaveBeenCalled();
     expect(updateRelease).not.toHaveBeenCalled();
   });
@@ -288,7 +288,7 @@ describe('POST /releases/upload/complete', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { success: boolean };
     expect(body.success).toBe(true);
-    expect(updateRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-1', 'usrc', { size: 4096 });
+    expect(updateRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default', { size: 4096 });
   });
 });
 
@@ -320,7 +320,7 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    expect(failRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-1');
+    expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
   });
 
   it('returns success when release is already failed', async () => {
@@ -414,8 +414,8 @@ describe('DELETE /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    expect(deleteObject).toHaveBeenCalledWith(relEnv, 'unisource', completedRelease.r2_key);
-    expect(deleteRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-1', 'usrc');
+    expect(deleteObject).toHaveBeenCalledWith(relEnv, 'primary', completedRelease.r2_key);
+    expect(deleteRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default');
   });
 });
 
@@ -432,7 +432,7 @@ describe('PATCH /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    expect(updateRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-1', 'usrc', {
+    expect(updateRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default', {
       notes: 'patched',
       force_update: true,
     });
@@ -466,7 +466,7 @@ describe('POST /releases/sync', () => {
             {
               id: 'rel-sync',
               name: 'v1.2.0',
-              r2_key: 'releases/usrc/rel-sync.zip',
+              r2_key: 'releases/default/rel-sync.zip',
               size: 1234,
               tags: ['stable'],
               notes: 'synced',
@@ -481,16 +481,16 @@ describe('POST /releases/sync', () => {
     const body = await res.json() as { synced: number };
     expect(body.synced).toBe(1);
     expect(upsertReleaseSync).toHaveBeenCalledWith(
-      relEnv.usrc_d1,
+      relEnv.APP_DB,
       expect.objectContaining({
         id: 'rel-sync',
-        service_id: 'usrc',
+        service_id: 'default',
         name: 'v1.2.0',
-        r2_key: 'releases/usrc/rel-sync.zip',
+        r2_key: 'releases/default/rel-sync.zip',
         size: 1234,
       })
     );
-    expect(completeRelease).toHaveBeenCalledWith(relEnv.usrc_d1, 'rel-sync');
+    expect(completeRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-sync');
   });
 
   it('returns 400 and does not create release when manifest r2_key is outside service releases prefix', async () => {
@@ -504,7 +504,7 @@ describe('POST /releases/sync', () => {
             {
               id: 'rel-sync',
               name: 'v1.2.0',
-              r2_key: 'backups/usrc/rel-sync.zip',
+              r2_key: 'backups/default/rel-sync.zip',
               size: 1234,
             },
           ],
@@ -514,14 +514,14 @@ describe('POST /releases/sync', () => {
     );
     expect(res.status).toBe(400);
     const body = await res.json() as { message: string };
-    expect(body.message).toBe('r2_key must start with releases/usrc/');
+    expect(body.message).toBe('r2_key must start with releases/default/');
     expect(upsertReleaseSync).not.toHaveBeenCalled();
     expect(completeRelease).not.toHaveBeenCalled();
   });
 
-  it('accepts release sync keys without service id prefix for chmura-blokserwis bucket', async () => {
+  it('accepts release sync keys without service id prefix for service-b bucket', async () => {
     vi.mocked(completeRelease).mockResolvedValue(true);
-    const app = buildReleasesApp('system', true, 'chmura-blokserwis');
+    const app = buildReleasesApp('system', true, 'service-b');
     const res = await app.fetch(
       new Request('http://localhost/releases/sync', {
         method: 'POST',
@@ -542,9 +542,9 @@ describe('POST /releases/sync', () => {
 
     expect(res.status).toBe(200);
     expect(upsertReleaseSync).toHaveBeenCalledWith(
-      relEnv.usrc_d1,
+      relEnv.APP_DB,
       expect.objectContaining({
-        service_id: 'chmura-blokserwis',
+        service_id: 'service-b',
         r2_key: 'releases/rel-sync.zip',
       })
     );
@@ -561,15 +561,15 @@ describe('releases routes — admin enforcement', () => {
       c.set('authType', 'jwt' as WorkerVariables['authType']);
       c.set('isAdmin', false as WorkerVariables['isAdmin']);
       c.set('service', {
-        id: 'usrc',
-        name: 'usrc',
-        default_bucket: 'unisource',
+        id: 'default',
+        name: 'default',
+        default_bucket: 'primary',
         max_storage_bytes: 1000000000,
         current_used_bytes: 0,
         main_used_bytes: 0,
         max_file_size_bytes: 500000000,
         recommended_upload_destination: 'r2',
-        object_key_prefix: 'usrc',
+        object_key_prefix: 'default',
         created_at: 0,
       } as WorkerVariables['service']);
       await next();

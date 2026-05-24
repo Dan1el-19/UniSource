@@ -52,11 +52,19 @@ jobs:
       - name: Build frontend
         run: pnpm --filter ./apps/frontend build
 
+      - name: Generate Wrangler config
+        run: pnpm --filter frontend generate:wrangler
+        env:
+          WORKER_NAME: ${{ secrets.FRONTEND_WORKER_NAME }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FRONTEND_ROUTE_PATTERN: ${{ secrets.FRONTEND_ROUTE_PATTERN }}
+          FRONTEND_ROUTE_ZONE_NAME: ${{ secrets.FRONTEND_ROUTE_ZONE_NAME }}
+
       - name: Deploy frontend Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           packageManager: pnpm
           workingDirectory: apps/frontend
-          command: deploy
+          command: deploy --config wrangler.generated.jsonc
           wranglerVersion: "4"

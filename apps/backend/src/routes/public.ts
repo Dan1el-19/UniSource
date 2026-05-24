@@ -91,7 +91,7 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
   const { slug } = c.req.valid('param');
   const now = Math.floor(Date.now() / 1000);
 
-  const link = await getShareLinkBySlug(c.env.usrc_d1, slug);
+  const link = await getShareLinkBySlug(c.env.APP_DB, slug);
   if (!link || !link.is_active) {
     return c.json({ error: 'Not Found', message: 'Share link not found or inactive' }, 404);
   }
@@ -102,7 +102,7 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
     return c.json({ error: 'Gone', message: 'Download limit reached' }, 410);
   }
 
-  const file = await getFileRecord(c.env.usrc_d1, link.file_id);
+  const file = await getFileRecord(c.env.APP_DB, link.file_id);
   if (!file || file.is_trashed) {
     return c.json({ error: 'Not Found', message: 'File not available' }, 404);
   }
@@ -154,7 +154,7 @@ publicRouter.post(
     const { password } = c.req.valid('json');
     const now = Math.floor(Date.now() / 1000);
 
-    const link = await getShareLinkBySlug(c.env.usrc_d1, slug);
+    const link = await getShareLinkBySlug(c.env.APP_DB, slug);
     if (!link || !link.is_active) {
       return c.json({ error: 'Not Found', message: 'Share link not found or inactive' }, 404);
     }
@@ -171,7 +171,7 @@ publicRouter.post(
     const ok = await verifyPassword(password, link.password_hash);
     if (!ok) return c.json({ error: 'Unauthorized', message: 'Incorrect password' }, 401);
 
-    const file = await getFileRecord(c.env.usrc_d1, link.file_id);
+    const file = await getFileRecord(c.env.APP_DB, link.file_id);
     if (!file || file.is_trashed) {
       return c.json({ error: 'Not Found', message: 'File not available' }, 404);
     }
@@ -218,7 +218,7 @@ publicRouter.get(
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const link = await getShareLinkBySlug(c.env.usrc_d1, slug);
+    const link = await getShareLinkBySlug(c.env.APP_DB, slug);
     if (!link || !link.is_active) {
       return c.json({ error: 'Not Found', message: 'Share link not found or inactive' }, 404);
     }
@@ -229,12 +229,12 @@ publicRouter.get(
     // B5: atomic increment + max_downloads check. The DB UPDATE only succeeds
     // when the link is still under cap; concurrent requests on the last slot
     // can therefore not both exceed the limit.
-    const incremented = await incrementDownloadCount(c.env.usrc_d1, link.id);
+    const incremented = await incrementDownloadCount(c.env.APP_DB, link.id);
     if (!incremented) {
       return c.json({ error: 'Gone', message: 'Download limit reached' }, 410);
     }
 
-    const file = await getFileRecord(c.env.usrc_d1, link.file_id);
+    const file = await getFileRecord(c.env.APP_DB, link.file_id);
     if (!file || file.is_trashed) {
       return c.json({ error: 'Not Found', message: 'File not available' }, 404);
     }
@@ -250,7 +250,7 @@ publicRouter.get(
 
       // Audit logging is best-effort and does not block the redirect.
       const auditLog = Promise.resolve(
-        logServiceEvent(c.env.usrc_d1, {
+        logServiceEvent(c.env.APP_DB, {
           serviceId: link.service_id,
           userId: link.user_id,
           action: 'share_link_accessed',

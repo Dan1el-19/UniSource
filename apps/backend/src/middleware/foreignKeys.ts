@@ -15,7 +15,7 @@ export const foreignKeysMiddleware = createMiddleware<{
   // D1 only supports a subset of pragmas; foreign_keys is one of them.
   // Failures here are non-fatal — we continue with FK enforcement off.
   try {
-    await c.env.usrc_d1.prepare('PRAGMA foreign_keys = ON').run();
+    await c.env.APP_DB.prepare('PRAGMA foreign_keys = ON').run();
   } catch {
     // Best-effort: D1 may have FKs already enabled by default in some envs.
   }

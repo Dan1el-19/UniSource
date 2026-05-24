@@ -17,13 +17,13 @@ function buildAdminApp(db: D1Database) {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', 'admin-user' as WorkerVariables['userId']);
-    c.set('serviceId', 'usrc' as WorkerVariables['serviceId']);
+    c.set('serviceId', 'default' as WorkerVariables['serviceId']);
     c.set('authType', 'apikey' as WorkerVariables['authType']);
     c.set('isAdmin', true as WorkerVariables['isAdmin']);
     await next();
   });
   app.route('/admin', admin);
-  return { app, env: { usrc_d1: db } as unknown as CloudflareBindings };
+  return { app, env: { APP_DB: db } as unknown as CloudflareBindings };
 }
 
 function mockD1(): D1Database {

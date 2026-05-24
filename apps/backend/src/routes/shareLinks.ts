@@ -79,7 +79,7 @@ shareLinkRouter.post(
     const { fileId } = c.req.valid('param');
     const body = c.req.valid('json');
 
-    const file = await getFileRecordForUser(c.env.usrc_d1, fileId, userId, serviceId);
+    const file = await getFileRecordForUser(c.env.APP_DB, fileId, userId, serviceId);
     if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
     if (file.is_trashed) return c.json({ error: 'Conflict', message: 'Cannot share a trashed file' }, 409);
 
@@ -88,7 +88,7 @@ shareLinkRouter.post(
       if (!isValidSlug(slug)) {
         return c.json({ error: 'Bad Request', message: 'slug must be 3–64 alphanumeric/dash/underscore chars' }, 400);
       }
-      const existing = await c.env.usrc_d1
+      const existing = await c.env.APP_DB
         .prepare('SELECT id FROM share_links WHERE slug = ?')
         .bind(slug)
         .first();
@@ -98,7 +98,7 @@ shareLinkRouter.post(
     } else {
       for (let attempt = 0; attempt < 5; attempt++) {
         const candidate = generateSlug();
-        const existing = await c.env.usrc_d1
+        const existing = await c.env.APP_DB
           .prepare('SELECT id FROM share_links WHERE slug = ?')
           .bind(candidate)
           .first();
@@ -110,7 +110,7 @@ shareLinkRouter.post(
     const password_hash = body.password ? await hashPassword(body.password) : null;
     const id = crypto.randomUUID();
 
-    const link = await createShareLink(c.env.usrc_d1, {
+    const link = await createShareLink(c.env.APP_DB, {
       id,
       service_id: serviceId,
       file_id: fileId,
@@ -135,10 +135,10 @@ shareLinkRouter.get(
     const serviceId = c.get('serviceId');
     const { fileId } = c.req.valid('param');
 
-    const file = await getFileRecordForUser(c.env.usrc_d1, fileId, userId, serviceId);
+    const file = await getFileRecordForUser(c.env.APP_DB, fileId, userId, serviceId);
     if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
 
-    const links = await listShareLinksForFile(c.env.usrc_d1, fileId, userId, serviceId);
+    const links = await listShareLinksForFile(c.env.APP_DB, fileId, userId, serviceId);
     return c.json<ShareLinkListResponse>({ items: links.map(mapShareLink) });
   }
 );
@@ -163,7 +163,7 @@ shareLinkRouter.patch(
       updates.password_hash = body.password !== null ? await hashPassword(body.password) : null;
     }
 
-    const link = await updateShareLink(c.env.usrc_d1, linkId, userId, serviceId, updates);
+    const link = await updateShareLink(c.env.APP_DB, linkId, userId, serviceId, updates);
     if (!link) return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
 
     return c.json<ShareLinkUpdateResponse>({ link: mapShareLink(link) });
@@ -179,7 +179,7 @@ shareLinkRouter.delete(
     const serviceId = c.get('serviceId');
     const { linkId } = c.req.valid('param');
 
-    const deleted = await deleteShareLink(c.env.usrc_d1, linkId, userId, serviceId);
+    const deleted = await deleteShareLink(c.env.APP_DB, linkId, userId, serviceId);
     if (!deleted) return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
 
     return c.json({ success: true as const, id: linkId });

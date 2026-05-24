@@ -3,4 +3,4 @@
  * service is seeded by migration 0003 in the D1 `services` table; auth
  * middleware looks it up dynamically.
  */
-export const DEFAULT_SERVICE_ID = 'usrc';
+export const DEFAULT_SERVICE_ID = 'default';

@@ -24,16 +24,16 @@ CREATE TABLE IF NOT EXISTS service_users (
 -- 3. Seed default services
 INSERT INTO services (id, name, default_bucket, max_storage_bytes, max_file_size_bytes)
 VALUES 
-  ('usrc', 'UniSource Platform', 'unisource', 16106127360, 536870912),
-  ('chmura-blokserwis', 'Chmura Blokserwis', 'chmura-blokserwis', 107374182400, 2147483648)
+  ('default', 'Default Service', 'primary', 16106127360, 536870912),
+  ('service-b', 'Example Service B', 'service-b', 107374182400, 2147483648)
 ON CONFLICT(id) DO NOTHING;
 
 -- 4. Add service_id isolation columns to operational tables
-ALTER TABLE uploads ADD COLUMN service_id TEXT NOT NULL DEFAULT 'usrc';
+ALTER TABLE uploads ADD COLUMN service_id TEXT NOT NULL DEFAULT 'default';
 ALTER TABLE uploads ADD COLUMN user_id TEXT;  -- fixes critical bug #15 (upload owner check)
 
-ALTER TABLE folders ADD COLUMN service_id TEXT NOT NULL DEFAULT 'usrc';
-ALTER TABLE files ADD COLUMN service_id TEXT NOT NULL DEFAULT 'usrc';
+ALTER TABLE folders ADD COLUMN service_id TEXT NOT NULL DEFAULT 'default';
+ALTER TABLE files ADD COLUMN service_id TEXT NOT NULL DEFAULT 'default';
 
 -- 5. Create new Indexes for Service Isolation
 CREATE INDEX IF NOT EXISTS idx_uploads_service_user ON uploads(service_id, user_id);

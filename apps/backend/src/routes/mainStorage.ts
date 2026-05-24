@@ -66,7 +66,7 @@ mainStorage.get('/', zValidator('query', listQuerySchema, validationErrorHook), 
   const { limit, cursor } = c.req.valid('query');
   const serviceId = c.get('serviceId');
   try {
-    const result = await listMainStorageFileRecords(c.env.usrc_d1, serviceId, { limit, cursor });
+    const result = await listMainStorageFileRecords(c.env.APP_DB, serviceId, { limit, cursor });
     return c.json({
       items: result.items.map(toMainStorageFileResponse),
       next_cursor: result.next_cursor,
@@ -83,7 +83,7 @@ mainStorage.get('/', zValidator('query', listQuerySchema, validationErrorHook), 
 // Get a single MAIN_STORAGE file
 mainStorage.get('/:id', async (c) => {
   const serviceId = c.get('serviceId');
-  const file = await getFileRecord(c.env.usrc_d1, c.req.param('id'));
+  const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
   if (!file || file.service_id !== serviceId || file.is_main_storage !== 1) {
     return c.json(notFoundResponse, 404);
   }
@@ -101,11 +101,11 @@ mainStorage.patch(
   async (c) => {
     const serviceId = c.get('serviceId');
     const { filename } = c.req.valid('json');
-    const file = await getFileRecord(c.env.usrc_d1, c.req.param('id'));
+    const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
     if (!file || file.service_id !== serviceId || file.is_main_storage !== 1 || file.is_trashed === 1) {
       return c.json(notFoundResponse, 404);
     }
-    const updated = await updateFileRecord(c.env.usrc_d1, file.id, file.user_id, serviceId, { filename });
+    const updated = await updateFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId, { filename });
     if (!updated) {
       return c.json(notFoundResponse, 404);
     }
@@ -117,7 +117,7 @@ mainStorage.patch(
 mainStorage.delete('/:id', async (c) => {
   const serviceId = c.get('serviceId');
   const permanent = c.req.query('permanent') === 'true';
-  const file = await getFileRecord(c.env.usrc_d1, c.req.param('id'));
+  const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
   if (!file || file.service_id !== serviceId || file.is_main_storage !== 1) {
     return c.json(notFoundResponse, 404);
   }
@@ -136,11 +136,11 @@ mainStorage.delete('/:id', async (c) => {
       return c.json({ error: 'Bad Gateway', message: 'Unable to delete file in upstream storage' }, 502);
     }
 
-    await deleteFileRecordPermanently(c.env.usrc_d1, file.id, file.user_id, serviceId);
-    await releaseMainStorageQuota(c.env.usrc_d1, serviceId, file.size);
-    await deactivateShareLinksForFile(c.env.usrc_d1, file.id, serviceId);
+    await deleteFileRecordPermanently(c.env.APP_DB, file.id, file.user_id, serviceId);
+    await releaseMainStorageQuota(c.env.APP_DB, serviceId, file.size);
+    await deactivateShareLinksForFile(c.env.APP_DB, file.id, serviceId);
   } else {
-    await trashFileRecord(c.env.usrc_d1, file.id, file.user_id, serviceId);
+    await trashFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId);
   }
   return c.json({ success: true, file_id: file.id });
 });
@@ -148,11 +148,11 @@ mainStorage.delete('/:id', async (c) => {
 // Restore a trashed MAIN_STORAGE file
 mainStorage.post('/:id/restore', async (c) => {
   const serviceId = c.get('serviceId');
-  const file = await getFileRecord(c.env.usrc_d1, c.req.param('id'));
+  const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
   if (!file || file.service_id !== serviceId || file.is_main_storage !== 1 || file.is_trashed !== 1) {
     return c.json(notFoundResponse, 404);
   }
-  await restoreFileRecord(c.env.usrc_d1, file.id, file.user_id, serviceId);
+  await restoreFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId);
   return c.json({ success: true, file_id: file.id });
 });
 

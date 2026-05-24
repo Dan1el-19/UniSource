@@ -29,23 +29,23 @@ function mockD1WithRecord(record: UploadRecord | null): D1Database {
 // ---------------------------------------------------------------------------
 // Service fixtures
 // ---------------------------------------------------------------------------
-const usrcServiceRecord: ServiceRecord = {
-	id: 'usrc',
-	name: 'UniSource',
-	default_bucket: 'unisource',
+const defaultServiceRecord: ServiceRecord = {
+	id: 'default',
+	name: 'primary',
+	default_bucket: 'primary',
 	max_storage_bytes: 16106127360,
 	current_used_bytes: 0,
 	main_used_bytes: 0,
 	max_file_size_bytes: 5_368_709_120,
 	recommended_upload_destination: 'r2',
-	object_key_prefix: 'usrc',
+	object_key_prefix: 'default',
 	created_at: 0,
 };
 
-const blokServiceRecord: ServiceRecord = {
-	id: 'chmura-blokserwis',
-	name: 'Chmura Blokserwis',
-	default_bucket: 'chmura-blokserwis',
+const secondaryServiceRecord: ServiceRecord = {
+	id: 'service-b',
+	name: 'Example Service B',
+	default_bucket: 'service-b',
 	max_storage_bytes: 107374182400,
 	current_used_bytes: 0,
 	main_used_bytes: 0,
@@ -60,7 +60,7 @@ const blokServiceRecord: ServiceRecord = {
 // ---------------------------------------------------------------------------
 function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-	const service = serviceId === 'usrc' ? usrcServiceRecord : blokServiceRecord;
+	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	// Inject auth context the same way the real authMiddleware would
 	app.use('*', async (c, next) => {
@@ -74,12 +74,12 @@ function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 	app.route('/files', files);
 
 	// Provide the D1 binding
-	return { app, env: { usrc_d1: db } as unknown as CloudflareBindings };
+	return { app, env: { APP_DB: db } as unknown as CloudflareBindings };
 }
 
 function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-	const service = serviceId === 'usrc' ? usrcServiceRecord : blokServiceRecord;
+	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	app.use('*', async (c, next) => {
 		c.set('serviceId', serviceId as WorkerVariables['serviceId']);
@@ -91,23 +91,23 @@ function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 
 	app.route('/upload', upload);
 
-	return { app, env: { usrc_d1: db } as unknown as CloudflareBindings };
+	return { app, env: { APP_DB: db } as unknown as CloudflareBindings };
 }
 
 // ---------------------------------------------------------------------------
-// Fixture: an upload that belongs to 'blokserwis'
+// Fixture: an upload that belongs to 'service-b'
 // ---------------------------------------------------------------------------
 const blokRecord: UploadRecord = {
 	id: 'upload-blok-001',
-	service_id: 'blokserwis',
+	service_id: 'service-b',
 	user_id: null,
 	folder_id: null,
 	filename: 'secret.pdf',
 	size: 1024,
 	mime_type: 'application/pdf',
 	destination: 'r2',
-	storage_key: 'blokserwis/uploads/2026/01/01/upload-blok-001.pdf',
-	bucket: 'blokserwis',
+	storage_key: 'service-b/uploads/2026/01/01/upload-blok-001.pdf',
+	bucket: 'service-b',
 	status: 'completed',
 	presigned_url: null,
 	expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -130,7 +130,7 @@ const blokPendingRecord: UploadRecord = {
 describe('GET /files/:id — service isolation', () => {
 	it('returns 404 when the record belongs to a different service', async () => {
 		const db = mockD1WithRecord(blokRecord);
-		const { app, env } = buildFilesApp('usrc', 'system', db);
+		const { app, env } = buildFilesApp('default', 'system', db);
 
 		const res = await app.fetch(
 			new Request('http://localhost/files/upload-blok-001'),
@@ -141,9 +141,9 @@ describe('GET /files/:id — service isolation', () => {
 	});
 
 	it('returns 200 when the record belongs to the authenticated service', async () => {
-		const ownRecord: UploadRecord = { ...blokRecord, service_id: 'usrc' };
+		const ownRecord: UploadRecord = { ...blokRecord, service_id: 'default' };
 		const db = mockD1WithRecord(ownRecord);
-		const { app, env } = buildFilesApp('usrc', 'system', db);
+		const { app, env } = buildFilesApp('default', 'system', db);
 
 		const res = await app.fetch(
 			new Request('http://localhost/files/upload-blok-001'),
@@ -160,7 +160,7 @@ describe('GET /files/:id — service isolation', () => {
 describe('GET /files/:id/download-url — service isolation', () => {
 	it('returns 404 when the record belongs to a different service', async () => {
 		const db = mockD1WithRecord(blokRecord);
-		const { app, env } = buildFilesApp('usrc', 'system', db);
+		const { app, env } = buildFilesApp('default', 'system', db);
 
 		const res = await app.fetch(
 			new Request('http://localhost/files/upload-blok-001/download-url'),
@@ -177,7 +177,7 @@ describe('GET /files/:id/download-url — service isolation', () => {
 describe('DELETE /files/:id — service isolation', () => {
 	it('returns 404 when the record belongs to a different service', async () => {
 		const db = mockD1WithRecord(blokRecord);
-		const { app, env } = buildFilesApp('usrc', 'system', db);
+		const { app, env } = buildFilesApp('default', 'system', db);
 
 		const res = await app.fetch(
 			new Request('http://localhost/files/upload-blok-001', { method: 'DELETE' }),
@@ -194,7 +194,7 @@ describe('DELETE /files/:id — service isolation', () => {
 describe('POST /upload/fail — service isolation', () => {
 	it('returns 404 when the upload belongs to a different service (API key / system userId)', async () => {
 		const db = mockD1WithRecord(blokPendingRecord);
-		const { app, env } = buildUploadApp('usrc', 'system', db);
+		const { app, env } = buildUploadApp('default', 'system', db);
 
 		const res = await app.fetch(
 			new Request('http://localhost/upload/fail', {
@@ -209,9 +209,9 @@ describe('POST /upload/fail — service isolation', () => {
 	});
 
 	it('returns 200 when the upload belongs to the authenticated service (API key / system userId)', async () => {
-		const ownRecord: UploadRecord = { ...blokPendingRecord, service_id: 'usrc' };
+		const ownRecord: UploadRecord = { ...blokPendingRecord, service_id: 'default' };
 		const db = mockD1WithRecord(ownRecord);
-		const { app, env } = buildUploadApp('usrc', 'system', db);
+		const { app, env } = buildUploadApp('default', 'system', db);
 
 		const res = await app.fetch(
 			new Request('http://localhost/upload/fail', {
@@ -226,15 +226,15 @@ describe('POST /upload/fail — service isolation', () => {
 	});
 
 	it('returns 404 when the upload belongs to a different service (JWT / user auth)', async () => {
-		// blokRecord user_id is null — getUploadForUser should reject this for usrc service
+		// blokRecord user_id is null — getUploadForUser should reject this for default service
 		const blokUserRecord: UploadRecord = {
 			...blokPendingRecord,
-			service_id: 'blokserwis',
+			service_id: 'service-b',
 			user_id: 'user-abc',
 		};
 		const db = mockD1WithRecord(blokUserRecord);
-		// JWT path: userId is not 'system', service is 'usrc'
-		const { app, env } = buildUploadApp('usrc', 'user-abc', db);
+		// JWT path: userId is not 'system', service is 'default'
+		const { app, env } = buildUploadApp('default', 'user-abc', db);
 
 		const res = await app.fetch(
 			new Request('http://localhost/upload/fail', {
