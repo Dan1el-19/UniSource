@@ -51,7 +51,8 @@ export class UnisourceV2Client {
     const url = new URL('/v2/files', this.config.baseUrl)
     if (query) {
       for (const [k, v] of Object.entries(query)) {
-        if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
+        if (v === undefined) continue
+        url.searchParams.set(k, v === null ? 'null' : String(v))
       }
     }
 
