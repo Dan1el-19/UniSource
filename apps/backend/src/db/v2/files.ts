@@ -1,12 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { buildKeysetWhere } from '../../lib/v2/pagination'
-import type { SortBy, SortDir } from '../../lib/v2/pagination'
-import {
-  decodeCursor,
-  encodeCursor,
-  fingerprint,
-  type FilterSet,
-} from '../../lib/v2/cursor'
+import type { SortDir } from '../../lib/v2/pagination'
+import { decodeCursor, encodeCursor, fingerprint } from '../../lib/v2/cursor'
+import { RESOURCE_CONFIG_FILES, type FilesSortBy, type FilesFilterSet } from '../../lib/v2/resource'
 import type { UploadDestination } from '../files'
 
 export interface FileRowV2 {
@@ -53,7 +49,7 @@ export interface ListFilesV2Input {
   trash: 'active' | 'trashed' | 'all'
   search?: string
   mime_type?: string
-  sort_by: SortBy
+  sort_by: FilesSortBy
   sort_dir: SortDir
   limit: number
   cursor?: string
@@ -90,7 +86,7 @@ function mapFile(row: RawFileRow): FileRowV2 {
   return { ...rest, is_trashed: is_trashed === 1 }
 }
 
-function lastValue(row: RawFileRow, sort_by: SortBy): string | number {
+function lastValue(row: RawFileRow, sort_by: FilesSortBy): string | number {
   switch (sort_by) {
     case 'created_at':
       return row.created_at
@@ -107,7 +103,7 @@ export async function listFilesV2(
   db: D1Database,
   input: ListFilesV2Input
 ): Promise<ListFilesV2Result> {
-  const filterSet: FilterSet = {
+  const filterSet: FilesFilterSet = {
     user_id: input.user_id,
     service_id: input.service_id,
     folder_id: input.folder_id,
@@ -115,7 +111,7 @@ export async function listFilesV2(
     search: input.search,
     mime_type: input.mime_type,
   }
-  const fp = fingerprint(filterSet)
+  const fp = fingerprint(RESOURCE_CONFIG_FILES, filterSet)
 
   let cursor_lv: string | number | undefined
   let cursor_li: string | undefined
@@ -130,7 +126,7 @@ export async function listFilesV2(
     cursor_li = decoded.li
   }
 
-  const { sql: whereSql, binds, orderBy } = buildKeysetWhere({
+  const { sql: whereSql, binds, orderBy } = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
     user_id: input.user_id,
     service_id: input.service_id,
     folder_id: input.folder_id,

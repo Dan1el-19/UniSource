@@ -70,7 +70,7 @@ function canonicalize(value: unknown): string {
   return String(value)
 }
 
-export function fingerprint<S extends string, F extends Record<string, unknown>>(
+export function fingerprint<S extends string, F extends object>(
   config: ResourceConfig<S, F>,
   input: F & { trash: 'active' | 'trashed' | 'all' }
 ): string {

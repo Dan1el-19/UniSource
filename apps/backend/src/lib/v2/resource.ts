@@ -1,6 +1,6 @@
 export type FilterOp = '=' | 'IS_NULL_OR_EQ' | 'LIKE_ESCAPED'
 
-export interface FilterDescriptor<F> {
+export interface FilterDescriptor<F extends object> {
   key: keyof F & string
   column: string
   op: FilterOp
@@ -8,7 +8,7 @@ export interface FilterDescriptor<F> {
 
 export interface ResourceConfig<
   S extends string,
-  F extends Record<string, unknown>
+  F extends object
 > {
   table: string
   baseConditions: readonly string[]

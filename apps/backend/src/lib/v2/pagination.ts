@@ -20,7 +20,7 @@ interface BuildBaseWhereCommon {
   trash: 'active' | 'trashed' | 'all'
 }
 
-export function buildBaseWhere<S extends string, F extends Record<string, unknown>>(
+export function buildBaseWhere<S extends string, F extends object>(
   config: ResourceConfig<S, F>,
   input: F & BuildBaseWhereCommon
 ): { sql: string; binds: unknown[] } {
@@ -73,7 +73,7 @@ interface BuildKeysetCommon<S extends string> extends BuildBaseWhereCommon {
   cursor_li?: string
 }
 
-export function buildKeysetWhere<S extends string, F extends Record<string, unknown>>(
+export function buildKeysetWhere<S extends string, F extends object>(
   config: ResourceConfig<S, F>,
   input: F & BuildKeysetCommon<S>
 ): { sql: string; binds: unknown[]; orderBy: string } {
