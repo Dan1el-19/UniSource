@@ -9,6 +9,7 @@ export {
   uploadStatusSchema,
   apiErrorSchema,
   FILES_DEFAULT_LIMIT,
+  LIST_MAX_LIMIT,
   FILES_MAX_LIMIT,
 } from './primitives';
 export type {

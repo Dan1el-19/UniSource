@@ -6,6 +6,7 @@ export type V2ErrorCode =
   | 'search_too_long'
   | 'unauthorized'
   | 'forbidden'
+  | 'not_found'
   | 'rate_limited'
   | 'internal_error'
 

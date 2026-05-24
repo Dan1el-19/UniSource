@@ -7,6 +7,7 @@ import {
   type FilterSet,
 } from '../../../src/lib/v2/cursor'
 import { V2Error } from '../../../src/lib/v2/errors'
+import { RESOURCE_CONFIG_FILES, RESOURCE_CONFIG_FOLDERS } from '../../../src/lib/v2/resource'
 
 const SECRET = 'a'.repeat(32) // 32-char secret for testing
 
@@ -21,8 +22,8 @@ describe('cursor', () => {
         search: 'test',
         mime_type: 'image/png',
       }
-      const fp1 = fingerprint(filter)
-      const fp2 = fingerprint(filter)
+      const fp1 = fingerprint(RESOURCE_CONFIG_FILES, filter)
+      const fp2 = fingerprint(RESOURCE_CONFIG_FILES, filter)
       expect(fp1).toBe(fp2)
     })
 
@@ -35,8 +36,8 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp1 = fingerprint(base)
-      const fp2 = fingerprint({ ...base, user_id: 'user2' })
+      const fp1 = fingerprint(RESOURCE_CONFIG_FILES, base)
+      const fp2 = fingerprint(RESOURCE_CONFIG_FILES, { ...base, user_id: 'user2' })
       expect(fp1).not.toBe(fp2)
     })
 
@@ -49,8 +50,8 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp1 = fingerprint(base)
-      const fp2 = fingerprint({ ...base, service_id: 'svc2' })
+      const fp1 = fingerprint(RESOURCE_CONFIG_FILES, base)
+      const fp2 = fingerprint(RESOURCE_CONFIG_FILES, { ...base, service_id: 'svc2' })
       expect(fp1).not.toBe(fp2)
     })
 
@@ -63,8 +64,8 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp1 = fingerprint(base)
-      const fp2 = fingerprint({ ...base, folder_id: 'folder2' })
+      const fp1 = fingerprint(RESOURCE_CONFIG_FILES, base)
+      const fp2 = fingerprint(RESOURCE_CONFIG_FILES, { ...base, folder_id: 'folder2' })
       expect(fp1).not.toBe(fp2)
     })
 
@@ -77,8 +78,8 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp1 = fingerprint(base)
-      const fp2 = fingerprint({ ...base, trash: 'trashed' })
+      const fp1 = fingerprint(RESOURCE_CONFIG_FILES, base)
+      const fp2 = fingerprint(RESOURCE_CONFIG_FILES, { ...base, trash: 'trashed' })
       expect(fp1).not.toBe(fp2)
     })
 
@@ -91,8 +92,8 @@ describe('cursor', () => {
         search: 'test1',
         mime_type: undefined,
       }
-      const fp1 = fingerprint(base)
-      const fp2 = fingerprint({ ...base, search: 'test2' })
+      const fp1 = fingerprint(RESOURCE_CONFIG_FILES, base)
+      const fp2 = fingerprint(RESOURCE_CONFIG_FILES, { ...base, search: 'test2' })
       expect(fp1).not.toBe(fp2)
     })
 
@@ -105,8 +106,8 @@ describe('cursor', () => {
         search: undefined,
         mime_type: 'image/png',
       }
-      const fp1 = fingerprint(base)
-      const fp2 = fingerprint({ ...base, mime_type: 'image/jpeg' })
+      const fp1 = fingerprint(RESOURCE_CONFIG_FILES, base)
+      const fp2 = fingerprint(RESOURCE_CONFIG_FILES, { ...base, mime_type: 'image/jpeg' })
       expect(fp1).not.toBe(fp2)
     })
 
@@ -127,7 +128,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      expect(fingerprint(filter1)).toBe(fingerprint(filter2))
+      expect(fingerprint(RESOURCE_CONFIG_FILES, filter1)).toBe(fingerprint(RESOURCE_CONFIG_FILES, filter2))
     })
 
     it('handles null folder_id as __root__', () => {
@@ -147,7 +148,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      expect(fingerprint(filter1)).toBe(fingerprint(filter2))
+      expect(fingerprint(RESOURCE_CONFIG_FILES, filter1)).toBe(fingerprint(RESOURCE_CONFIG_FILES, filter2))
     })
   })
 
@@ -173,7 +174,7 @@ describe('cursor', () => {
           search: undefined,
           mime_type: undefined,
         }
-        const fp = fingerprint(filter)
+        const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
         const payload: CursorPayload = {
           v: 1,
@@ -203,7 +204,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       await expect(
         decodeCursor(SECRET, 'nodothere', { sb: 'created_at', sd: 'asc', fp })
@@ -225,7 +226,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       await expect(
         decodeCursor(SECRET, '!!!.!!!', { sb: 'created_at', sd: 'asc', fp })
@@ -246,7 +247,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       // Create a valid base64url string that's not valid JSON
       const badJson = Buffer.from('not json').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
@@ -271,7 +272,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       const payload: CursorPayload = {
         v: 1,
@@ -308,7 +309,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       const payload: CursorPayload = {
         v: 1,
@@ -348,7 +349,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       const payload: CursorPayload = {
         v: 1,
@@ -380,7 +381,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       const payload: CursorPayload = {
         v: 1,
@@ -412,7 +413,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       const payload: CursorPayload = {
         v: 1,
@@ -444,7 +445,7 @@ describe('cursor', () => {
         search: undefined,
         mime_type: undefined,
       }
-      const fp = fingerprint(filter)
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, filter)
 
       const payload: CursorPayload = {
         v: 1,
@@ -467,5 +468,41 @@ describe('cursor', () => {
         expect((e as V2Error).code).toBe('cursor_invalid')
       }
     })
+  })
+})
+
+describe('fingerprint with RESOURCE_CONFIG_FOLDERS', () => {
+  const baseFolders = {
+    user_id: 'u1',
+    service_id: 's1',
+    parent_id: undefined as string | null | undefined,
+    trash: 'active' as const,
+    search: undefined as string | undefined,
+  }
+
+  it('is deterministic', () => {
+    expect(fingerprint(RESOURCE_CONFIG_FOLDERS, baseFolders))
+      .toBe(fingerprint(RESOURCE_CONFIG_FOLDERS, baseFolders))
+  })
+
+  it('differs when parent_id changes', () => {
+    const fp1 = fingerprint(RESOURCE_CONFIG_FOLDERS, baseFolders)
+    const fp2 = fingerprint(RESOURCE_CONFIG_FOLDERS, { ...baseFolders, parent_id: 'p1' })
+    expect(fp1).not.toBe(fp2)
+  })
+
+  it('differs between undefined and null parent_id', () => {
+    const undef = fingerprint(RESOURCE_CONFIG_FOLDERS, baseFolders)
+    const nullVal = fingerprint(RESOURCE_CONFIG_FOLDERS, { ...baseFolders, parent_id: null })
+    expect(undef).not.toBe(nullVal)
+  })
+
+  it('cursor signed for files config rejected against folders config (cross-resource)', () => {
+    const filesFp = fingerprint(RESOURCE_CONFIG_FILES, {
+      user_id: 'u1', service_id: 's1', folder_id: undefined, trash: 'active',
+      search: undefined, mime_type: undefined,
+    })
+    const foldersFp = fingerprint(RESOURCE_CONFIG_FOLDERS, baseFolders)
+    expect(filesFp).not.toBe(foldersFp)
   })
 })

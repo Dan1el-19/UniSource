@@ -6,6 +6,10 @@ import {
   type SortBy,
   type SortDir,
 } from '../../../src/lib/v2/pagination'
+import {
+  RESOURCE_CONFIG_FILES,
+  RESOURCE_CONFIG_FOLDERS,
+} from '../../../src/lib/v2/resource'
 
 describe('pagination', () => {
   describe('escapeLikePattern', () => {
@@ -36,7 +40,7 @@ describe('pagination', () => {
 
   describe('buildBaseWhere', () => {
     it('always starts with is_main_storage = 0', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -46,7 +50,7 @@ describe('pagination', () => {
     })
 
     it('includes user_id and service_id', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -59,7 +63,7 @@ describe('pagination', () => {
     })
 
     it('includes trash filter for active', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -69,7 +73,7 @@ describe('pagination', () => {
     })
 
     it('includes trash filter for trashed', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -79,7 +83,7 @@ describe('pagination', () => {
     })
 
     it('omits trash filter for all', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -89,7 +93,7 @@ describe('pagination', () => {
     })
 
     it('handles folder_id undefined (skips condition)', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: undefined,
@@ -99,7 +103,7 @@ describe('pagination', () => {
     })
 
     it('handles folder_id null (IS NULL)', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: null,
@@ -109,7 +113,7 @@ describe('pagination', () => {
     })
 
     it('handles folder_id string (= ?)', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -120,7 +124,7 @@ describe('pagination', () => {
     })
 
     it('includes search filter with LIKE and ESCAPE', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -133,7 +137,7 @@ describe('pagination', () => {
     })
 
     it('includes mime_type filter', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -145,7 +149,7 @@ describe('pagination', () => {
     })
 
     it('uses positional parameters (no raw concat)', () => {
-      const result = buildBaseWhere({
+      const result = buildBaseWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -163,7 +167,7 @@ describe('pagination', () => {
   describe('buildKeysetWhere', () => {
     it('throws when sort_by is unknown', () => {
       expect(() =>
-        buildKeysetWhere({
+        buildKeysetWhere(RESOURCE_CONFIG_FILES, {
           user_id: 'user1',
           service_id: 'svc1',
           folder_id: 'folder1',
@@ -175,7 +179,7 @@ describe('pagination', () => {
     })
 
     it('uses < operator for desc direction', () => {
-      const result = buildKeysetWhere({
+      const result = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -190,7 +194,7 @@ describe('pagination', () => {
     })
 
     it('uses > operator for asc direction', () => {
-      const result = buildKeysetWhere({
+      const result = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -205,7 +209,7 @@ describe('pagination', () => {
     })
 
     it('includes orderBy with sort column and direction', () => {
-      const result = buildKeysetWhere({
+      const result = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -227,7 +231,7 @@ describe('pagination', () => {
       ]
 
       cases.forEach(({ sb, col }) => {
-        const result = buildKeysetWhere({
+        const result = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
           user_id: 'user1',
           service_id: 'svc1',
           folder_id: 'folder1',
@@ -240,7 +244,7 @@ describe('pagination', () => {
     })
 
     it('includes base WHERE conditions', () => {
-      const result = buildKeysetWhere({
+      const result = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -254,7 +258,7 @@ describe('pagination', () => {
     })
 
     it('binds cursor values when provided', () => {
-      const result = buildKeysetWhere({
+      const result = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
         user_id: 'user1',
         service_id: 'svc1',
         folder_id: 'folder1',
@@ -267,5 +271,80 @@ describe('pagination', () => {
       expect(result.binds).toContain('2026-05-24')
       expect(result.binds).toContain('id123')
     })
+  })
+})
+
+describe('buildBaseWhere with RESOURCE_CONFIG_FOLDERS', () => {
+  it('does not include is_main_storage', () => {
+    const result = buildBaseWhere(RESOURCE_CONFIG_FOLDERS, {
+      user_id: 'u1',
+      service_id: 's1',
+      parent_id: undefined,
+      trash: 'active',
+    })
+    expect(result.sql).not.toContain('is_main_storage')
+  })
+
+  it('uses parent_id instead of folder_id', () => {
+    const result = buildBaseWhere(RESOURCE_CONFIG_FOLDERS, {
+      user_id: 'u1',
+      service_id: 's1',
+      parent_id: 'p1',
+      trash: 'active',
+    })
+    expect(result.sql).toContain('parent_id = ?')
+    expect(result.sql).not.toContain('folder_id')
+    expect(result.binds).toContain('p1')
+  })
+
+  it('search filter targets name column', () => {
+    const result = buildBaseWhere(RESOURCE_CONFIG_FOLDERS, {
+      user_id: 'u1',
+      service_id: 's1',
+      parent_id: undefined,
+      trash: 'active',
+      search: 'inv',
+    })
+    expect(result.sql).toContain('name LIKE ?')
+    expect(result.sql).toContain("ESCAPE '\\'")
+    expect(result.binds).toContain('%inv%')
+  })
+
+  it('does not include mime_type filter', () => {
+    const result = buildBaseWhere(RESOURCE_CONFIG_FOLDERS, {
+      user_id: 'u1',
+      service_id: 's1',
+      parent_id: undefined,
+      trash: 'active',
+    })
+    expect(result.sql).not.toContain('mime_type')
+  })
+})
+
+describe('buildKeysetWhere with RESOURCE_CONFIG_FOLDERS', () => {
+  it('orders by name when sort_by=name', () => {
+    const result = buildKeysetWhere(RESOURCE_CONFIG_FOLDERS, {
+      user_id: 'u1',
+      service_id: 's1',
+      parent_id: undefined,
+      trash: 'active',
+      sort_by: 'name',
+      sort_dir: 'asc',
+    })
+    expect(result.orderBy).toBe('name asc, id asc')
+  })
+
+  it('throws on unknown sort_by', () => {
+    expect(() =>
+      buildKeysetWhere(RESOURCE_CONFIG_FOLDERS, {
+        user_id: 'u1',
+        service_id: 's1',
+        parent_id: undefined,
+        trash: 'active',
+        // @ts-expect-error - testing runtime guard
+        sort_by: 'size',
+        sort_dir: 'desc',
+      })
+    ).toThrow(/Unknown sort_by/)
   })
 })

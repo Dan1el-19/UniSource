@@ -10,7 +10,12 @@ export const unixTimestamp = z.number().int().nonnegative();
 // ─── Pagination constants ─────────────────────────────────────────────────────
 
 export const FILES_DEFAULT_LIMIT = 25;
-export const FILES_MAX_LIMIT = 100;
+
+/** Maximum items per list-page response (used by all v2 list endpoints). */
+export const LIST_MAX_LIMIT = 100;
+
+/** @deprecated Use LIST_MAX_LIMIT — semantically applies to all v2 list endpoints, not just files. */
+export const FILES_MAX_LIMIT = LIST_MAX_LIMIT;
 
 // ─── Upload Destination ──────────────────────────────────────────────────────
 
