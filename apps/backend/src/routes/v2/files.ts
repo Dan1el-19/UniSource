@@ -9,7 +9,11 @@ import { logV2Request } from '../../lib/v2/log'
 type V2Env = { Bindings: CloudflareBindings; Variables: WorkerVariables }
 
 const querySchema = z.object({
-  folder_id: z.string().optional().transform(v => v === 'null' ? null : v),
+  folder_id: z.string().optional().transform(v => {
+    if (!v || v === '') return undefined
+    if (v === 'null') return null
+    return v
+  }),
   search: z.string().trim().max(100, { message: 'search_too_long' }).optional(),
   mime_type: z.string().trim().toLowerCase().max(255).optional(),
   trash: z.enum(['active', 'trashed', 'all']).default('active'),
@@ -55,12 +59,12 @@ filesV2.get('/', zValidator('query', querySchema, v2ValidationHook), async (c) =
     hmacSecret,
   })
 
-  logV2Request(c, start, { route_family: 'v2.files', operation: 'list' })
-
-  return c.json({
+  const response = c.json({
     items: result.items,
     page: { limit: query.limit, next_cursor: result.next_cursor },
   })
+  logV2Request(c, start, { route_family: 'v2.files', operation: 'list' })
+  return response
 })
 
 export default filesV2
