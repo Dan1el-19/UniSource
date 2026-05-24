@@ -38,8 +38,11 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Switch SDK dependency to npm
-        run: pnpm -w run sdk:deps:npm
+      - name: Require stable SDK on deploy
+        run: node scripts/require-sdk-stable-on-deploy.mjs
+
+      - name: Switch SDK dependency to npm exact
+        run: pnpm -w run sdk:deps:npm-exact
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --config.link-workspace-packages=false
