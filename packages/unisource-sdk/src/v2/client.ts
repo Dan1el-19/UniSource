@@ -6,6 +6,24 @@ import { UnisourceV2Error } from './errors'
 
 let warned = false
 
+type V2ErrorBody = { error?: { code?: string; message?: string; details?: unknown } }
+
+function parseErrorBody(value: unknown): V2ErrorBody {
+  if (!value || typeof value !== 'object') return {}
+
+  const error = (value as { error?: unknown }).error
+  if (!error || typeof error !== 'object') return {}
+
+  const payload = error as Record<string, unknown>
+  return {
+    error: {
+      code: typeof payload.code === 'string' ? payload.code : undefined,
+      message: typeof payload.message === 'string' ? payload.message : undefined,
+      details: payload.details,
+    },
+  }
+}
+
 export interface UnisourceV2ClientConfig {
   baseUrl: string
   serviceId: string
@@ -65,8 +83,8 @@ export class UnisourceV2Client {
 
     if (!response.ok) {
       const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
-      let body: { error?: { code?: string; message?: string; details?: unknown } }
-      try { body = await response.json() } catch { body = {} }
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
       throw new UnisourceV2Error(
         body.error?.message ?? response.statusText,
         response.status,
