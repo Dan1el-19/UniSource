@@ -1,11 +1,12 @@
 {
-  "name": "app-backend",
+  "name": "backend",
   "private": true,
   "version": "0.0.7",
   "type": "module",
   "scripts": {
     "prepare:sdk": "pnpm --filter @unisource/sdk build",
     "dev": "wrangler dev",
+    "generate:wrangler": "node ../../scripts/generate-wrangler-config.mjs backend",
     "build": "wrangler deploy --dry-run --minify",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",

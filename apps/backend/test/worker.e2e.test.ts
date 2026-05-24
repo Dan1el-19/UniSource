@@ -19,7 +19,7 @@ declare global {
   }
 }
 
-describe('app-backend worker', () => {
+describe('default-backend worker', () => {
   beforeAll(async () => {
     await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS)
   }, TEST_TIMEOUT_MS)

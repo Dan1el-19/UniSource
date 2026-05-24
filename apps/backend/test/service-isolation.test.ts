@@ -31,8 +31,8 @@ function mockD1WithRecord(record: UploadRecord | null): D1Database {
 // ---------------------------------------------------------------------------
 const defaultServiceRecord: ServiceRecord = {
 	id: 'default',
-	name: 'UniSource',
-	default_bucket: 'unisource',
+	name: 'primary',
+	default_bucket: 'primary',
 	max_storage_bytes: 16106127360,
 	current_used_bytes: 0,
 	main_used_bytes: 0,
@@ -42,9 +42,9 @@ const defaultServiceRecord: ServiceRecord = {
 	created_at: 0,
 };
 
-const blokServiceRecord: ServiceRecord = {
+const secondaryServiceRecord: ServiceRecord = {
 	id: 'service-b',
-	name: 'Service B',
+	name: 'Example Service B',
 	default_bucket: 'service-b',
 	max_storage_bytes: 107374182400,
 	current_used_bytes: 0,
@@ -60,7 +60,7 @@ const blokServiceRecord: ServiceRecord = {
 // ---------------------------------------------------------------------------
 function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-	const service = serviceId === 'default' ? defaultServiceRecord : blokServiceRecord;
+	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	// Inject auth context the same way the real authMiddleware would
 	app.use('*', async (c, next) => {
@@ -79,7 +79,7 @@ function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 
 function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-	const service = serviceId === 'default' ? defaultServiceRecord : blokServiceRecord;
+	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	app.use('*', async (c, next) => {
 		c.set('serviceId', serviceId as WorkerVariables['serviceId']);
@@ -95,19 +95,19 @@ function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture: an upload that belongs to 'example'
+// Fixture: an upload that belongs to 'service-b'
 // ---------------------------------------------------------------------------
 const blokRecord: UploadRecord = {
 	id: 'upload-blok-001',
-	service_id: 'example',
+	service_id: 'service-b',
 	user_id: null,
 	folder_id: null,
 	filename: 'secret.pdf',
 	size: 1024,
 	mime_type: 'application/pdf',
 	destination: 'r2',
-	storage_key: 'example/uploads/2026/01/01/upload-blok-001.pdf',
-	bucket: 'example',
+	storage_key: 'service-b/uploads/2026/01/01/upload-blok-001.pdf',
+	bucket: 'service-b',
 	status: 'completed',
 	presigned_url: null,
 	expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -229,7 +229,7 @@ describe('POST /upload/fail — service isolation', () => {
 		// blokRecord user_id is null — getUploadForUser should reject this for default service
 		const blokUserRecord: UploadRecord = {
 			...blokPendingRecord,
-			service_id: 'example',
+			service_id: 'service-b',
 			user_id: 'user-abc',
 		};
 		const db = mockD1WithRecord(blokUserRecord);

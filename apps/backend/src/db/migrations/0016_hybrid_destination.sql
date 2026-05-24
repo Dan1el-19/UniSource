@@ -14,8 +14,8 @@ INSERT OR IGNORE INTO services (
 VALUES
   (
     'default',
-    'UniSource Platform',
-    'unisource',
+    'Default Service',
+    'primary',
     16106127360,
     0,
     0,
@@ -25,7 +25,7 @@ VALUES
   ),
   (
     'service-b',
-    'Service B',
+    'Example Service B',
     'service-b',
     107374182400,
     0,

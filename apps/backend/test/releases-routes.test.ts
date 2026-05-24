@@ -54,7 +54,7 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'defaul
     c.set('service', {
       id: serviceId,
       name: serviceId,
-      default_bucket: serviceId === 'service-b' ? 'service-b' : 'unisource',
+      default_bucket: serviceId === 'service-b' ? 'service-b' : 'primary',
       max_storage_bytes: 1000000000,
       current_used_bytes: 0,
       main_used_bytes: 0,
@@ -75,7 +75,7 @@ const relEnv = {
   R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'sec',
   SERVICE_API_KEY: 'test-api-key',
-  SECONDARY_SERVICE_API_KEY: 'blok-key',
+  SECONDARY_SERVICE_API_KEY: 'service-b-key',
 } as unknown as CloudflareBindings;
 
 const completedRelease = {
@@ -158,7 +158,7 @@ describe('POST /releases/upload/init', () => {
     );
     expect(generatePresignedPutUrl).toHaveBeenCalledWith(
       relEnv,
-      'unisource',
+      'primary',
       body.r2_key,
       'application/octet-stream',
       3600
@@ -414,7 +414,7 @@ describe('DELETE /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    expect(deleteObject).toHaveBeenCalledWith(relEnv, 'unisource', completedRelease.r2_key);
+    expect(deleteObject).toHaveBeenCalledWith(relEnv, 'primary', completedRelease.r2_key);
     expect(deleteRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default');
   });
 });
@@ -563,7 +563,7 @@ describe('releases routes — admin enforcement', () => {
       c.set('service', {
         id: 'default',
         name: 'default',
-        default_bucket: 'unisource',
+        default_bucket: 'primary',
         max_storage_bytes: 1000000000,
         current_used_bytes: 0,
         main_used_bytes: 0,

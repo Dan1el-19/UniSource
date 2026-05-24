@@ -77,7 +77,7 @@ const pendingR2Record: UploadRecord = {
   mime_type: 'application/pdf',
   destination: 'r2',
   storage_key: 'default/uploads/2026/01/01/upload-123.pdf',
-  bucket: 'unisource',
+  bucket: 'primary',
   status: 'pending',
   presigned_url: null,
   expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -110,13 +110,13 @@ const baseEnv = {
   APPWRITE_BUCKET_ID: 'bucket',
   APPWRITE_API_KEY: 'ak',
   SERVICE_API_KEY: 'test-api-key',
-  SECONDARY_SERVICE_API_KEY: 'blok-api-key',
+  SECONDARY_SERVICE_API_KEY: 'service-b-key',
 } as unknown as CloudflareBindings;
 
 const defaultServiceRecord: ServiceRecord = {
   id: 'default',
-  name: 'UniSource',
-  default_bucket: 'unisource',
+  name: 'primary',
+  default_bucket: 'primary',
   max_storage_bytes: 16106127360,
   current_used_bytes: 0,
   main_used_bytes: 0,
@@ -126,9 +126,9 @@ const defaultServiceRecord: ServiceRecord = {
   created_at: 0,
 };
 
-const blokServiceRecord: ServiceRecord = {
+const secondaryServiceRecord: ServiceRecord = {
   id: 'service-b',
-  name: 'Service B',
+  name: 'Example Service B',
   default_bucket: 'service-b',
   max_storage_bytes: 107374182400,
   current_used_bytes: 0,
@@ -141,7 +141,7 @@ const blokServiceRecord: ServiceRecord = {
 
 function buildUploadApp(userId = 'system', serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-  const service = serviceId === 'default' ? defaultServiceRecord : blokServiceRecord;
+  const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
     c.set('serviceId', serviceId as WorkerVariables['serviceId']);

@@ -64,7 +64,7 @@ const r2File = {
 	mime_type: 'application/pdf',
 	storage_destination: 'r2',
 	storage_key: 'default/uploads/report.pdf',
-	bucket: 'unisource',
+	bucket: 'primary',
 	is_trashed: 0
 };
 
@@ -99,7 +99,7 @@ describe('GET /public/:slug/download', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 		expect(generatePresignedGetUrl).toHaveBeenLastCalledWith(
 			expect.anything(),
-			'unisource',
+			'primary',
 			'default/uploads/report.pdf',
 			expect.any(Number),
 			'report.pdf'

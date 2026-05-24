@@ -40,7 +40,7 @@ describe('unisource-sdk schemas', () => {
       filename: 'raport.pdf',
       size: 1024,
       mime_type: 'application/pdf',
-      bucket: 'unisource',
+      bucket: 'primary',
     });
 
     expect(parsed.success).toBe(true);
@@ -60,7 +60,7 @@ describe('unisource-sdk schemas', () => {
     const parsed = uploadAppwriteInitResponseSchema.safeParse({
       upload_id: 'uuid-upload',
       destination: 'appwrite',
-      appwrite_endpoint: 'https://eu-central-1.appwrite.example.com/v1',
+      appwrite_endpoint: 'https://appwrite.example.com/v1',
       appwrite_project_id: 'project-id',
       appwrite_bucket_id: 'bucket-id',
       file_id: 'file-id',
