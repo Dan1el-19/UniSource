@@ -74,7 +74,7 @@ export function fingerprint(input: FilterSet): string {
     input.trash,
     input.search ?? '',
     input.mime_type ?? '',
-  ].join('|')
+  ].join('\0')
   return fnv1a32(canonical).toString(16)
 }
 
@@ -105,6 +105,13 @@ export async function decodeCursor(
     const bodyBytes = fromBase64Url(bodyB64)
     const sigBytes = fromBase64Url(sigB64)
 
+    const key = await getKey(secret)
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, bodyBytes)
+
+    if (!valid) {
+      throw new V2Error('cursor_invalid', 400)
+    }
+
     const payload: CursorPayload = JSON.parse(new TextDecoder().decode(bodyBytes))
 
     if (payload.v !== 1) {
@@ -112,13 +119,6 @@ export async function decodeCursor(
     }
 
     if (payload.sb !== expected.sb || payload.sd !== expected.sd || payload.fp !== expected.fp) {
-      throw new V2Error('cursor_invalid', 400)
-    }
-
-    const key = await getKey(secret)
-    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, bodyBytes)
-
-    if (!valid) {
       throw new V2Error('cursor_invalid', 400)
     }
 
