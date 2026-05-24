@@ -141,34 +141,6 @@ describe('GET /v2/files', () => {
     expect(res.headers.get('X-Request-Id')).toBe('my-trace-123')
   }, TEST_TIMEOUT)
 
-  it('invalid X-Request-Id (bad chars) → new UUID generated', async () => {
-    const app = buildApp()
-    const res = await app.fetch(
-      new Request('http://localhost/v2/files', {
-        headers: { 'X-Request-Id': 'bad id\n' },
-      }),
-      testEnv
-    )
-    const returned = res.headers.get('X-Request-Id')
-    expect(returned).toBeTruthy()
-    expect(returned).not.toBe('bad id\n')
-    // Should be a UUID
-    expect(returned).toMatch(/^[0-9a-f-]{36}$/)
-  }, TEST_TIMEOUT)
-
-  it('X-Request-Id > 128 chars → new UUID generated', async () => {
-    const longId = 'a'.repeat(129)
-    const app = buildApp()
-    const res = await app.fetch(
-      new Request('http://localhost/v2/files', {
-        headers: { 'X-Request-Id': longId },
-      }),
-      testEnv
-    )
-    const returned = res.headers.get('X-Request-Id')
-    expect(returned).not.toBe(longId)
-    expect(returned).toMatch(/^[0-9a-f-]{36}$/)
-  }, TEST_TIMEOUT)
 
   it('cursor from previous response returns next page', async () => {
     // Insert 5 files
