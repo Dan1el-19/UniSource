@@ -58,7 +58,10 @@ export function buildBaseWhere(input: BuildBaseWhereInput): { sql: string; binds
 
   if (input.search) {
     const escaped = escapeLikePattern(input.search)
-    conditions.push("filename LIKE ? ESCAPE '\\\\'")
+    // SQLite ESCAPE must be a single character. The escape char is `\`, so the
+    // SQL literal needs to be a single backslash inside single quotes: `'\'`.
+    // In a TypeScript string that is two backslashes (escaped backslash).
+    conditions.push("filename LIKE ? ESCAPE '\\'")
     binds.push(`%${escaped}%`)
   }
 

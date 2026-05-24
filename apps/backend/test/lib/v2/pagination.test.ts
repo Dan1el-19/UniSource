@@ -128,7 +128,7 @@ describe('pagination', () => {
         search: 'test',
       })
       expect(result.sql).toContain('filename LIKE ?')
-      expect(result.sql).toContain("ESCAPE '\\\\'")
+      expect(result.sql).toContain("ESCAPE '\\'")
       expect(result.binds).toContain('%test%')
     })
 
