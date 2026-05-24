@@ -1,28 +1,13 @@
-export type SortBy = 'created_at' | 'updated_at' | 'name' | 'size'
+import type { ResourceConfig, FilterDescriptor } from './resource'
+
 export type SortDir = 'asc' | 'desc'
 
-export const SORT_COLUMN: Record<SortBy, string> = {
-  created_at: 'created_at',
-  updated_at: 'updated_at',
-  name: 'filename',
-  size: 'size',
-}
-
-export interface BuildBaseWhereInput {
-  user_id: string
-  service_id: string
-  folder_id: string | null | undefined
-  trash: 'active' | 'trashed' | 'all'
-  search?: string
-  mime_type?: string
-}
-
-export interface BuildKeysetWhereInput extends BuildBaseWhereInput {
-  sort_by: SortBy
-  sort_dir: SortDir
-  cursor_lv?: string | number
-  cursor_li?: string
-}
+/**
+ * Re-export legacy alias for files. Nowy kod powinien używać `FilesSortBy` /
+ * `FoldersSortBy` z `resource.ts`.
+ * @deprecated import { FilesSortBy } from './resource'
+ */
+export type SortBy = 'created_at' | 'updated_at' | 'name' | 'size'
 
 export function escapeLikePattern(input: string): string {
   return input
@@ -31,43 +16,48 @@ export function escapeLikePattern(input: string): string {
     .replaceAll('_', '\\_')
 }
 
-export function buildBaseWhere(input: BuildBaseWhereInput): { sql: string; binds: unknown[] } {
-  const conditions: string[] = ['is_main_storage = 0']
+interface BuildBaseWhereCommon {
+  trash: 'active' | 'trashed' | 'all'
+}
+
+export function buildBaseWhere<S extends string, F extends object>(
+  config: ResourceConfig<S, F>,
+  input: F & BuildBaseWhereCommon
+): { sql: string; binds: unknown[] } {
+  const conditions: string[] = [...config.baseConditions]
   const binds: unknown[] = []
 
-  conditions.push('user_id = ?')
-  binds.push(input.user_id)
-
-  conditions.push('service_id = ?')
-  binds.push(input.service_id)
-
+  // Trash jest specjalny — każdy resource ma is_trashed.
   if (input.trash === 'active') {
     conditions.push('is_trashed = 0')
   } else if (input.trash === 'trashed') {
     conditions.push('is_trashed = 1')
   }
+  // 'all' → brak warunku
 
-  if (input.folder_id !== undefined) {
-    if (input.folder_id === null) {
-      conditions.push('folder_id IS NULL')
-    } else {
-      conditions.push('folder_id = ?')
-      binds.push(input.folder_id)
+  for (const filter of config.filters as readonly FilterDescriptor<F>[]) {
+    const value = input[filter.key]
+    if (value === undefined) continue
+
+    switch (filter.op) {
+      case '=':
+        conditions.push(`${filter.column} = ?`)
+        binds.push(value)
+        break
+      case 'IS_NULL_OR_EQ':
+        if (value === null) {
+          conditions.push(`${filter.column} IS NULL`)
+        } else {
+          conditions.push(`${filter.column} = ?`)
+          binds.push(value)
+        }
+        break
+      case 'LIKE_ESCAPED':
+        if (typeof value !== 'string' || value === '') break
+        conditions.push(`${filter.column} LIKE ? ESCAPE '\\'`)
+        binds.push(`%${escapeLikePattern(value)}%`)
+        break
     }
-  }
-
-  if (input.search) {
-    const escaped = escapeLikePattern(input.search)
-    // SQLite ESCAPE must be a single character. The escape char is `\`, so the
-    // SQL literal needs to be a single backslash inside single quotes: `'\'`.
-    // In a TypeScript string that is two backslashes (escaped backslash).
-    conditions.push("filename LIKE ? ESCAPE '\\'")
-    binds.push(`%${escaped}%`)
-  }
-
-  if (input.mime_type) {
-    conditions.push('mime_type = ?')
-    binds.push(input.mime_type)
   }
 
   return {
@@ -76,17 +66,23 @@ export function buildBaseWhere(input: BuildBaseWhereInput): { sql: string; binds
   }
 }
 
-export function buildKeysetWhere(input: BuildKeysetWhereInput): {
-  sql: string
-  binds: unknown[]
-  orderBy: string
-} {
-  if (!(input.sort_by in SORT_COLUMN)) {
-    throw new Error(`Unknown sort_by: ${input.sort_by}`)
+interface BuildKeysetCommon<S extends string> extends BuildBaseWhereCommon {
+  sort_by: S
+  sort_dir: SortDir
+  cursor_lv?: string | number
+  cursor_li?: string
+}
+
+export function buildKeysetWhere<S extends string, F extends object>(
+  config: ResourceConfig<S, F>,
+  input: F & BuildKeysetCommon<S>
+): { sql: string; binds: unknown[]; orderBy: string } {
+  if (!(input.sort_by in config.sortColumns)) {
+    throw new Error(`Unknown sort_by: ${String(input.sort_by)}`)
   }
 
-  const base = buildBaseWhere(input)
-  const sortCol = SORT_COLUMN[input.sort_by]
+  const base = buildBaseWhere(config, input)
+  const sortCol = config.sortColumns[input.sort_by]
   const dir = input.sort_dir
 
   let keysetCondition = ''

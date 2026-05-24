@@ -3,6 +3,7 @@ import { applyD1Migrations, env } from 'cloudflare:test'
 import type { D1Migration } from '@cloudflare/vitest-pool-workers'
 import { listFilesV2, type FileRowV2 } from '../../../src/db/v2/files'
 import { encodeCursor, fingerprint } from '../../../src/lib/v2/cursor'
+import { RESOURCE_CONFIG_FILES } from '../../../src/lib/v2/resource'
 import { V2Error } from '../../../src/lib/v2/errors'
 
 declare global {
@@ -430,7 +431,7 @@ describe('listFilesV2', () => {
 
   describe('cursor validation', () => {
     it('cursor minted under trash=active is rejected when reused with trash=trashed (fp mismatch)', async () => {
-      const activeFp = fingerprint({
+      const activeFp = fingerprint(RESOURCE_CONFIG_FILES, {
         user_id: 'user-1',
         service_id: 'svc-a',
         folder_id: undefined,
@@ -453,7 +454,7 @@ describe('listFilesV2', () => {
     })
 
     it('cursor minted with sort_by=created_at is rejected at sort_by=name (sb mismatch)', async () => {
-      const fp = fingerprint({
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, {
         user_id: 'user-1',
         service_id: 'svc-a',
         folder_id: undefined,
@@ -481,7 +482,7 @@ describe('listFilesV2', () => {
     })
 
     it('cursor with valid base64 body but tampered signature is rejected', async () => {
-      const fp = fingerprint({
+      const fp = fingerprint(RESOURCE_CONFIG_FILES, {
         user_id: 'user-1',
         service_id: 'svc-a',
         folder_id: undefined,

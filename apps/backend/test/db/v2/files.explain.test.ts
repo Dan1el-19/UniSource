@@ -3,6 +3,7 @@ import { applyD1Migrations, env } from 'cloudflare:test'
 import type { D1Migration } from '@cloudflare/vitest-pool-workers'
 import { buildKeysetWhere } from '../../../src/lib/v2/pagination'
 import type { SortBy } from '../../../src/lib/v2/pagination'
+import { RESOURCE_CONFIG_FILES } from '../../../src/lib/v2/resource'
 
 declare global {
   namespace Cloudflare {
@@ -58,7 +59,7 @@ describe('listFilesV2 — EXPLAIN QUERY PLAN coverage (36 combinations)', () => 
       for (const trash of trashes) {
         const label = `sort=${sort_by} folder=${folderLabel(folder_id)} trash=${trash}`
         it(label, async () => {
-          const { sql, binds, orderBy } = buildKeysetWhere({
+          const { sql, binds, orderBy } = buildKeysetWhere(RESOURCE_CONFIG_FILES, {
             user_id: 'u1',
             service_id: 's1',
             folder_id,
