@@ -19,8 +19,7 @@ import mainStorage from './routes/mainStorage';
 import releasesRouter from './routes/releases';
 import appRouter from './routes/app';
 import superadminRouter from './routes/superadmin';
-import filesV2 from './routes/v2/files';
-import foldersV2 from './routes/v2/folders';
+import v2Router from './routes/v2/index';
 import { parseAllowedOrigins } from './config/runtime';
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
@@ -76,17 +75,10 @@ app.use('/files/*', adminPreviewMiddleware);
 app.route('/files', userFiles);
 
 // --- V2 API ---
-// V2 files route
-app.use('/v2/files/*', authMiddleware);
-app.use('/v2/files/*', rateLimit('general'));
-app.use('/v2/files/*', adminPreviewMiddleware);
-app.route('/v2/files', filesV2);
-
-// V2 folders route
-app.use('/v2/folders/*', authMiddleware);
-app.use('/v2/folders/*', rateLimit('general'));
-app.use('/v2/folders/*', adminPreviewMiddleware);
-app.route('/v2/folders', foldersV2);
+app.use('/v2/*', authMiddleware);
+app.use('/v2/*', rateLimit('general'));
+app.use('/v2/*', adminPreviewMiddleware);
+app.route('/v2', v2Router);
 // --- End V2 API ---
 
 // Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
