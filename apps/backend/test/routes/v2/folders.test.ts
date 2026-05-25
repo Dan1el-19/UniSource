@@ -368,3 +368,56 @@ describe('POST /v2/folders/bulk-trash', () => {
     expect(body.error.request_id).toBeTruthy()
   }, TEST_TIMEOUT)
 })
+
+// ---------------------------------------------------------------------------
+// POST /v2/folders/bulk-restore
+// ---------------------------------------------------------------------------
+describe('POST /v2/folders/bulk-restore', () => {
+  beforeAll(async () => {
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS)
+  }, TEST_TIMEOUT)
+
+  beforeEach(async () => {
+    await clearFolders()
+  }, TEST_TIMEOUT)
+
+  it('restores trashed folders and returns processed_count', async () => {
+    await seedFolders([
+      { id: 'f1', user_id: USER_ID, service_id: SERVICE_ID, parent_id: null,
+        name: 'a', color_tag: null, is_trashed: 1, trashed_at: 50,
+        created_at: 100, updated_at: 100 },
+    ])
+
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/v2/folders/bulk-restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['f1'] }),
+      }),
+      testEnv
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.success).toBe(true)
+    expect(body.processed_count).toBe(1)
+  }, TEST_TIMEOUT)
+
+  it('returns validation_error with v2 shape on invalid body', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/v2/folders/bulk-restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      testEnv
+    )
+
+    expect(res.status).toBe(400)
+    const body = await res.json() as any
+    expect(body.error.code).toBe('validation_error')
+    expect(body.error.request_id).toBeTruthy()
+  }, TEST_TIMEOUT)
+})
