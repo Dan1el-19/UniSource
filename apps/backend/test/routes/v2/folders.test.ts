@@ -241,3 +241,73 @@ describe('GET /v2/folders', () => {
     ])
   }, TEST_TIMEOUT)
 })
+
+// ---------------------------------------------------------------------------
+// GET /v2/folders/:id/breadcrumbs
+// ---------------------------------------------------------------------------
+describe('GET /v2/folders/:id/breadcrumbs', () => {
+  beforeAll(async () => {
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS)
+  }, TEST_TIMEOUT)
+
+  beforeEach(async () => {
+    await clearFolders()
+  }, TEST_TIMEOUT)
+
+  it('returns breadcrumbs in v2 envelope shape with FolderRowV2 items', async () => {
+    await seedFolders([
+      { id: 'root', user_id: USER_ID, service_id: SERVICE_ID, parent_id: null,
+        name: 'Root', color_tag: null, is_trashed: 0, trashed_at: null,
+        created_at: 100, updated_at: 100 },
+      { id: 'child', user_id: USER_ID, service_id: SERVICE_ID, parent_id: 'root',
+        name: 'Child', color_tag: '', is_trashed: 0, trashed_at: null,
+        created_at: 200, updated_at: 200 },
+    ])
+
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/v2/folders/child/breadcrumbs'),
+      testEnv
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(Object.keys(body)).toEqual(['breadcrumbs'])
+    expect(body.breadcrumbs).toHaveLength(2)
+    // is_trashed must be boolean (FolderRowV2 shape)
+    expect(typeof body.breadcrumbs[0].is_trashed).toBe('boolean')
+    expect(body.breadcrumbs[0].is_trashed).toBe(false)
+    // color_tag: '' should be normalised to null
+    expect(body.breadcrumbs[1].color_tag).toBeNull()
+    // Ensure no extra columns
+    expect(Object.keys(body.breadcrumbs[0]).sort()).toEqual([
+      'color_tag', 'created_at', 'id', 'is_trashed', 'name',
+      'parent_id', 'service_id', 'trashed_at', 'updated_at', 'user_id',
+    ])
+  }, TEST_TIMEOUT)
+
+  it('returns 404 with error.code=not_found when folder does not exist', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/v2/folders/missing/breadcrumbs'),
+      testEnv
+    )
+
+    expect(res.status).toBe(404)
+    const body = await res.json() as any
+    expect(body.error.code).toBe('not_found')
+    expect(body.error.message).toBe('Folder not found')
+    expect(body.error.request_id).toBeTruthy()
+    // Must NOT contain legacy shape
+    expect('message' in body).toBe(false)
+  }, TEST_TIMEOUT)
+
+  it('returns X-Request-Id header on 404', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/v2/folders/missing/breadcrumbs'),
+      testEnv
+    )
+    expect(res.headers.get('X-Request-Id')).toBeTruthy()
+  }, TEST_TIMEOUT)
+})

@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { LIST_MAX_LIMIT } from '@unisource/sdk'
 import { listFoldersV2 } from '../../db/v2/folders'
+import type { FolderRowV2 } from '../../db/v2/folders'
 import { V2Error } from '../../lib/v2/errors'
 import { logV2Request } from '../../lib/v2/log'
 import { v2ValidationHook } from '../../lib/v2/zodHook'
@@ -107,19 +108,35 @@ function mapFolderLegacy(folder: FolderRecord): Folder {
   }
 }
 
-// TODO(v2-folders-rest): refactor /:id/breadcrumbs to v2 standard (V2Error 'not_found', request_id)
-foldersV2.get('/:id/breadcrumbs', zValidator('param', folderIdParamSchema, legacyValidationErrorHook), async (c) => {
+// v2 mapper — FolderRecord (DB row) → FolderRowV2 (public response shape)
+// Differs from mapFolderLegacy: color_tag '' is normalised to null (matches db/v2/folders.ts)
+function mapFolderV2(folder: FolderRecord): FolderRowV2 {
+  return {
+    id: folder.id,
+    service_id: folder.service_id,
+    user_id: folder.user_id,
+    parent_id: folder.parent_id,
+    name: folder.name,
+    color_tag: folder.color_tag === '' ? null : folder.color_tag,
+    is_trashed: folder.is_trashed === 1,
+    trashed_at: folder.trashed_at,
+    created_at: folder.created_at,
+    updated_at: folder.updated_at,
+  }
+}
+
+foldersV2.get('/:id/breadcrumbs', zValidator('param', folderIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId')
   const serviceId = c.get('serviceId')
   const { id } = c.req.valid('param')
 
   const folder = await getFolderForUser(c.env.APP_DB, id, userId, serviceId)
   if (!folder) {
-    return c.json({ error: 'Not Found', message: 'Folder not found' }, 404)
+    throw new V2Error('not_found', 404, 'Folder not found')
   }
 
   const breadcrumbs = await getFolderBreadcrumbs(c.env.APP_DB, id, userId, serviceId)
-  return c.json<FolderBreadcrumbsResponse>({ breadcrumbs: breadcrumbs.map(mapFolderLegacy) })
+  return c.json({ breadcrumbs: breadcrumbs.map(mapFolderV2) })
 })
 
 // TODO(v2-folders-rest): refactor bulk-* to v2 standard (V2Error, V2Envelope)
