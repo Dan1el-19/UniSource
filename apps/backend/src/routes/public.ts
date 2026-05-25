@@ -13,6 +13,9 @@ import {
 } from '../services/appwrite';
 import { createSignedToken, verifySignedToken } from '../utils/signedTokens';
 import { rateLimit } from '../middleware/ratelimit';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -21,15 +24,6 @@ const PUBLIC_DOWNLOAD_SCOPE = 'public-download';
 
 const slugParam = z.object({ slug: z.string().trim().min(1) });
 const downloadTokenQuery = z.object({ token: z.string().trim().min(1) });
-
-function validationErrorHook(
-  result: { success: boolean; error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> } },
-  c: { json: (v: unknown, s?: number) => Response }
-) {
-  if (result.success) return;
-  const issue = result.error?.issues[0];
-  return c.json({ error: 'Bad Request', message: issue?.message ?? 'Validation failed' }, 400);
-}
 
 async function generateDownloadUrl(
   env: CloudflareBindings,
@@ -87,34 +81,37 @@ async function createPublicDownloadUrl(
 
 const publicRouter = new Hono<HonoEnv>();
 
-publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugParam, validationErrorHook), async (c) => {
+publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugParam, v2ValidationHook), async (c) => {
   const { slug } = c.req.valid('param');
   const now = Math.floor(Date.now() / 1000);
+  const start = Date.now();
 
   const link = await getShareLinkBySlug(c.env.APP_DB, slug);
   if (!link || !link.is_active) {
-    return c.json({ error: 'Not Found', message: 'Share link not found or inactive' }, 404);
+    throw new V2Error('not_found', 404, 'Share link not found or inactive');
   }
   if (link.expires_at && link.expires_at < now) {
-    return c.json({ error: 'Gone', message: 'Share link has expired' }, 410);
+    throw new V2Error('gone', 410, 'Share link has expired');
   }
   if (link.max_downloads !== null && link.download_count >= link.max_downloads) {
-    return c.json({ error: 'Gone', message: 'Download limit reached' }, 410);
+    throw new V2Error('gone', 410, 'Download limit reached');
   }
 
   const file = await getFileRecord(c.env.APP_DB, link.file_id);
   if (!file || file.is_trashed) {
-    return c.json({ error: 'Not Found', message: 'File not available' }, 404);
+    throw new V2Error('not_found', 404, 'File not available');
   }
 
   if (link.password_hash) {
-    return c.json({
+    const response = c.json({
       filename: file.filename,
       size: file.size,
       mime_type: file.mime_type,
       requires_password: true,
       link_name: link.name,
     });
+    logV2Request(c, start, { route_family: 'public', operation: 'get_share_link' });
+    return response;
   }
 
   try {
@@ -127,7 +124,7 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
     );
 
     c.header('Cache-Control', 'no-store');
-    return c.json({
+    const response = c.json({
       file_id: file.id,
       filename: file.filename,
       size: file.size,
@@ -138,42 +135,44 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
       link_name: link.name,
       link_expires_at: link.expires_at,
     });
+    logV2Request(c, start, { route_family: 'public', operation: 'get_share_link' });
+    return response;
   } catch {
-    // S5: do not echo upstream provider details to the public client.
-    return c.json({ error: 'Bad Gateway', message: 'Unable to generate download URL' }, 502);
+    throw new V2Error('bad_gateway', 502, 'Unable to generate download URL');
   }
 });
 
 publicRouter.post(
   '/:slug/unlock',
   rateLimit('share-password', { discriminator: (c) => c.req.param('slug') }),
-  zValidator('param', slugParam, validationErrorHook),
-  zValidator('json', z.object({ password: z.string().min(1) }), validationErrorHook),
+  zValidator('param', slugParam, v2ValidationHook),
+  zValidator('json', z.object({ password: z.string().min(1) }), v2ValidationHook),
   async (c) => {
     const { slug } = c.req.valid('param');
     const { password } = c.req.valid('json');
     const now = Math.floor(Date.now() / 1000);
+    const start = Date.now();
 
     const link = await getShareLinkBySlug(c.env.APP_DB, slug);
     if (!link || !link.is_active) {
-      return c.json({ error: 'Not Found', message: 'Share link not found or inactive' }, 404);
+      throw new V2Error('not_found', 404, 'Share link not found or inactive');
     }
     if (link.expires_at && link.expires_at < now) {
-      return c.json({ error: 'Gone', message: 'Share link has expired' }, 410);
+      throw new V2Error('gone', 410, 'Share link has expired');
     }
     if (link.max_downloads !== null && link.download_count >= link.max_downloads) {
-      return c.json({ error: 'Gone', message: 'Download limit reached' }, 410);
+      throw new V2Error('gone', 410, 'Download limit reached');
     }
     if (!link.password_hash) {
-      return c.json({ error: 'Bad Request', message: 'This link has no password' }, 400);
+      throw new V2Error('validation_error', 400, 'This link has no password');
     }
 
     const ok = await verifyPassword(password, link.password_hash);
-    if (!ok) return c.json({ error: 'Unauthorized', message: 'Incorrect password' }, 401);
+    if (!ok) throw new V2Error('unauthorized', 401, 'Incorrect password');
 
     const file = await getFileRecord(c.env.APP_DB, link.file_id);
     if (!file || file.is_trashed) {
-      return c.json({ error: 'Not Found', message: 'File not available' }, 404);
+      throw new V2Error('not_found', 404, 'File not available');
     }
 
     try {
@@ -186,7 +185,7 @@ publicRouter.post(
       );
 
       c.header('Cache-Control', 'no-store');
-      return c.json({
+      const response = c.json({
         file_id: file.id,
         filename: file.filename,
         size: file.size,
@@ -197,8 +196,10 @@ publicRouter.post(
         link_name: link.name,
         link_expires_at: link.expires_at,
       });
+      logV2Request(c, start, { route_family: 'public', operation: 'unlock' });
+      return response;
     } catch {
-      return c.json({ error: 'Bad Gateway', message: 'Unable to generate download URL' }, 502);
+      throw new V2Error('bad_gateway', 502, 'Unable to generate download URL');
     }
   }
 );
@@ -206,24 +207,25 @@ publicRouter.post(
 publicRouter.get(
   '/:slug/download',
   rateLimit('public-read'),
-  zValidator('param', slugParam, validationErrorHook),
-  zValidator('query', downloadTokenQuery, validationErrorHook),
+  zValidator('param', slugParam, v2ValidationHook),
+  zValidator('query', downloadTokenQuery, v2ValidationHook),
   async (c) => {
     const { slug } = c.req.valid('param');
     const { token } = c.req.valid('query');
+    const start = Date.now();
     const payload = await verifySignedToken<{ slug: string; exp: number }>(getPublicDownloadSecret(c.env), token);
 
     if (!payload || payload.slug !== slug) {
-      return c.json({ error: 'Unauthorized', message: 'Download session expired or invalid' }, 401);
+      throw new V2Error('unauthorized', 401, 'Download session expired or invalid');
     }
 
     const now = Math.floor(Date.now() / 1000);
     const link = await getShareLinkBySlug(c.env.APP_DB, slug);
     if (!link || !link.is_active) {
-      return c.json({ error: 'Not Found', message: 'Share link not found or inactive' }, 404);
+      throw new V2Error('not_found', 404, 'Share link not found or inactive');
     }
     if (link.expires_at && link.expires_at < now) {
-      return c.json({ error: 'Gone', message: 'Share link has expired' }, 410);
+      throw new V2Error('gone', 410, 'Share link has expired');
     }
 
     // B5: atomic increment + max_downloads check. The DB UPDATE only succeeds
@@ -231,12 +233,12 @@ publicRouter.get(
     // can therefore not both exceed the limit.
     const incremented = await incrementDownloadCount(c.env.APP_DB, link.id);
     if (!incremented) {
-      return c.json({ error: 'Gone', message: 'Download limit reached' }, 410);
+      throw new V2Error('gone', 410, 'Download limit reached');
     }
 
     const file = await getFileRecord(c.env.APP_DB, link.file_id);
     if (!file || file.is_trashed) {
-      return c.json({ error: 'Not Found', message: 'File not available' }, 404);
+      throw new V2Error('not_found', 404, 'File not available');
     }
 
     try {
@@ -267,6 +269,7 @@ publicRouter.get(
       }
 
       c.header('Cache-Control', 'no-store');
+      logV2Request(c, start, { route_family: 'public', operation: 'download' });
       return new Response(null, {
         status: 302,
         headers: {
@@ -275,7 +278,7 @@ publicRouter.get(
         },
       });
     } catch {
-      return c.json({ error: 'Bad Gateway', message: 'Unable to generate download URL' }, 502);
+      throw new V2Error('bad_gateway', 502, 'Unable to generate download URL');
     }
   }
 );
