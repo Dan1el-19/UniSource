@@ -59,6 +59,7 @@ vi.mock('../src/db/services', async (importOriginal) => {
 import { generatePresignedPutUrl, headObject } from '../src/services/r2';
 import { getAppwriteFileMeta } from '../src/services/appwrite';
 import { createUpload, getUpload, failUpload, completeUpload, completeUploadAndCreateFile } from '../src/db/files';
+import { v2ErrorHandler } from '../src/middleware/v2Errors';
 import { createMainStorageFileRecord } from '../src/db/fileRecords';
 import upload from '../src/routes/upload';
 import publicRouter from '../src/routes/public';
@@ -141,6 +142,7 @@ const secondaryServiceRecord: ServiceRecord = {
 
 function buildUploadApp(userId = 'system', serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+  app.onError(v2ErrorHandler);
   const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
@@ -156,6 +158,7 @@ function buildUploadApp(userId = 'system', serviceId = 'default') {
 
 function buildPublicApp() {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+  app.onError(v2ErrorHandler);
   app.route('/public', publicRouter);
   return app;
 }

@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { describe, it, expect } from 'vitest';
 import type { UploadRecord } from '../src/db/files';
 import type { ServiceRecord } from '../src/db/services';
+import { v2ErrorHandler } from '../src/middleware/v2Errors';
 import files from '../src/routes/files';
 import upload from '../src/routes/upload';
 
@@ -60,6 +61,7 @@ const secondaryServiceRecord: ServiceRecord = {
 // ---------------------------------------------------------------------------
 function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+	app.onError(v2ErrorHandler);
 	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	// Inject auth context the same way the real authMiddleware would
@@ -79,6 +81,7 @@ function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 
 function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+	app.onError(v2ErrorHandler);
 	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	app.use('*', async (c, next) => {
