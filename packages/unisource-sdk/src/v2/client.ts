@@ -7,8 +7,8 @@ import { v2FileSchema } from './files'
 import { v2FolderListResponseSchema, v2FolderBreadcrumbsResponseSchema } from './folders'
 import { bulkOperationResponseSchema } from './legacy-draft'
 import { UnisourceV2Error } from './errors'
-import type { ShareLinkListResponse, ShareLinkCreateResponse, ShareLinkDetailResponse, ShareLinkDeleteResponse, SharesCreateRequest } from '../shareLinks'
-import { shareLinkListResponseSchema, shareLinkCreateResponseSchema, shareLinkDetailResponseSchema, shareLinkDeleteResponseSchema } from '../shareLinks'
+import type { ShareLinkListResponse, ShareLinkCreateResponse, ShareLinkDetailResponse, ShareLinkDeleteResponse, SharesCreateRequest, ShareLinkCreateRequest, ShareLinkUpdateRequest, ShareLinkUpdateResponse } from '../shareLinks'
+import { shareLinkListResponseSchema, shareLinkCreateResponseSchema, shareLinkDetailResponseSchema, shareLinkDeleteResponseSchema, shareLinkUpdateResponseSchema } from '../shareLinks'
 import type { AppReleaseLatestResponse } from '../releases'
 import { appReleaseLatestResponseSchema } from '../releases'
 
@@ -105,6 +105,31 @@ export class UnisourceV2Client {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<AppReleaseLatestResponse> => this._appLatestRelease(query, signal, options),
+  }
+
+  readonly shareLinks = {
+    create: (
+      fileId: string,
+      body: ShareLinkCreateRequest,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkCreateResponse> => this._shareLinksCreate(fileId, body, signal, options),
+    listForFile: (
+      fileId: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkListResponse> => this._shareLinksListForFile(fileId, signal, options),
+    update: (
+      linkId: string,
+      body: ShareLinkUpdateRequest,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkUpdateResponse> => this._shareLinksUpdate(linkId, body, signal, options),
+    delete: (
+      linkId: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkDeleteResponse> => this._shareLinksDelete(linkId, signal, options),
   }
 
   readonly folders = {
@@ -616,6 +641,158 @@ export class UnisourceV2Client {
     if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
 
     const url = new URL(`/shares/${encodeURIComponent(id)}`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'DELETE', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkDeleteResponseSchema.parse(data)
+  }
+
+  private async _shareLinksCreate(
+    fileId: string,
+    body: ShareLinkCreateRequest,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkCreateResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = {
+      'X-Service-ID': this.config.serviceId,
+      'Content-Type': 'application/json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/my-files/${encodeURIComponent(fileId)}/share-links`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'POST', headers, body: JSON.stringify(body), signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let errBody: V2ErrorBody
+      try { errBody = parseErrorBody(await response.json()) } catch { errBody = {} }
+      throw new UnisourceV2Error(
+        errBody.error?.message ?? response.statusText,
+        response.status,
+        errBody.error?.code ?? 'unknown',
+        requestId,
+        errBody.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkCreateResponseSchema.parse(data)
+  }
+
+  private async _shareLinksListForFile(
+    fileId: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkListResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/my-files/${encodeURIComponent(fileId)}/share-links`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'GET', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkListResponseSchema.parse(data)
+  }
+
+  private async _shareLinksUpdate(
+    linkId: string,
+    body: ShareLinkUpdateRequest,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkUpdateResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = {
+      'X-Service-ID': this.config.serviceId,
+      'Content-Type': 'application/json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/share-links/${encodeURIComponent(linkId)}`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'PATCH', headers, body: JSON.stringify(body), signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let errBody: V2ErrorBody
+      try { errBody = parseErrorBody(await response.json()) } catch { errBody = {} }
+      throw new UnisourceV2Error(
+        errBody.error?.message ?? response.statusText,
+        response.status,
+        errBody.error?.code ?? 'unknown',
+        requestId,
+        errBody.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkUpdateResponseSchema.parse(data)
+  }
+
+  private async _shareLinksDelete(
+    linkId: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkDeleteResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/share-links/${encodeURIComponent(linkId)}`, this.config.baseUrl)
 
     let response: Response
     try {
