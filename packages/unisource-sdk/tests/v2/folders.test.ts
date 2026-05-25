@@ -340,3 +340,98 @@ describe('UnisourceV2Client.folders.bulkRestore', () => {
     expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
   })
 })
+
+describe('UnisourceV2Client.folders.bulkMove', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  function mockOk(body = { success: true, processed_count: 2 }) {
+    return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
+  }
+
+  it('calls correct URL with POST', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulkMove({ ids: ['a', 'b'] })
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://api.example.com/v2/folders/bulk-move',
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('sets Content-Type: application/json', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulkMove({ ids: ['a'] })
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['Content-Type']).toBe('application/json')
+  })
+
+  it('sends ids in body', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulkMove({ ids: ['x', 'y'] })
+    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body
+    expect(JSON.parse(body as string)).toEqual({ ids: ['x', 'y'] })
+  })
+
+  it('includes parent_id string in body', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulkMove({ ids: ['a'], parent_id: 'p1' })
+    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body
+    expect(JSON.parse(body as string)).toEqual({ ids: ['a'], parent_id: 'p1' })
+  })
+
+  it('includes parent_id null in body as JSON null', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulkMove({ ids: ['a'], parent_id: null })
+    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string
+    expect(body).toContain('"parent_id":null')
+    expect(JSON.parse(body).parent_id).toBeNull()
+  })
+
+  it('sets X-Service-ID and Authorization headers', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulkMove({ ids: ['a'] })
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['X-Service-ID']).toBe('svc-1')
+    expect(headers['Authorization']).toBe('Bearer test-token')
+  })
+
+  it('sets X-Target-User-ID when asUser provided', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulkMove({ ids: ['a'] }, undefined, { asUser: 'user-Z' })
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['X-Target-User-ID']).toBe('user-Z')
+  })
+
+  it('parses success response', async () => {
+    vi.stubGlobal('fetch', mockOk({ success: true, processed_count: 2 }))
+    const client = new UnisourceV2Client(mockConfig)
+    const result = await client.folders.bulkMove({ ids: ['a', 'b'], parent_id: 'p1' })
+    expect(result).toEqual({ success: true, processed_count: 2 })
+  })
+
+  it('throws UnisourceV2Error on 409 cycle detected', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 409, statusText: 'Conflict',
+      headers: { get: () => 'req-409' },
+      json: () => Promise.resolve({ error: { code: 'validation_error', message: 'Cycle detected' } }),
+    }))
+    const client = new UnisourceV2Client(mockConfig)
+    await expect(client.folders.bulkMove({ ids: ['a'], parent_id: 'a' })).rejects.toMatchObject({
+      name: 'UnisourceV2Error', status: 409, code: 'validation_error', message: 'Cycle detected', requestId: 'req-409',
+    })
+  })
+
+  it('forwards AbortSignal to fetch', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    const controller = new AbortController()
+    await client.folders.bulkMove({ ids: ['a'] }, controller.signal)
+    expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
+  })
+})

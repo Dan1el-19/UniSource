@@ -1,7 +1,7 @@
 import type { V2ListQuery, V2ListResponse } from './types'
 import type { V2File } from './files'
 import type { V2FolderListQuery, V2FolderListResponse, V2FolderBreadcrumbsResponse } from './folders'
-import type { BulkFolderIds, BulkOperationResponse } from './legacy-draft'
+import type { BulkFileIds, BulkFileMoveRequest, BulkFolderIds, BulkFolderMoveRequest, BulkOperationResponse } from './legacy-draft'
 import { v2ListResponseSchema } from './schemas'
 import { v2FileSchema } from './files'
 import { v2FolderListResponseSchema, v2FolderBreadcrumbsResponseSchema } from './folders'
@@ -79,6 +79,11 @@ export class UnisourceV2Client {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<BulkOperationResponse> => this._foldersBulkRestore(body, signal, options),
+    bulkMove: (
+      body: BulkFolderMoveRequest,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<BulkOperationResponse> => this._foldersBulkMove(body, signal, options),
   }
 
   private async _filesList(
@@ -260,6 +265,45 @@ export class UnisourceV2Client {
     if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
 
     const url = new URL('/v2/folders/bulk-restore', this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'POST', headers, body: JSON.stringify(body), signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let errBody: V2ErrorBody
+      try { errBody = parseErrorBody(await response.json()) } catch { errBody = {} }
+      throw new UnisourceV2Error(
+        errBody.error?.message ?? response.statusText,
+        response.status,
+        errBody.error?.code ?? 'unknown',
+        requestId,
+        errBody.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return bulkOperationResponseSchema.parse(data)
+  }
+
+  private async _foldersBulkMove(
+    body: BulkFolderMoveRequest,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<BulkOperationResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = {
+      'X-Service-ID': this.config.serviceId,
+      'Content-Type': 'application/json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL('/v2/folders/bulk-move', this.config.baseUrl)
 
     let response: Response
     try {
