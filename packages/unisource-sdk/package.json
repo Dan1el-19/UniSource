@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Repository Maintainer/UniSource.git",
+    "url": "git+https://github.com/Dan1el-19/UniSource.git",
     "directory": "packages/unisource-sdk"
   },
   "publishConfig": {

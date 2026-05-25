@@ -1,7 +1,7 @@
 # UniSource
 
 ![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)
-![TypeScript](https://img.shields.io/badge/TypeScript-yes-3178C6)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6)
 ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020)
 ![npm](https://img.shields.io/npm/v/@unisource/sdk)
 
@@ -44,7 +44,7 @@ UniSource API / Cloudflare Worker
    └─ Admin panel
 ```
 
-A real example consumer is Chmura Blokserwis (separate frontend app), which uses the UniSource API and `@unisource/sdk`.
+A real example consumer is `chmura-blokserwis`, a separate frontend app that uses the UniSource API and `@unisource/sdk`.
 
 ## Project status
 
