@@ -22,25 +22,14 @@ import {
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
 import { deactivateShareLinksForFile } from '../db/shareLinks';
-import type {
-  FileRecordDetailResponse,
-  FileDownloadUrlResponse,
-  FileUpdateResponse,
-} from '@unisource/sdk';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
 const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
 
-function validationErrorHook(
-  result: { success: boolean; error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> } },
-  c: { json: (v: unknown, s?: number) => Response }
-) {
-  if (result.success) return;
-  const issue = result.error?.issues[0];
-  const path = issue?.path.length ? `${issue.path.join('.')}: ` : '';
-  return c.json({ error: 'Bad Request', message: `${path}${issue?.message ?? 'Validation failed'}` }, 400);
-}
 
 function mapFileRecord(record: FileRecord): import('@unisource/sdk').FileRecord {
   return {
@@ -66,44 +55,51 @@ const updateBody = z.object({ filename: z.string().trim().min(1).max(255) });
 const userFiles = new Hono<HonoEnv>();
 
 // GET /files/:id
-userFiles.get('/:id', zValidator('param', idParam, validationErrorHook), async (c) => {
+userFiles.get('/:id', zValidator('param', idParam, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   const { id } = c.req.valid('param');
 
   const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
-  if (!record) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+  if (!record) throw new V2Error('not_found', 404, 'File not found');
 
-  return c.json<FileRecordDetailResponse>({ file: mapFileRecord(record) });
+  const response = c.json({ file: mapFileRecord(record) });
+  logV2Request(c, start, { route_family: 'userFiles', operation: 'get' });
+  return response;
 });
 
 // PATCH /files/:id  { filename } or { folder_id }
 userFiles.patch(
   '/:id',
-  zValidator('param', idParam, validationErrorHook),
-  zValidator('json', updateBody, validationErrorHook),
+  zValidator('param', idParam, v2ValidationHook),
+  zValidator('json', updateBody, v2ValidationHook),
   async (c) => {
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
+    const start = Date.now();
     const { id } = c.req.valid('param');
     const { filename } = c.req.valid('json');
 
     const file = await updateFileRecord(c.env.APP_DB, id, userId, serviceId, { filename });
-    if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+    if (!file) throw new V2Error('not_found', 404, 'File not found');
 
-    return c.json<FileUpdateResponse>({ file: mapFileRecord(file) });
+    const response = c.json({ file: mapFileRecord(file) });
+    logV2Request(c, start, { route_family: 'userFiles', operation: 'update' });
+    return response;
   }
 );
 
 // DELETE /files/:id  ?permanent=bool
-userFiles.delete('/:id', zValidator('param', idParam, validationErrorHook), async (c) => {
+userFiles.delete('/:id', zValidator('param', idParam, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   const { id } = c.req.valid('param');
   const permanent = c.req.query('permanent') === 'true';
 
   const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
-  if (!record) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+  if (!record) throw new V2Error('not_found', 404, 'File not found');
 
   if (permanent) {
     try {
@@ -111,11 +107,11 @@ userFiles.delete('/:id', zValidator('param', idParam, validationErrorHook), asyn
         await deleteObject(c.env, record.bucket, record.storage_key);
       } else {
         const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
-        if (!appwriteFileId) return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key' }, 500);
+        if (!appwriteFileId) throw new V2Error('internal_error', 500, 'Invalid Appwrite storage key');
         await deleteAppwriteFile(c.env, record.bucket, appwriteFileId);
       }
     } catch {
-      return c.json({ error: 'Bad Gateway', message: 'Unable to delete file from storage' }, 502);
+      throw new V2Error('bad_gateway', 502, 'Unable to delete file from storage');
     }
 
     await deactivateShareLinksForFile(c.env.APP_DB, id, serviceId);
@@ -136,36 +132,44 @@ userFiles.delete('/:id', zValidator('param', idParam, validationErrorHook), asyn
       })
     );
 
-    return c.json({ success: true, id, permanent: true });
+    const permResponse = c.json({ success: true, id, permanent: true });
+    logV2Request(c, start, { route_family: 'userFiles', operation: 'delete' });
+    return permResponse;
   }
 
   const trashed = await trashFileRecord(c.env.APP_DB, id, userId, serviceId);
-  if (!trashed) return c.json({ error: 'Conflict', message: 'File already in trash' }, 409);
+  if (!trashed) throw new V2Error('conflict', 409, 'File already in trash');
 
-  return c.json({ success: true, id, permanent: false });
+  const response = c.json({ success: true, id, permanent: false });
+  logV2Request(c, start, { route_family: 'userFiles', operation: 'delete' });
+  return response;
 });
 
 // POST /files/:id/restore
-userFiles.post('/:id/restore', zValidator('param', idParam, validationErrorHook), async (c) => {
+userFiles.post('/:id/restore', zValidator('param', idParam, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   const { id } = c.req.valid('param');
 
   const restored = await restoreFileRecord(c.env.APP_DB, id, userId, serviceId);
-  if (!restored) return c.json({ error: 'Not Found', message: 'File not found or not in trash' }, 404);
+  if (!restored) throw new V2Error('not_found', 404, 'File not found or not in trash');
 
-  return c.json({ success: true, id });
+  const response = c.json({ success: true, id });
+  logV2Request(c, start, { route_family: 'userFiles', operation: 'restore' });
+  return response;
 });
 
 // GET /files/:id/download-url
-userFiles.get('/:id/download-url', zValidator('param', idParam, validationErrorHook), async (c) => {
+userFiles.get('/:id/download-url', zValidator('param', idParam, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   const { id } = c.req.valid('param');
 
   const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
-  if (!record) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
-  if (record.is_trashed) return c.json({ error: 'Conflict', message: 'File is in trash' }, 409);
+  if (!record) throw new V2Error('not_found', 404, 'File not found');
+  if (record.is_trashed) throw new V2Error('conflict', 409, 'File is in trash');
 
   if (record.storage_destination === 'r2') {
     try {
@@ -179,19 +183,21 @@ userFiles.get('/:id/download-url', zValidator('param', idParam, validationErrorH
       c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       c.header('Pragma', 'no-cache');
       c.header('Expires', '0');
-      return c.json<FileDownloadUrlResponse>({
+      const r2Response = c.json({
         upload_id: record.id,
         destination: record.storage_destination,
         download_url: presigned_url,
         expires_at,
       });
+      logV2Request(c, start, { route_family: 'userFiles', operation: 'download_url' });
+      return r2Response;
     } catch {
-      return c.json({ error: 'Bad Gateway', message: 'Unable to generate R2 download URL' }, 502);
+      throw new V2Error('bad_gateway', 502, 'Unable to generate R2 download URL');
     }
   }
 
   const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
-  if (!appwriteFileId) return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key format' }, 500);
+  if (!appwriteFileId) throw new V2Error('internal_error', 500, 'Invalid Appwrite storage key format');
 
   try {
     const token = await createAppwriteFileToken(c.env, record.bucket, appwriteFileId, DOWNLOAD_URL_TTL_SECONDS);
@@ -199,14 +205,16 @@ userFiles.get('/:id/download-url', zValidator('param', idParam, validationErrorH
     c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     c.header('Pragma', 'no-cache');
     c.header('Expires', '0');
-    return c.json<FileDownloadUrlResponse>({
+    const appwriteResponse = c.json({
       upload_id: record.id,
       destination: record.storage_destination,
       download_url: downloadUrl,
       expires_at: token.expires_at,
     });
+    logV2Request(c, start, { route_family: 'userFiles', operation: 'download_url' });
+    return appwriteResponse;
   } catch {
-    return c.json({ error: 'Bad Gateway', message: 'Unable to generate Appwrite download URL' }, 502);
+    throw new V2Error('bad_gateway', 502, 'Unable to generate Appwrite download URL');
   }
 });
 

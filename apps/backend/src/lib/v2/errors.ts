@@ -9,6 +9,8 @@ export type V2ErrorCode =
   | 'not_found'
   | 'rate_limited'
   | 'internal_error'
+  | 'conflict'
+  | 'bad_gateway'
 
 export class V2Error extends Error {
   constructor(

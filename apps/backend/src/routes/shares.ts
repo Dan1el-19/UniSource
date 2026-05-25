@@ -18,19 +18,11 @@ import {
 import { getFileRecordForUser } from '../db/fileRecords';
 import { hashPassword } from '../utils/password';
 import { generateSlug, isValidSlug } from '../utils/slug';
-import type { ShareLinkCreateResponse, ShareLinkListResponse } from '@unisource/sdk';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
-
-function validationErrorHook(
-  result: { success: boolean; error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> } },
-  c: { json: (v: unknown, s?: number) => Response }
-) {
-  if (result.success) return;
-  const issue = result.error?.issues[0];
-  const path = issue?.path.length ? `${issue.path.join('.')}: ` : '';
-  return c.json({ error: 'Bad Request', message: `${path}${issue?.message ?? 'Validation failed'}` }, 400);
-}
 
 function mapShareLink(link: ShareLink) {
   return {
@@ -64,24 +56,28 @@ const sharesRouter = new Hono<HonoEnv>();
 
 // GET /shares
 sharesRouter.get('/', async (c) => {
+  const start = Date.now();
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const links = await listShareLinksForUser(c.env.APP_DB, userId, serviceId);
-  return c.json<ShareLinkListResponse>({ items: links.map(mapShareLink) });
+  const response = c.json({ items: links.map(mapShareLink) });
+  logV2Request(c, start, { route_family: 'shares', operation: 'list' });
+  return response;
 });
 
 // POST /shares
 sharesRouter.post(
   '/',
-  zValidator('json', createBodySchema, validationErrorHook),
+  zValidator('json', createBodySchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const body = c.req.valid('json');
 
     const file = await getFileRecordForUser(c.env.APP_DB, body.file_id, userId, serviceId);
-    if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
-    if (file.is_trashed) return c.json({ error: 'Conflict', message: 'Cannot share a trashed file' }, 409);
+    if (!file) throw new V2Error('not_found', 404, 'File not found');
+    if (file.is_trashed) throw new V2Error('conflict', 409, 'Cannot share a trashed file');
 
     // Generate unique slug
     let slug: string | undefined;
@@ -93,7 +89,7 @@ sharesRouter.post(
         .first();
       if (!existing) { slug = candidate; break; }
     }
-    if (!slug) return c.json({ error: 'Internal Server Error', message: 'Could not generate unique slug' }, 500);
+    if (!slug) throw new V2Error('internal_error', 500, 'Could not generate unique slug');
 
     const password_hash = body.password ? await hashPassword(body.password) : null;
     const id = crypto.randomUUID();
@@ -110,34 +106,42 @@ sharesRouter.post(
       max_downloads: body.max_downloads ?? null,
     });
 
-    return c.json<ShareLinkCreateResponse>({ link: mapShareLink(link) }, 201);
+    const response = c.json({ link: mapShareLink(link) }, 201);
+    logV2Request(c, start, { route_family: 'shares', operation: 'create' });
+    return response;
   }
 );
 
 // GET /shares/:id
-sharesRouter.get('/:id', zValidator('param', idParam, validationErrorHook), async (c) => {
+sharesRouter.get('/:id', zValidator('param', idParam, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
   const link = await getShareLinkById(c.env.APP_DB, id);
   if (!link || link.user_id !== userId || link.service_id !== serviceId) {
-    return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
+    throw new V2Error('not_found', 404, 'Share link not found');
   }
 
-  return c.json({ link: mapShareLink(link) });
+  const response = c.json({ link: mapShareLink(link) });
+  logV2Request(c, start, { route_family: 'shares', operation: 'get' });
+  return response;
 });
 
 // DELETE /shares/:id
-sharesRouter.delete('/:id', zValidator('param', idParam, validationErrorHook), async (c) => {
+sharesRouter.delete('/:id', zValidator('param', idParam, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
 
   const deleted = await deleteShareLink(c.env.APP_DB, id, userId, serviceId);
-  if (!deleted) return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
+  if (!deleted) throw new V2Error('not_found', 404, 'Share link not found');
 
-  return c.json({ success: true as const, id });
+  const response = c.json({ success: true as const, id });
+  logV2Request(c, start, { route_family: 'shares', operation: 'delete' });
+  return response;
 });
 
 export default sharesRouter;

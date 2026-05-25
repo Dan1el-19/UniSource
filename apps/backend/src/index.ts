@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { HTTPException } from 'hono/http-exception';
 import { authMiddleware } from './middleware/auth';
 import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
+import { V2Error, errorResponse } from './lib/v2/errors';
 import { foreignKeysMiddleware } from './middleware/foreignKeys';
 import { rateLimit } from './middleware/ratelimit';
 import upload from './routes/upload';
@@ -129,6 +131,12 @@ app.route('/public', publicRouter);
 app.route('/superadmin', superadminRouter);
 
 app.onError((err, c) => {
+  if (err instanceof V2Error) {
+    return errorResponse(c, err);
+  }
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
   logError('Unhandled Application Error', err, c as any);
   return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
 });
