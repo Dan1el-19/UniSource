@@ -139,8 +139,7 @@ foldersV2.get('/:id/breadcrumbs', zValidator('param', folderIdParamSchema, v2Val
   return c.json({ breadcrumbs: breadcrumbs.map(mapFolderV2) })
 })
 
-// TODO(v2-folders-rest): refactor bulk-* to v2 standard (V2Error, V2Envelope)
-foldersV2.post('/bulk-trash', zValidator('json', bulkFolderIdsSchema, legacyValidationErrorHook), async (c) => {
+foldersV2.post('/bulk-trash', zValidator('json', bulkFolderIdsSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId')
   const serviceId = c.get('serviceId')
   const { ids } = c.req.valid('json')

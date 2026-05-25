@@ -311,3 +311,60 @@ describe('GET /v2/folders/:id/breadcrumbs', () => {
     expect(res.headers.get('X-Request-Id')).toBeTruthy()
   }, TEST_TIMEOUT)
 })
+
+// ---------------------------------------------------------------------------
+// POST /v2/folders/bulk-trash
+// ---------------------------------------------------------------------------
+describe('POST /v2/folders/bulk-trash', () => {
+  beforeAll(async () => {
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS)
+  }, TEST_TIMEOUT)
+
+  beforeEach(async () => {
+    await clearFolders()
+  }, TEST_TIMEOUT)
+
+  it('trashes provided folders and returns processed_count', async () => {
+    await seedFolders([
+      { id: 'f1', user_id: USER_ID, service_id: SERVICE_ID, parent_id: null,
+        name: 'a', color_tag: null, is_trashed: 0, trashed_at: null,
+        created_at: 100, updated_at: 100 },
+      { id: 'f2', user_id: USER_ID, service_id: SERVICE_ID, parent_id: null,
+        name: 'b', color_tag: null, is_trashed: 0, trashed_at: null,
+        created_at: 200, updated_at: 200 },
+    ])
+
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/v2/folders/bulk-trash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['f1', 'f2'] }),
+      }),
+      testEnv
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json() as any
+    expect(body.success).toBe(true)
+    expect(body.processed_count).toBe(2)
+    expect(body.failed_ids).toBeUndefined()
+  }, TEST_TIMEOUT)
+
+  it('returns validation_error with v2 shape on invalid body', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/v2/folders/bulk-trash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [] }),
+      }),
+      testEnv
+    )
+
+    expect(res.status).toBe(400)
+    const body = await res.json() as any
+    expect(body.error.code).toBe('validation_error')
+    expect(body.error.request_id).toBeTruthy()
+  }, TEST_TIMEOUT)
+})
