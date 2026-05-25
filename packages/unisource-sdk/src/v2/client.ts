@@ -1,9 +1,9 @@
 import type { V2ListQuery, V2ListResponse } from './types'
 import type { V2File } from './files'
-import type { V2FolderListQuery, V2FolderListResponse } from './folders'
+import type { V2FolderListQuery, V2FolderListResponse, V2FolderBreadcrumbsResponse } from './folders'
 import { v2ListResponseSchema } from './schemas'
 import { v2FileSchema } from './files'
-import { v2FolderListResponseSchema } from './folders'
+import { v2FolderListResponseSchema, v2FolderBreadcrumbsResponseSchema } from './folders'
 import { UnisourceV2Error } from './errors'
 
 let warned = false
@@ -62,6 +62,11 @@ export class UnisourceV2Client {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FolderListResponse> => this._foldersList(query, signal, options),
+    breadcrumbs: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<V2FolderBreadcrumbsResponse> => this._foldersBreadcrumbs(id, signal, options),
   }
 
   private async _filesList(
@@ -150,5 +155,43 @@ export class UnisourceV2Client {
 
     const data = await response.json()
     return v2FolderListResponseSchema.parse(data)
+  }
+
+  private async _foldersBreadcrumbs(
+    id: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<V2FolderBreadcrumbsResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = {
+      'X-Service-ID': this.config.serviceId,
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/v2/folders/${encodeURIComponent(id)}/breadcrumbs`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'GET', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return v2FolderBreadcrumbsResponseSchema.parse(data)
   }
 }

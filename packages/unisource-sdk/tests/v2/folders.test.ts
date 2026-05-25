@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { v2FolderSchema, v2FolderListResponseSchema } from '../../src/v2/folders'
+import { v2FolderSchema, v2FolderListResponseSchema, v2FolderBreadcrumbsResponseSchema } from '../../src/v2/folders'
 import { UnisourceV2Client } from '../../src/v2/client'
 import { UnisourceV2Error } from '../../src/v2/errors'
 
@@ -34,6 +34,17 @@ describe('v2FolderListResponseSchema', () => {
 
   it('rejects missing page', () => {
     expect(() => v2FolderListResponseSchema.parse({ items: [] })).toThrow()
+  })
+})
+
+describe('v2FolderBreadcrumbsResponseSchema', () => {
+  it('parses valid response', () => {
+    const ok = v2FolderBreadcrumbsResponseSchema.parse({ breadcrumbs: [validFolder] })
+    expect(ok.breadcrumbs[0]!.id).toBe('f1')
+  })
+
+  it('rejects is_trashed as numeric (V1 shape)', () => {
+    expect(() => v2FolderBreadcrumbsResponseSchema.parse({ breadcrumbs: [{ ...validFolder, is_trashed: 0 }] })).toThrow()
   })
 })
 
@@ -92,5 +103,77 @@ describe('UnisourceV2Client.folders.list', () => {
     await expect(client.folders.list()).rejects.toMatchObject({
       name: 'UnisourceV2Error', message: 'Bad Gateway', status: 502, code: 'unknown', requestId: 'req-502',
     })
+  })
+})
+
+describe('UnisourceV2Client.folders.breadcrumbs', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  function mockOk(body = { breadcrumbs: [validFolder] }) {
+    return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
+  }
+
+  it('calls correct URL with id', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.breadcrumbs('folder-1')
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://api.example.com/v2/folders/folder-1/breadcrumbs',
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
+  it('URL-encodes id with special characters', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.breadcrumbs('folder:with space')
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://api.example.com/v2/folders/folder%3Awith%20space/breadcrumbs',
+      expect.anything()
+    )
+  })
+
+  it('sets X-Service-ID and Authorization headers', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.breadcrumbs('f1')
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['X-Service-ID']).toBe('svc-1')
+    expect(headers['Authorization']).toBe('Bearer test-token')
+  })
+
+  it('sets X-Target-User-ID when asUser provided', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.breadcrumbs('f1', undefined, { asUser: 'user-Z' })
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['X-Target-User-ID']).toBe('user-Z')
+  })
+
+  it('validates response with v2FolderSchema (boolean is_trashed)', async () => {
+    vi.stubGlobal('fetch', mockOk({ breadcrumbs: [{ ...validFolder, is_trashed: true }] }))
+    const client = new UnisourceV2Client(mockConfig)
+    const result = await client.folders.breadcrumbs('f1')
+    expect(result.breadcrumbs[0]!.is_trashed).toBe(true)
+  })
+
+  it('throws UnisourceV2Error on 404 with parsed code/message/requestId', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 404, statusText: 'Not Found',
+      headers: { get: () => 'req-404' },
+      json: () => Promise.resolve({ error: { code: 'folder_not_found', message: 'Folder not found' } }),
+    }))
+    const client = new UnisourceV2Client(mockConfig)
+    await expect(client.folders.breadcrumbs('missing')).rejects.toMatchObject({
+      name: 'UnisourceV2Error', status: 404, code: 'folder_not_found', message: 'Folder not found', requestId: 'req-404',
+    })
+  })
+
+  it('forwards AbortSignal to fetch', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    const controller = new AbortController()
+    await client.folders.breadcrumbs('f1', controller.signal)
+    expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
   })
 })

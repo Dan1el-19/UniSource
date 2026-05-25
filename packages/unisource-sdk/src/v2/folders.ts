@@ -37,3 +37,8 @@ export type V2FolderListQuery = z.infer<typeof v2FolderListQuerySchema>
 
 export const v2FolderListResponseSchema = v2ListResponseSchema(v2FolderSchema)
 export type V2FolderListResponse = z.infer<typeof v2FolderListResponseSchema>
+
+export const v2FolderBreadcrumbsResponseSchema = z.object({
+  breadcrumbs: z.array(v2FolderSchema),
+})
+export type V2FolderBreadcrumbsResponse = z.infer<typeof v2FolderBreadcrumbsResponseSchema>
