@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { HTTPException } from 'hono/http-exception';
 import { authMiddleware } from './middleware/auth';
 import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
+import { V2Error, errorResponse } from './lib/v2/errors';
 import { foreignKeysMiddleware } from './middleware/foreignKeys';
 import { rateLimit } from './middleware/ratelimit';
 import upload from './routes/upload';
@@ -19,32 +21,8 @@ import mainStorage from './routes/mainStorage';
 import releasesRouter from './routes/releases';
 import appRouter from './routes/app';
 import superadminRouter from './routes/superadmin';
-import filesV2 from './routes/v2/files';
-import foldersV2 from './routes/v2/folders';
-
-/**
- * Default CORS allowlist used when ALLOWED_ORIGINS env var is empty.
- * Keeps the production deployment usable for first-party frontends without
- * configuration, while denying arbitrary origins.
- */
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://app.example.com',
-  'https://service-b.pages.dev',
-  'https://example.com',
-  'https://www.example.com',
-  'http://localhost:5173',
-  'http://localhost:4321',
-  'http://localhost:8788'
-];
-
-function parseAllowedOrigins(env: CloudflareBindings): string[] {
-  const raw = (env as unknown as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS;
-  if (!raw) return DEFAULT_ALLOWED_ORIGINS;
-  return raw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-}
+import v2Router from './routes/v2/index';
+import { parseAllowedOrigins } from './config/runtime';
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
@@ -99,17 +77,10 @@ app.use('/files/*', adminPreviewMiddleware);
 app.route('/files', userFiles);
 
 // --- V2 API ---
-// V2 files route
-app.use('/v2/files/*', authMiddleware);
-app.use('/v2/files/*', rateLimit('general'));
-app.use('/v2/files/*', adminPreviewMiddleware);
-app.route('/v2/files', filesV2);
-
-// V2 folders route
-app.use('/v2/folders/*', authMiddleware);
-app.use('/v2/folders/*', rateLimit('general'));
-app.use('/v2/folders/*', adminPreviewMiddleware);
-app.route('/v2/folders', foldersV2);
+app.use('/v2/*', authMiddleware);
+app.use('/v2/*', rateLimit('general'));
+app.use('/v2/*', adminPreviewMiddleware);
+app.route('/v2', v2Router);
 // --- End V2 API ---
 
 // Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
@@ -160,6 +131,12 @@ app.route('/public', publicRouter);
 app.route('/superadmin', superadminRouter);
 
 app.onError((err, c) => {
+  if (err instanceof V2Error) {
+    return errorResponse(c, err);
+  }
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
   logError('Unhandled Application Error', err, c as any);
   return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
 });

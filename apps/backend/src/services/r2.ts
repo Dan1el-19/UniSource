@@ -2,8 +2,11 @@ import {
   createR2SigningClient,
   r2ObjectUrl,
   presign,
+  resolveR2BucketName,
 } from './r2/sigv4';
 import { parseListPartsResponse, parseS3ErrorCode } from './r2/list-parts-xml';
+
+export { resolveR2BucketName };
 
 export interface PresignedUploadResult {
   presigned_url: string;
@@ -47,22 +50,36 @@ export interface MultipartCompleteResult {
 
 const LIST_PARTS_MAX_PAGES = 10;
 
-/**
- * Map a bucket name to its Cloudflare Workers R2 binding env-var key.
- * Convention: 'unisource' → 'PRIMARY_BUCKET' (legacy), everything else → uppercased + non-alphanumeric → '_' + '_BUCKET'.
- */
-function getBucketEnvKey(bucketName: string): string {
-  if (bucketName === 'unisource') {
-    return 'PRIMARY_BUCKET';
+export function resolveR2BindingName(env: CloudflareBindings, bucketKey: string): string {
+  const raw = (env as unknown as { R2_BUCKET_BINDINGS?: string }).R2_BUCKET_BINDINGS;
+  if (!raw) {
+    throw new Error(`R2 bucket binding not configured for bucket key: ${bucketKey}`);
   }
-  return bucketName.toUpperCase().replace(/[^A-Z0-9]/g, '_') + '_BUCKET';
+
+  let bindings: Record<string, string>;
+  try {
+    bindings = JSON.parse(raw) as Record<string, string>;
+  } catch {
+    throw new Error('R2_BUCKET_BINDINGS must be valid JSON');
+  }
+
+  const bindingName = bindings[bucketKey];
+  if (!bindingName) {
+    throw new Error(`R2 bucket binding not configured for bucket key: ${bucketKey}`);
+  }
+
+  if (!/^[A-Z][A-Z0-9_]*$/.test(bindingName)) {
+    throw new Error(`Invalid R2 binding name for bucket key: ${bucketKey}`);
+  }
+
+  return bindingName;
 }
 
-function bindingByBucketName(env: CloudflareBindings, bucketName: string): R2Bucket {
-  const envKey = getBucketEnvKey(bucketName);
+function bindingByBucketName(env: CloudflareBindings, bucketKey: string): R2Bucket {
+  const envKey = resolveR2BindingName(env, bucketKey);
   const binding = (env as unknown as Record<string, R2Bucket | undefined>)[envKey];
   if (!binding) {
-    throw new Error(`R2 binding not configured: ${envKey} for bucket: ${bucketName}`);
+    throw new Error(`R2 binding not configured: ${envKey} for bucket key: ${bucketKey}`);
   }
   return binding;
 }

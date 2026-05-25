@@ -49,7 +49,7 @@ import type {
   BulkFolderMoveRequest,
   BulkOperationResponse,
   FolderBreadcrumbsResponse,
-} from './v2';
+} from './v2/legacy-draft';
 import type {
   ServiceDetailResponse,
   ServiceUsageResponse,
@@ -639,6 +639,9 @@ export class UnisourceClient {
 
   // ─── V2 API Endpoints ───────────────────────────────────────────────────────
 
+  /**
+   * @deprecated FROZEN — no new methods. Use UnisourceV2Client from '@unisource/sdk/v2' instead.
+   */
   readonly v2 = {
     files: {
       /** List files with advanced search, sorting, and filtering capabilities */

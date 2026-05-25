@@ -11,23 +11,11 @@ import {
 import { getFileRecordForUser } from '../db/fileRecords';
 import { hashPassword } from '../utils/password';
 import { generateSlug, isValidSlug } from '../utils/slug';
-import type {
-  ShareLinkCreateResponse,
-  ShareLinkListResponse,
-  ShareLinkUpdateResponse,
-} from '@unisource/sdk';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
-
-function validationErrorHook(
-  result: { success: boolean; error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> } },
-  c: { json: (v: unknown, s?: number) => Response }
-) {
-  if (result.success) return;
-  const issue = result.error?.issues[0];
-  const path = issue?.path.length ? `${issue.path.join('.')}: ` : '';
-  return c.json({ error: 'Bad Request', message: `${path}${issue?.message ?? 'Validation failed'}` }, 400);
-}
 
 function mapShareLink(link: ShareLink) {
   return {
@@ -71,29 +59,30 @@ const shareLinkRouter = new Hono<HonoEnv>();
 // POST /my-files/:fileId/share-links
 shareLinkRouter.post(
   '/my-files/:fileId/share-links',
-  zValidator('param', fileIdParam, validationErrorHook),
-  zValidator('json', createBodySchema, validationErrorHook),
+  zValidator('param', fileIdParam, v2ValidationHook),
+  zValidator('json', createBodySchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const { fileId } = c.req.valid('param');
     const body = c.req.valid('json');
 
     const file = await getFileRecordForUser(c.env.APP_DB, fileId, userId, serviceId);
-    if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
-    if (file.is_trashed) return c.json({ error: 'Conflict', message: 'Cannot share a trashed file' }, 409);
+    if (!file) throw new V2Error('not_found', 404, 'File not found');
+    if (file.is_trashed) throw new V2Error('conflict', 409, 'Cannot share a trashed file');
 
     let slug = body.slug;
     if (slug) {
       if (!isValidSlug(slug)) {
-        return c.json({ error: 'Bad Request', message: 'slug must be 3–64 alphanumeric/dash/underscore chars' }, 400);
+        throw new V2Error('validation_error', 400, 'slug must be 3-64 alphanumeric/dash/underscore chars');
       }
       const existing = await c.env.APP_DB
         .prepare('SELECT id FROM share_links WHERE slug = ?')
         .bind(slug)
         .first();
       if (existing) {
-        return c.json({ error: 'Conflict', message: 'Slug already in use' }, 409);
+        throw new V2Error('conflict', 409, 'Slug already in use');
       }
     } else {
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -104,7 +93,7 @@ shareLinkRouter.post(
           .first();
         if (!existing) { slug = candidate; break; }
       }
-      if (!slug) return c.json({ error: 'Internal Server Error', message: 'Could not generate unique slug' }, 500);
+      if (!slug) throw new V2Error('internal_error', 500, 'Could not generate unique slug');
     }
 
     const password_hash = body.password ? await hashPassword(body.password) : null;
@@ -122,33 +111,39 @@ shareLinkRouter.post(
       max_downloads: body.max_downloads ?? null,
     });
 
-    return c.json<ShareLinkCreateResponse>({ link: mapShareLink(link) }, 201);
+    const response = c.json({ link: mapShareLink(link) }, 201);
+    logV2Request(c, start, { route_family: 'shareLinks', operation: 'create' });
+    return response;
   }
 );
 
 // GET /my-files/:fileId/share-links
 shareLinkRouter.get(
   '/my-files/:fileId/share-links',
-  zValidator('param', fileIdParam, validationErrorHook),
+  zValidator('param', fileIdParam, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const { fileId } = c.req.valid('param');
 
     const file = await getFileRecordForUser(c.env.APP_DB, fileId, userId, serviceId);
-    if (!file) return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+    if (!file) throw new V2Error('not_found', 404, 'File not found');
 
     const links = await listShareLinksForFile(c.env.APP_DB, fileId, userId, serviceId);
-    return c.json<ShareLinkListResponse>({ items: links.map(mapShareLink) });
+    const response = c.json({ items: links.map(mapShareLink) });
+    logV2Request(c, start, { route_family: 'shareLinks', operation: 'list' });
+    return response;
   }
 );
 
 // PATCH /share-links/:linkId
 shareLinkRouter.patch(
   '/share-links/:linkId',
-  zValidator('param', linkIdParam, validationErrorHook),
-  zValidator('json', updateBodySchema, validationErrorHook),
+  zValidator('param', linkIdParam, v2ValidationHook),
+  zValidator('json', updateBodySchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const { linkId } = c.req.valid('param');
@@ -164,25 +159,30 @@ shareLinkRouter.patch(
     }
 
     const link = await updateShareLink(c.env.APP_DB, linkId, userId, serviceId, updates);
-    if (!link) return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
+    if (!link) throw new V2Error('not_found', 404, 'Share link not found');
 
-    return c.json<ShareLinkUpdateResponse>({ link: mapShareLink(link) });
+    const response = c.json({ link: mapShareLink(link) });
+    logV2Request(c, start, { route_family: 'shareLinks', operation: 'update' });
+    return response;
   }
 );
 
 // DELETE /share-links/:linkId
 shareLinkRouter.delete(
   '/share-links/:linkId',
-  zValidator('param', linkIdParam, validationErrorHook),
+  zValidator('param', linkIdParam, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const { linkId } = c.req.valid('param');
 
     const deleted = await deleteShareLink(c.env.APP_DB, linkId, userId, serviceId);
-    if (!deleted) return c.json({ error: 'Not Found', message: 'Share link not found' }, 404);
+    if (!deleted) throw new V2Error('not_found', 404, 'Share link not found');
 
-    return c.json({ success: true as const, id: linkId });
+    const response = c.json({ success: true as const, id: linkId });
+    logV2Request(c, start, { route_family: 'shareLinks', operation: 'delete' });
+    return response;
   }
 );
 

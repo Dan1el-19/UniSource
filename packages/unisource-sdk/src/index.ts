@@ -9,6 +9,7 @@ export {
   uploadStatusSchema,
   apiErrorSchema,
   FILES_DEFAULT_LIMIT,
+  LIST_MAX_LIMIT,
   FILES_MAX_LIMIT,
 } from './primitives';
 export type {
@@ -266,7 +267,8 @@ export {
 } from './client';
 export type { UnisourceClientConfig } from './client';
 
-// ─── V2 API ───────────────────────────────────────────────────────────────────
+// ─── V2 API (Deprecated) ──────────────────────────────────────────────────────
+// @deprecated Use '@unisource/sdk/v2' import instead.
 export {
   fileRecordsListV2QuerySchema,
   bulkFileIdsSchema,
@@ -276,7 +278,8 @@ export {
   bulkFolderIdsSchema,
   bulkFolderMoveRequestSchema,
   folderBreadcrumbsResponseSchema,
-} from './v2';
+} from './v2/legacy-draft';
+// @deprecated Use '@unisource/sdk/v2' import instead.
 export type {
   FileRecordsListV2Query,
   BulkFileIds,
@@ -286,4 +289,4 @@ export type {
   BulkFolderIds,
   BulkFolderMoveRequest,
   FolderBreadcrumbsResponse,
-} from './v2';
+} from './v2/legacy-draft';

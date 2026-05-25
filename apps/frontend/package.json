@@ -1,5 +1,5 @@
 {
-  "name": "unisource-admin",
+  "name": "frontend",
   "private": true,
   "type": "module",
   "version": "0.1.0",
@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite dev",
+    "generate:wrangler": "node ../../scripts/generate-wrangler-config.mjs frontend",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"

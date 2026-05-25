@@ -41,6 +41,7 @@ vi.mock('../src/middleware/requireRole', () => ({
 
 import { listMainStorageFileRecords, getFileRecord, trashFileRecord, deleteFileRecordPermanently, updateFileRecord, restoreFileRecord } from '../src/db/fileRecords';
 import { releaseMainStorageQuota } from '../src/db/services';
+import { v2ErrorHandler } from '../src/middleware/v2Errors';
 import mainStorageRouter from '../src/routes/mainStorage';
 
 function buildMainApp(userId = 'u1', serviceId = 'default') {
@@ -52,6 +53,7 @@ function buildMainApp(userId = 'u1', serviceId = 'default') {
     c.set('isAdmin', false as WorkerVariables['isAdmin']);
     await next();
   });
+  app.onError(v2ErrorHandler);
   app.route('/main', mainStorageRouter);
   return app;
 }

@@ -31,7 +31,7 @@ describe('listMainStorageFileRecords', () => {
       mime_type: 'application/pdf',
       storage_destination: 'r2',
       storage_key: 'main/shared.pdf',
-      bucket: 'unisource',
+      bucket: 'primary',
       folder_id: null,
       is_trashed: 0,
       trashed_at: null,

@@ -135,7 +135,7 @@ export const authMiddleware = createMiddleware<{
 
     if (authenticatedUser) {
       // Non-default services require explicit service_users membership
-      // This prevents a example.com account from accessing example data
+      // This prevents a app.example.com account from accessing service-b data
       let serviceRole: 'user' | 'plus' | 'admin' = authenticatedUser.labels.includes('admin')
         ? 'admin'
         : 'user';

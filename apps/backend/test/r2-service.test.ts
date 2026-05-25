@@ -12,9 +12,7 @@ import {
   generatePresignedGetUrl,
 } from '../src/services/r2';
 
-// PRIMARY_BUCKET is provisioned by wrangler.jsonc; vitest-pool-workers exposes it
-// as a Miniflare R2 binding. We use the matching SERVICES map id.
-const BUCKET = 'unisource';
+const BUCKET = 'primary';
 
 // CI runners do not have R2 creds in .dev.vars (it's gitignored). aws4fetch's
 // AwsClient throws on construction if accessKeyId/secretAccessKey are missing.
@@ -24,6 +22,8 @@ const cfEnv = {
   R2_ACCOUNT_ID: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   R2_ACCESS_KEY_ID: 'AKIATESTKEY',
   R2_SECRET_ACCESS_KEY: 'testsecret/testsecret/testsecret/testsecret',
+  R2_BUCKET_BINDINGS: JSON.stringify({ [BUCKET]: 'PRIMARY_BUCKET' }),
+  R2_BUCKET_NAMES: JSON.stringify({ [BUCKET]: 'storage-a' }),
 } as unknown as CloudflareBindings;
 
 const fixtures = {
@@ -144,7 +144,7 @@ describe('headObject (Miniflare R2 binding)', () => {
 
     expect(result).toEqual({ size: 1234 });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/unisource/direct-upload.bin?'),
+      expect.stringContaining('/storage-a/direct-upload.bin?'),
       expect.objectContaining({ method: 'HEAD' })
     );
   });

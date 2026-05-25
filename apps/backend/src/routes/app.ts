@@ -3,6 +3,9 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { getLatestReleaseByTag } from '../db/releases';
 import { generatePresignedGetUrl } from '../services/r2';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -14,16 +17,14 @@ const latestQuerySchema = z.object({
 
 const app = new Hono<HonoEnv>();
 
-app.get('/releases/latest', zValidator('query', latestQuerySchema), async (c) => {
+app.get('/releases/latest', zValidator('query', latestQuerySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const { channel } = c.req.valid('query');
 
   const serviceId = c.get('serviceId');
   const release = await getLatestReleaseByTag(c.env.APP_DB, serviceId, channel);
   if (!release) {
-    return c.json(
-      { error: 'Not Found', message: `No completed release found for channel "${channel}"` },
-      404
-    );
+    throw new V2Error('not_found', 404, `No completed release found for channel "${channel}"`);
   }
 
   const service = c.get('service')!;
@@ -35,7 +36,7 @@ app.get('/releases/latest', zValidator('query', latestQuerySchema), async (c) =>
     release.name
   );
 
-  return c.json({
+  const response = c.json({
     id: release.id,
     name: release.name,
     size: release.size,
@@ -47,6 +48,8 @@ app.get('/releases/latest', zValidator('query', latestQuerySchema), async (c) =>
     download_url: presigned_url,
     download_url_expires_at: expires_at,
   });
+  logV2Request(c, start, { route_family: 'app', operation: 'latest_release' });
+  return response;
 });
 
 export default app;

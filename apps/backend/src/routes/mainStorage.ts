@@ -18,26 +18,14 @@ import {
 } from '../services/appwrite';
 import { deleteObject } from '../services/r2';
 import { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from '@unisource/sdk';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
 const mainStorage = new Hono<HonoEnv>();
 
-function validationErrorHook(
-  result: {
-    success: boolean;
-    error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> };
-  },
-  c: { json: (value: unknown, status?: number) => Response }
-) {
-  if (result.success) return;
-  const firstIssue = result.error?.issues[0];
-  const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : '';
-  return c.json(
-    { error: 'Bad Request', message: `${issuePath}${firstIssue?.message ?? 'Validation failed'}` },
-    400
-  );
-}
 
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(FILES_MAX_LIMIT).default(FILES_DEFAULT_LIMIT),
@@ -48,10 +36,6 @@ type MainStorageFileResponse = Omit<FileRecord, 'storage_key' | 'bucket' | 'is_m
   is_trashed: boolean;
 };
 
-const notFoundResponse = {
-  error: 'Not Found',
-  message: 'File not found or not part of main storage',
-};
 
 function toMainStorageFileResponse(file: FileRecord): MainStorageFileResponse {
   const { storage_key: _storageKey, bucket: _bucket, is_main_storage: _isMainStorage, ...publicFile } = file;
@@ -62,18 +46,21 @@ function toMainStorageFileResponse(file: FileRecord): MainStorageFileResponse {
 }
 
 // List all MAIN_STORAGE files for the service
-mainStorage.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
+mainStorage.get('/', zValidator('query', listQuerySchema, v2ValidationHook), async (c) => {
   const { limit, cursor } = c.req.valid('query');
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   try {
     const result = await listMainStorageFileRecords(c.env.APP_DB, serviceId, { limit, cursor });
-    return c.json({
+    const response = c.json({
       items: result.items.map(toMainStorageFileResponse),
       next_cursor: result.next_cursor,
     });
+    logV2Request(c, start, { route_family: 'mainStorage', operation: 'list' });
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message === 'Invalid cursor') {
-      return c.json({ error: 'Bad Request', message: 'cursor is invalid' }, 400);
+      throw new V2Error('cursor_invalid', 400);
     }
 
     throw error;
@@ -83,11 +70,14 @@ mainStorage.get('/', zValidator('query', listQuerySchema, validationErrorHook), 
 // Get a single MAIN_STORAGE file
 mainStorage.get('/:id', async (c) => {
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
   if (!file || file.service_id !== serviceId || file.is_main_storage !== 1) {
-    return c.json(notFoundResponse, 404);
+    throw new V2Error('not_found', 404, 'File not found or not part of main storage');
   }
-  return c.json(toMainStorageFileResponse(file));
+  const response = c.json(toMainStorageFileResponse(file));
+  logV2Request(c, start, { route_family: 'mainStorage', operation: 'get' });
+  return response;
 });
 
 const fileUpdateBodySchema = z.object({
@@ -97,29 +87,33 @@ const fileUpdateBodySchema = z.object({
 // Rename a MAIN_STORAGE file
 mainStorage.patch(
   '/:id',
-  zValidator('json', fileUpdateBodySchema, validationErrorHook),
+  zValidator('json', fileUpdateBodySchema, v2ValidationHook),
   async (c) => {
     const serviceId = c.get('serviceId');
+    const start = Date.now();
     const { filename } = c.req.valid('json');
     const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
     if (!file || file.service_id !== serviceId || file.is_main_storage !== 1 || file.is_trashed === 1) {
-      return c.json(notFoundResponse, 404);
+      throw new V2Error('not_found', 404, 'File not found or not part of main storage');
     }
     const updated = await updateFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId, { filename });
     if (!updated) {
-      return c.json(notFoundResponse, 404);
+      throw new V2Error('not_found', 404, 'File not found or not part of main storage');
     }
-    return c.json({ file: toMainStorageFileResponse(updated) });
+    const response = c.json({ file: toMainStorageFileResponse(updated) });
+    logV2Request(c, start, { route_family: 'mainStorage', operation: 'update' });
+    return response;
   }
 );
 
 // Soft-delete or permanent delete a MAIN_STORAGE file
 mainStorage.delete('/:id', async (c) => {
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   const permanent = c.req.query('permanent') === 'true';
   const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
   if (!file || file.service_id !== serviceId || file.is_main_storage !== 1) {
-    return c.json(notFoundResponse, 404);
+    throw new V2Error('not_found', 404, 'File not found or not part of main storage');
   }
   if (permanent) {
     try {
@@ -128,12 +122,12 @@ mainStorage.delete('/:id', async (c) => {
       } else {
         const appwriteFileId = extractAppwriteFileIdFromStorageKey(file.storage_key);
         if (!appwriteFileId) {
-          return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key format' }, 500);
+          throw new V2Error('internal_error', 500, 'Invalid Appwrite storage key format');
         }
         await deleteAppwriteFile(c.env, file.bucket, appwriteFileId);
       }
     } catch {
-      return c.json({ error: 'Bad Gateway', message: 'Unable to delete file in upstream storage' }, 502);
+      throw new V2Error('bad_gateway', 502, 'Unable to delete file in upstream storage');
     }
 
     await deleteFileRecordPermanently(c.env.APP_DB, file.id, file.user_id, serviceId);
@@ -142,18 +136,23 @@ mainStorage.delete('/:id', async (c) => {
   } else {
     await trashFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId);
   }
-  return c.json({ success: true, file_id: file.id });
+  const response = c.json({ success: true, file_id: file.id });
+  logV2Request(c, start, { route_family: 'mainStorage', operation: 'delete' });
+  return response;
 });
 
 // Restore a trashed MAIN_STORAGE file
 mainStorage.post('/:id/restore', async (c) => {
   const serviceId = c.get('serviceId');
+  const start = Date.now();
   const file = await getFileRecord(c.env.APP_DB, c.req.param('id'));
   if (!file || file.service_id !== serviceId || file.is_main_storage !== 1 || file.is_trashed !== 1) {
-    return c.json(notFoundResponse, 404);
+    throw new V2Error('not_found', 404, 'File not found or not part of main storage');
   }
   await restoreFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId);
-  return c.json({ success: true, file_id: file.id });
+  const response = c.json({ success: true, file_id: file.id });
+  logV2Request(c, start, { route_family: 'mainStorage', operation: 'restore' });
+  return response;
 });
 
 export default mainStorage;
