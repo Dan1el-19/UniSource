@@ -61,6 +61,11 @@ export class UnisourceV2Client {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<BulkOperationResponse> => this._filesBulkTrash(body, signal, options),
+    bulkRestore: (
+      body: BulkFileIds,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<BulkOperationResponse> => this._filesBulkRestore(body, signal, options),
   }
 
   readonly folders = {
@@ -348,6 +353,45 @@ export class UnisourceV2Client {
     if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
 
     const url = new URL('/v2/files/bulk-trash', this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'POST', headers, body: JSON.stringify(body), signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let errBody: V2ErrorBody
+      try { errBody = parseErrorBody(await response.json()) } catch { errBody = {} }
+      throw new UnisourceV2Error(
+        errBody.error?.message ?? response.statusText,
+        response.status,
+        errBody.error?.code ?? 'unknown',
+        requestId,
+        errBody.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return bulkOperationResponseSchema.parse(data)
+  }
+
+  private async _filesBulkRestore(
+    body: BulkFileIds,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<BulkOperationResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = {
+      'X-Service-ID': this.config.serviceId,
+      'Content-Type': 'application/json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL('/v2/files/bulk-restore', this.config.baseUrl)
 
     let response: Response
     try {
