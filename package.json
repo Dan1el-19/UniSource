@@ -22,5 +22,6 @@
       "path": "cz-conventional-changelog"
     }
   },
-  "packageManager": "pnpm@11.1.2"
+  "packageManager": "pnpm@11.1.2",
+  "license": "Apache-2.0"
 }

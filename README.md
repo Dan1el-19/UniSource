@@ -1,211 +1,84 @@
 # UniSource
 
-Monorepo UniSource zawiera prywatny frontend, prywatny backend API oraz publiczny pakiet `@unisource/sdk` z kontraktami TypeScript, schematami Zod i klientami HTTP.
+![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020)
+![npm](https://img.shields.io/npm/v/@unisource/sdk)
 
-## Branch i status API
+UniSource is open-source code for a self-hosted backend platform.
+It provides a central API, TypeScript SDK and admin panel for apps that need storage, sharing, releases and service-level configuration.
 
-Repo utrzymuje dwie główne linie pracy:
+## What is UniSource?
 
-- `main` - stabilna linia dla aktualnego API i publikacji stabilnych wersji SDK.
-- `beta` - linia rozwojowa dla API v2 oraz publikacji `@unisource/sdk` pod tagiem npm `beta`.
+UniSource is a backend foundation you can run on your own infrastructure. The repo contains the code for the API layer, the admin panel and the SDK used by external apps.
 
-Na branchu `beta` kontrakty v2 są aktywnie rozwijane. Kod może zawierać endpointy i typy v2 przed ich stabilizacją, dlatego traktuj je jako API beta: możliwe są breaking changes przed przeniesieniem do stabilnego release.
+The source code is public, but this is **not** a public hosted API. If you use UniSource, you deploy your own instance with your own credentials, storage and runtime setup.
 
-## Struktura
+The idea is simple: instead of building a new backend from scratch for every app, extend UniSource with new modules/endpoints and expose them through `@unisource/sdk` (or future packages).
+
+## What this is not
+
+- not a public hosted API
+- not a polished SaaS product
+- not an enterprise-audited backend
+- not a one-command deployment
+
+## What's inside?
+
+- `apps/backend`: Hono API on Cloudflare Workers
+- `apps/frontend`: admin/control panel
+- `packages/unisource-sdk`: TypeScript SDK
+- `docs/`, `scripts/`, configs: project support files
+
+## How it fits together
 
 ```text
-apps/
-  frontend/          # SvelteKit + Vite, aplikacja prywatna
-  backend/           # Hono API na Cloudflare Workers
-packages/
-  unisource-sdk/     # publiczny pakiet @unisource/sdk
-scripts/             # skrypty pomocnicze dla release i workspace
+External app
+   ↓
+@unisource/sdk
+   ↓
+UniSource API / Cloudflare Worker
+   ├─ D1 database
+   ├─ R2 storage
+   ├─ Appwrite auth/storage
+   └─ Admin panel
 ```
 
-Pakiety są zarządzane przez pnpm workspaces:
+A real example consumer is `chmura-blokserwis`, a separate frontend app that uses the UniSource API and `@unisource/sdk`.
 
-- `frontend` - aplikacja webowa, prywatna, wersjonowana tagami `frontend@x.y.z`.
-- `backend` - API Hono/Cloudflare Workers, prywatne, wersjonowane tagami `backend@x.y.z`.
-- `@unisource/sdk` - publiczna paczka npm; stable idzie z `main`, beta v2 z brancha `beta`.
+## Project status
 
-## Wymagania
+UniSource is a side project, actively evolving, and already used in real deployments.
 
-- Node.js `>=22.12.0`
-- pnpm `11.1.2`
-- Konto i konfiguracja Cloudflare dla aplikacji Workers
+Stable API paths exist today, while API v2 is being developed through beta SDK releases. Expect rough edges and possible breaking changes on beta paths before stabilization.
 
-W repo używaj wyłącznie `pnpm`.
+## Development model
 
-## Szybki start
+UniSource is heavily AI-built and human-directed.
+
+Most implementation is produced with AI coding tools/agents, while architecture direction, infrastructure decisions, prompting strategy, research and release flow are human-guided.
+
+If you plan serious production use, review the code and deployment model carefully in your own environment.
+
+## Getting started
 
 ```bash
 pnpm install
-```
-
-Uruchomienie aplikacji lokalnie:
-
-```bash
-pnpm run frontend
-pnpm run backend
-```
-
-Równoważne komendy filtrowane:
-
-```bash
-pnpm --filter frontend dev
 pnpm --filter backend dev
-pnpm --filter @unisource/sdk dev
-```
-
-## Konfiguracja środowiska
-
-Backend i frontend mają przykładowe pliki konfiguracyjne:
-
-- `apps/backend/.dev.vars.example`
-- `apps/frontend/.env.example`
-
-Skopiuj je do lokalnych plików używanych przez aplikacje:
-
-```bash
-cp apps/backend/.dev.vars.example apps/backend/.dev.vars
-cp apps/frontend/.env.example apps/frontend/.env
-```
-
-Konfigurację Wranglera można regenerować dla aplikacji:
-
-```bash
-pnpm --filter backend generate:wrangler
-pnpm --filter frontend generate:wrangler
-```
-
-## Najważniejsze komendy
-
-```bash
-pnpm --filter frontend build
-pnpm --filter frontend typecheck
-
-pnpm --filter backend check
-pnpm --filter backend test
-pnpm --filter backend build
-
-pnpm --filter @unisource/sdk typecheck
-pnpm --filter @unisource/sdk test
+pnpm --filter frontend dev
 pnpm --filter @unisource/sdk build
 ```
 
-Backend przed sprawdzaniem typów i testami buduje lokalny SDK, bo korzysta z zależności workspace.
+Detailed setup for Cloudflare, D1, R2, Appwrite, secrets and deployment belongs in [`docs/setup.md`](docs/setup.md).
 
-## SDK w aplikacjach
+## Documentation
 
-Domyślnie aplikacje powinny korzystać z lokalnej wersji SDK:
+- [Backend docs](apps/backend/README.md)
+- [SDK docs](packages/unisource-sdk/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Agent instructions](AGENTS.md)
+- [Setup notes](docs/setup.md)
 
-```json
-{
-  "dependencies": {
-    "@unisource/sdk": "workspace:*"
-  }
-}
-```
+## License
 
-Skrypty pomocnicze w root przełączają źródło zależności SDK w aplikacjach:
-
-```bash
-pnpm run sdk:deps:workspace
-pnpm run sdk:deps:npm
-pnpm run sdk:deps:npm-exact
-```
-
-Przy zmianach w `packages/unisource-sdk` sprawdź, czy `apps/frontend` i `apps/backend` wymagają aktualizacji.
-
-## API v2 beta
-
-API v2 jest rozwijane równolegle w backendzie i SDK:
-
-- backend montuje trasy `/v2/files` oraz `/v2/folders`;
-- SDK eksportuje kontrakty v2 oraz klienta dostępnego z pakietu `@unisource/sdk`;
-- wersje testowe SDK publikowane są jako `@unisource/sdk@beta`.
-
-Lokalnie beta SDK nadal jest linkowane przez workspace:
-
-```bash
-pnpm --filter @unisource/sdk build
-pnpm --filter backend check
-```
-
-W zewnętrznych integracjach testujących API v2 instaluj wersję beta:
-
-```bash
-pnpm add @unisource/sdk@beta
-```
-
-Przed zmianą kontraktu v2 aktualizuj jednocześnie:
-
-- backendowe schematy i handlery w `apps/backend`;
-- eksporty i typy w `packages/unisource-sdk`;
-- testy backendu oraz SDK;
-- konsumentów w `apps/frontend`, jeśli używają zmienianego kontraktu.
-
-## Release i wersjonowanie
-
-Każdy pakiet ma niezależną wersję.
-
-### SDK stable
-
-Stabilny SDK jest publikowany z `main` przez Changesets:
-
-```bash
-pnpm run changeset
-pnpm run changeset:status
-pnpm run changeset:version
-pnpm --filter @unisource/sdk build
-pnpm --filter @unisource/sdk publish --dry-run --access public --no-git-checks
-pnpm run changeset:publish
-```
-
-Przed publishem upewnij się, że `packages/unisource-sdk/CHANGELOG.md` i `packages/unisource-sdk/package.json` zostały zaktualizowane przez Changesets.
-
-### SDK beta
-
-Beta SDK dla API v2 jest publikowana z brancha `beta` pod tagiem npm `beta`.
-
-Workflow beta obsługuje prerelease i powinien być używany zamiast ręcznego publikowania paczki:
-
-```bash
-pnpm --filter @unisource/sdk build
-pnpm --filter @unisource/sdk test
-```
-
-Po merge'u zmian v2 do `beta` uruchom workflow `sdk-beta-release.yml` z odpowiednim bumpem prerelease (`patch`, `minor`, `major` albo `next`, zależnie od aktualnej linii beta).
-
-### Frontend i backend
-
-Prywatne aplikacje nie są publikowane do npm. Wersje utrzymywane są przez tagi git:
-
-```bash
-git tag backend@1.2.0
-git push origin backend@1.2.0
-
-git tag frontend@2.0.0
-git push origin frontend@2.0.0
-```
-
-Tagi mają format `<pakiet>@<wersja>`, np. `@unisource/sdk@1.1.0`, `backend@1.2.0`, `frontend@2.0.0`.
-
-## Commity
-
-Stosuj Conventional Commits ze scope'em:
-
-```text
-feat(sdk): dodaj klienta dla plikow
-fix(backend): popraw walidacje tokenu
-chore(frontend): zaktualizuj konfiguracje Vite
-```
-
-Dozwolone scope'y dla zmian pakietowych to `frontend`, `backend` i `sdk`. Dla zmian w root repo używaj `root`.
-
-## Dokumentacja pakietów
-
-- `apps/backend/README.md` - szczegóły backendu, moduły API, testy i deployment.
-- `packages/unisource-sdk/README.md` - instalacja SDK, API v1, API v2 beta i release.
-- `CONTRIBUTING.md` - skrócony workflow contributorski i release.
-- `AGENTS.md` - instrukcje pracy dla agentów AI.
+UniSource is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
