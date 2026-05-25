@@ -8,7 +8,7 @@ import { V2Error } from '../../lib/v2/errors'
 import { logV2Request } from '../../lib/v2/log'
 import { v2ValidationHook } from '../../lib/v2/zodHook'
 
-// ─── Legacy bulk imports — TODO(v2-folders-rest): refactor to v2 standard ────
+// ─── DB helpers ───────────────────────────────────────────────────────────
 import {
   getFolderBreadcrumbs,
   bulkTrashFolders,
@@ -22,8 +22,6 @@ import {
   bulkFolderIdsSchema,
   bulkFolderMoveRequestSchema,
   type BulkOperationResponse,
-  type FolderBreadcrumbsResponse,
-  type Folder,
 } from '@unisource/sdk'
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables }
@@ -76,40 +74,12 @@ foldersV2.get('/', zValidator('query', querySchema, v2ValidationHook), async (c)
   return response
 })
 
-// ─── Legacy handlers (TODO(v2-folders-rest): refactor to v2 standard) ──────
+// ─── Bulk operations ────────────────────────────────────────────────────────
 
 const folderIdParamSchema = z.object({ id: z.string().trim().min(1) })
 
-function legacyValidationErrorHook(
-  result: { success: boolean; error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> } },
-  c: { json: (value: unknown, status?: number) => Response }
-) {
-  if (result.success) return
-  const firstIssue = result.error?.issues[0]
-  const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : ''
-  return c.json(
-    { error: 'Bad Request', message: `${issuePath}${firstIssue?.message ?? 'Validation failed'}` },
-    400
-  )
-}
-
-function mapFolderLegacy(folder: FolderRecord): Folder {
-  return {
-    id: folder.id,
-    service_id: folder.service_id,
-    user_id: folder.user_id,
-    parent_id: folder.parent_id,
-    name: folder.name,
-    color_tag: folder.color_tag,
-    is_trashed: folder.is_trashed === 1,
-    trashed_at: folder.trashed_at,
-    created_at: folder.created_at,
-    updated_at: folder.updated_at,
-  }
-}
-
 // v2 mapper — FolderRecord (DB row) → FolderRowV2 (public response shape)
-// Differs from mapFolderLegacy: color_tag '' is normalised to null (matches db/v2/folders.ts)
+// color_tag '' is normalised to null (matches db/v2/folders.ts)
 function mapFolderV2(folder: FolderRecord): FolderRowV2 {
   return {
     id: folder.id,
