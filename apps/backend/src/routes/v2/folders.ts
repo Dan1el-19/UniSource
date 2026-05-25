@@ -165,8 +165,7 @@ foldersV2.post('/bulk-restore', zValidator('json', bulkFolderIdsSchema, v2Valida
   })
 })
 
-// TODO(v2-folders-rest): refactor bulk-* to v2 standard (V2Error, V2Envelope)
-foldersV2.post('/bulk-move', zValidator('json', bulkFolderMoveRequestSchema, legacyValidationErrorHook), async (c) => {
+foldersV2.post('/bulk-move', zValidator('json', bulkFolderMoveRequestSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId')
   const serviceId = c.get('serviceId')
   const { ids, parent_id } = c.req.valid('json')
@@ -174,20 +173,24 @@ foldersV2.post('/bulk-move', zValidator('json', bulkFolderMoveRequestSchema, leg
   if (parent_id) {
     const targetFolder = await getFolderForUser(c.env.APP_DB, parent_id, userId, serviceId)
     if (!targetFolder) {
-      return c.json({ error: 'Not Found', message: 'Target folder not found' }, 404)
+      throw new V2Error('not_found', 404, 'Target folder not found')
     }
     if (targetFolder.is_trashed) {
-      return c.json({ error: 'Conflict', message: 'Cannot move folders into a trashed folder' }, 409)
+      throw new V2Error('validation_error', 409, 'Cannot move folders into a trashed folder')
     }
     if (ids.includes(parent_id)) {
-      return c.json({ error: 'Conflict', message: 'Cannot move a folder into itself' }, 409)
+      throw new V2Error('validation_error', 409, 'Cannot move a folder into itself')
     }
 
-    // Cycle prevention: Check if the target parent_id is a descendant of ANY of the folders being moved
+    // Cycle prevention: check if target is a descendant of any moved folder
     for (const folderId of ids) {
       const descendants = await getDescendantFolderIds(c.env.APP_DB, folderId, userId, serviceId)
       if (descendants.includes(parent_id)) {
-        return c.json({ error: 'Conflict', message: 'Cannot move a folder into its own descendant (cycle detected)' }, 409)
+        throw new V2Error(
+          'validation_error',
+          409,
+          'Cannot move a folder into its own descendant (cycle detected)'
+        )
       }
     }
   }
