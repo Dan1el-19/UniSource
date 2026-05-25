@@ -7,6 +7,10 @@ import { v2FileSchema } from './files'
 import { v2FolderListResponseSchema, v2FolderBreadcrumbsResponseSchema } from './folders'
 import { bulkOperationResponseSchema } from './legacy-draft'
 import { UnisourceV2Error } from './errors'
+import type { ShareLinkListResponse, ShareLinkCreateResponse, ShareLinkDetailResponse, ShareLinkDeleteResponse, SharesCreateRequest } from '../shareLinks'
+import { shareLinkListResponseSchema, shareLinkCreateResponseSchema, shareLinkDetailResponseSchema, shareLinkDeleteResponseSchema } from '../shareLinks'
+import type { AppReleaseLatestResponse } from '../releases'
+import { appReleaseLatestResponseSchema } from '../releases'
 
 let warned = false
 
@@ -71,6 +75,36 @@ export class UnisourceV2Client {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<BulkOperationResponse> => this._filesBulkMove(body, signal, options),
+  }
+
+  readonly shares = {
+    list: (
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkListResponse> => this._sharesList(signal, options),
+    create: (
+      body: SharesCreateRequest,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkCreateResponse> => this._sharesCreate(body, signal, options),
+    get: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkDetailResponse> => this._sharesGet(id, signal, options),
+    delete: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<ShareLinkDeleteResponse> => this._sharesDelete(id, signal, options),
+  }
+
+  readonly app = {
+    latestRelease: (
+      query?: { channel?: string },
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<AppReleaseLatestResponse> => this._appLatestRelease(query, signal, options),
   }
 
   readonly folders = {
@@ -459,5 +493,188 @@ export class UnisourceV2Client {
 
     const data = await response.json()
     return bulkOperationResponseSchema.parse(data)
+  }
+
+  private async _sharesList(
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkListResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL('/shares', this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'GET', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkListResponseSchema.parse(data)
+  }
+
+  private async _sharesCreate(
+    body: SharesCreateRequest,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkCreateResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = {
+      'X-Service-ID': this.config.serviceId,
+      'Content-Type': 'application/json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL('/shares', this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'POST', headers, body: JSON.stringify(body), signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let errBody: V2ErrorBody
+      try { errBody = parseErrorBody(await response.json()) } catch { errBody = {} }
+      throw new UnisourceV2Error(
+        errBody.error?.message ?? response.statusText,
+        response.status,
+        errBody.error?.code ?? 'unknown',
+        requestId,
+        errBody.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkCreateResponseSchema.parse(data)
+  }
+
+  private async _sharesGet(
+    id: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkDetailResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/shares/${encodeURIComponent(id)}`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'GET', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkDetailResponseSchema.parse(data)
+  }
+
+  private async _sharesDelete(
+    id: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<ShareLinkDeleteResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/shares/${encodeURIComponent(id)}`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'DELETE', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return shareLinkDeleteResponseSchema.parse(data)
+  }
+
+  private async _appLatestRelease(
+    query?: { channel?: string },
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<AppReleaseLatestResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL('/app/releases/latest', this.config.baseUrl)
+    if (query?.channel !== undefined) url.searchParams.set('channel', query.channel)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'GET', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return appReleaseLatestResponseSchema.parse(data)
   }
 }
