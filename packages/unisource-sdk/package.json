@@ -2,7 +2,7 @@
   "name": "@unisource/sdk",
   "private": false,
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.1.0-beta.0",
   "description": "Wspolne kontrakty danych dla backendu i frontendu UniSource.",
   "license": "MIT",
   "publishConfig": {
@@ -41,5 +41,10 @@
   },
   "dependencies": {
     "zod": "^4.3.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Repository Maintainer/UniSource.git",
+    "directory": "packages/unisource-sdk"
   }
 }
