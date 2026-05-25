@@ -13,6 +13,8 @@ import type { AppReleaseLatestResponse } from '../releases'
 import { appReleaseLatestResponseSchema } from '../releases'
 import type { MainStorageListQuery, MainStorageListResponse, MainStorageDetailResponse, MainStorageRenameRequest, MainStorageRenameResponse, MainStorageDeleteResponse, MainStorageRestoreResponse } from '../mainStorage'
 import { mainStorageListResponseSchema, mainStorageDetailResponseSchema, mainStorageRenameResponseSchema, mainStorageDeleteResponseSchema, mainStorageRestoreResponseSchema } from '../mainStorage'
+import type { FileRecordDetailResponse, FileUpdateRequest, FileUpdateResponse, FileDeleteResponse, FileRestoreResponse, FileDownloadUrlResponse } from '../fileRecords'
+import { fileRecordDetailResponseSchema, fileUpdateResponseSchema, fileDeleteResponseSchema, fileRestoreResponseSchema, fileDownloadUrlResponseSchema } from '../fileRecords'
 
 let warned = false
 
@@ -189,6 +191,35 @@ export class UnisourceV2Client {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<MainStorageRestoreResponse> => this._mainStorageRestore(id, signal, options),
+  }
+
+  readonly userFiles = {
+    get: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<FileRecordDetailResponse> => this._userFilesGet(id, signal, options),
+    update: (
+      id: string,
+      body: FileUpdateRequest,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<FileUpdateResponse> => this._userFilesUpdate(id, body, signal, options),
+    delete: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string; permanent?: boolean }
+    ): Promise<FileDeleteResponse> => this._userFilesDelete(id, signal, options),
+    restore: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<FileRestoreResponse> => this._userFilesRestore(id, signal, options),
+    downloadUrl: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<FileDownloadUrlResponse> => this._userFilesDownloadUrl(id, signal, options),
   }
 
   private async _filesList(
@@ -1075,5 +1106,190 @@ export class UnisourceV2Client {
 
     const data = await response.json()
     return mainStorageRestoreResponseSchema.parse(data)
+  }
+
+  private async _userFilesGet(
+    id: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<FileRecordDetailResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/files/${encodeURIComponent(id)}`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'GET', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return fileRecordDetailResponseSchema.parse(data)
+  }
+
+  private async _userFilesUpdate(
+    id: string,
+    body: FileUpdateRequest,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<FileUpdateResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = {
+      'X-Service-ID': this.config.serviceId,
+      'Content-Type': 'application/json',
+    }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/files/${encodeURIComponent(id)}`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'PATCH', headers, body: JSON.stringify(body), signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let errBody: V2ErrorBody
+      try { errBody = parseErrorBody(await response.json()) } catch { errBody = {} }
+      throw new UnisourceV2Error(
+        errBody.error?.message ?? response.statusText,
+        response.status,
+        errBody.error?.code ?? 'unknown',
+        requestId,
+        errBody.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return fileUpdateResponseSchema.parse(data)
+  }
+
+  private async _userFilesDelete(
+    id: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string; permanent?: boolean }
+  ): Promise<FileDeleteResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/files/${encodeURIComponent(id)}`, this.config.baseUrl)
+    if (options?.permanent) url.searchParams.set('permanent', 'true')
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'DELETE', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return fileDeleteResponseSchema.parse(data)
+  }
+
+  private async _userFilesRestore(
+    id: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<FileRestoreResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/files/${encodeURIComponent(id)}/restore`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'POST', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return fileRestoreResponseSchema.parse(data)
+  }
+
+  private async _userFilesDownloadUrl(
+    id: string,
+    signal?: AbortSignal,
+    options?: { asUser?: string }
+  ): Promise<FileDownloadUrlResponse> {
+    const token = await this.config.getToken()
+    const headers: Record<string, string> = { 'X-Service-ID': this.config.serviceId }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (options?.asUser) headers['X-Target-User-ID'] = options.asUser
+
+    const url = new URL(`/files/${encodeURIComponent(id)}/download-url`, this.config.baseUrl)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { method: 'GET', headers, signal })
+    } catch (err) {
+      throw new Error(`Network request failed: ${err}`)
+    }
+
+    if (!response.ok) {
+      const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
+      let body: V2ErrorBody
+      try { body = parseErrorBody(await response.json()) } catch { body = {} }
+      throw new UnisourceV2Error(
+        body.error?.message ?? response.statusText,
+        response.status,
+        body.error?.code ?? 'unknown',
+        requestId,
+        body.error?.details
+      )
+    }
+
+    const data = await response.json()
+    return fileDownloadUrlResponseSchema.parse(data)
   }
 }
