@@ -17,44 +17,15 @@ import { deleteObject, generatePresignedGetUrl } from '../services/r2';
 import {
 	FILES_DEFAULT_LIMIT,
 	FILES_MAX_LIMIT,
-	type FileDeleteResponse,
-	type FileDownloadUrlResponse,
 	type UploadRecord as ApiUploadRecord,
-	type UploadsListResponse,
 	uploadDestinationSchema,
 	uploadStatusSchema,
 } from '@unisource/sdk';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
-
-function validationErrorHook(
-	result: {
-		success: boolean;
-		error?: {
-			issues: Array<{
-				path: Array<PropertyKey>;
-				message: string;
-			}>;
-		};
-	},
-	c: {
-		json: (value: unknown, status?: number) => Response;
-	}
-) {
-	if (result.success) {
-		return;
-	}
-
-	const firstIssue = result.error?.issues[0];
-	const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : '';
-	return c.json(
-		{
-			error: 'Bad Request',
-			message: `${issuePath}${firstIssue?.message ?? 'Request validation failed'}`,
-		},
-		400
-	);
-}
 
 const fileIdParamSchema = z.object({
 	id: z.string().trim().min(1),
@@ -115,9 +86,10 @@ function toApiUpload(record: UploadRecord): ApiUploadRecord {
 
 const files = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
-files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), async (c) => {
+files.get('/', zValidator('query', filesListQuerySchema, v2ValidationHook), async (c) => {
 	const query = c.req.valid('query');
 	const serviceId = c.get('serviceId');
+	const start = Date.now();
 
 	try {
 		const result = await listUploads(c.env.APP_DB, {
@@ -128,43 +100,49 @@ files.get('/', zValidator('query', filesListQuerySchema, validationErrorHook), a
 			service_id: serviceId,
 		});
 
-		return c.json<UploadsListResponse>({
+		const response = c.json({
 			items: result.items.map(toApiUpload),
 			next_cursor: result.next_cursor,
 			limit: query.limit,
 		});
+		logV2Request(c, start, { route_family: 'files', operation: 'list' });
+		return response;
 	} catch (error) {
 		if (error instanceof Error && error.message === 'Invalid cursor') {
-			return c.json({ error: 'Bad Request', message: 'cursor is invalid' }, 400);
+			throw new V2Error('cursor_invalid', 400, 'cursor is invalid');
 		}
 
 		throw error;
 	}
 });
 
-files.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
+files.get('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook), async (c) => {
 	const { id } = c.req.valid('param');
 	const serviceId = c.get('serviceId');
+	const start = Date.now();
 	const record = await getUpload(c.env.APP_DB, id);
 
 	if (!record || record.service_id !== serviceId) {
-		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+		throw new V2Error('not_found', 404, 'File not found');
 	}
 
-	return c.json({ upload: toApiUpload(record) });
+	const response = c.json({ upload: toApiUpload(record) });
+	logV2Request(c, start, { route_family: 'files', operation: 'get' });
+	return response;
 });
 
-files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
+files.get('/:id/download-url', zValidator('param', fileIdParamSchema, v2ValidationHook), async (c) => {
 	const { id } = c.req.valid('param');
 	const serviceId = c.get('serviceId');
+	const start = Date.now();
 	const record = await getUpload(c.env.APP_DB, id);
 
 	if (!record || record.service_id !== serviceId) {
-		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+		throw new V2Error('not_found', 404, 'File not found');
 	}
 
 	if (record.status !== 'completed') {
-		return c.json({ error: 'Conflict', message: `File is not available for download in state: ${record.status}` }, 409);
+		throw new V2Error('conflict', 409, `File is not available for download in state: ${record.status}`);
 	}
 
 	if (record.destination === 'r2') {
@@ -181,20 +159,22 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validation
 			c.header('Pragma', 'no-cache');
 			c.header('Expires', '0');
 
-			return c.json<FileDownloadUrlResponse>({
+			const response = c.json({
 				upload_id: record.id,
 				destination: record.destination,
 				download_url: presigned_url,
 				expires_at,
 			});
+			logV2Request(c, start, { route_family: 'files', operation: 'download_url' });
+			return response;
 		} catch {
-			return c.json({ error: 'Bad Gateway', message: 'Unable to generate R2 download URL' }, 502);
+			throw new V2Error('bad_gateway', 502, 'Unable to generate R2 download URL');
 		}
 	}
 
 	const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
 	if (!appwriteFileId) {
-		return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key format' }, 500);
+		throw new V2Error('internal_error', 500, 'Invalid Appwrite storage key format');
 	}
 
 	try {
@@ -211,24 +191,27 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, validation
 		c.header('Pragma', 'no-cache');
 		c.header('Expires', '0');
 
-		return c.json<FileDownloadUrlResponse>({
+		const response = c.json({
 			upload_id: record.id,
 			destination: record.destination,
 			download_url: downloadUrl,
 			expires_at: token.expires_at,
 		});
+		logV2Request(c, start, { route_family: 'files', operation: 'download_url' });
+		return response;
 	} catch {
-		return c.json({ error: 'Bad Gateway', message: 'Unable to generate Appwrite download URL' }, 502);
+		throw new V2Error('bad_gateway', 502, 'Unable to generate Appwrite download URL');
 	}
 });
 
-files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
+files.delete('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook), async (c) => {
 	const { id } = c.req.valid('param');
 	const serviceId = c.get('serviceId');
+	const start = Date.now();
 	const record = await getUpload(c.env.APP_DB, id);
 
 	if (!record || record.service_id !== serviceId) {
-		return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+		throw new V2Error('not_found', 404, 'File not found');
 	}
 
 	// B17: delete the DB row FIRST so a failed physical delete cannot leave a
@@ -237,7 +220,7 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 	// retry can complete the operation.
 	const recordDeleted = await deleteUploadRecord(c.env.APP_DB, id);
 	if (!recordDeleted) {
-		return c.json({ error: 'Conflict', message: 'File record could not be deleted' }, 409);
+		throw new V2Error('conflict', 409, 'File record could not be deleted');
 	}
 
 	try {
@@ -246,20 +229,23 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook)
 		} else {
 			const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
 			if (!appwriteFileId) {
-				return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key format' }, 500);
+				throw new V2Error('internal_error', 500, 'Invalid Appwrite storage key format');
 			}
 			await deleteAppwriteFile(c.env, record.bucket, appwriteFileId);
 		}
 	} catch (err) {
+		if (err instanceof V2Error) throw err;
 		console.error('[admin files.delete] physical delete failed; row already removed', err);
-		return c.json({ error: 'Bad Gateway', message: 'Unable to delete file in upstream storage' }, 502);
+		throw new V2Error('bad_gateway', 502, 'Unable to delete file in upstream storage');
 	}
 
-	return c.json<FileDeleteResponse>({
+	const response = c.json({
 		success: true,
 		id,
 		permanent: true,
 	});
+	logV2Request(c, start, { route_family: 'files', operation: 'delete' });
+	return response;
 });
 
 export default files;
