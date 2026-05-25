@@ -11,6 +11,7 @@ export type V2ErrorCode =
   | 'internal_error'
   | 'conflict'
   | 'bad_gateway'
+  | 'gone'
 
 export class V2Error extends Error {
   constructor(

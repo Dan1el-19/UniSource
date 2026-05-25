@@ -24,40 +24,16 @@ import {
   updateAppwriteUserPassword,
   updateAppwriteUserStatus,
 } from '../services/appwrite';
-import type {
-  ServiceDetailResponse,
-  ServiceUsageResponse,
-  AuditLogListResponse,
-  AdminServiceUpdateRequest,
-  AdminServiceUpdateResponse,
-  AdminServiceSettingsResponse,
-  AdminUser,
-  AdminUserListResponse,
-  AdminUserPasswordResetResponse,
-  AdminUserUpdateResponse,
-} from '@unisource/sdk';
+import type { AdminUser } from '@unisource/sdk';
 import { adminServiceSettingsRequestSchema } from '@unisource/sdk';
 import { DEFAULT_SERVICE_ID } from '../config/services';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
 const AUDIT_DEFAULT_LIMIT = 25;
-
-function validationErrorHook(
-  result: {
-    success: boolean;
-    error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> };
-  },
-  c: { json: (value: unknown, status?: number) => Response }
-) {
-  if (result.success) return;
-  const firstIssue = result.error?.issues[0];
-  const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : '';
-  return c.json(
-    { error: 'Bad Request', message: `${issuePath}${firstIssue?.message ?? 'Validation failed'}` },
-    400
-  );
-}
 
 const admin = new Hono<HonoEnv>();
 
@@ -104,13 +80,14 @@ function mapAdminUser(
 }
 
 admin.get('/service', async (c) => {
+  const start = Date.now();
   const serviceId = c.get('serviceId');
   const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
-    return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+    throw new V2Error('not_found', 404, 'Service not found');
   }
 
-  return c.json<ServiceDetailResponse>({
+  const response = c.json({
     service: {
       id: service.id,
       name: service.name,
@@ -121,6 +98,8 @@ admin.get('/service', async (c) => {
       created_at: service.created_at,
     },
   });
+  logV2Request(c, start, { route_family: 'admin', operation: 'get_service' });
+  return response;
 });
 
 const serviceUpdateSchema = z.object({
@@ -130,17 +109,18 @@ const serviceUpdateSchema = z.object({
 
 admin.patch(
   '/service',
-  zValidator('json', serviceUpdateSchema, validationErrorHook),
+  zValidator('json', serviceUpdateSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const serviceId = c.get('serviceId');
     const body = c.req.valid('json');
     const service = await updateServiceDetails(c.env.APP_DB, serviceId, body);
 
     if (!service) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+      throw new V2Error('not_found', 404, 'Service not found');
     }
 
-    return c.json<AdminServiceUpdateResponse>({
+    const response = c.json({
       service: {
         id: service.id,
         name: service.name,
@@ -151,6 +131,8 @@ admin.patch(
         created_at: service.created_at,
       },
     });
+    logV2Request(c, start, { route_family: 'admin', operation: 'update_service' });
+    return response;
   }
 );
 
@@ -161,8 +143,9 @@ admin.patch(
  */
 admin.patch(
   '/service/settings',
-  zValidator('json', adminServiceSettingsRequestSchema, validationErrorHook),
+  zValidator('json', adminServiceSettingsRequestSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const serviceId = c.get('serviceId');
     const body = c.req.valid('json');
 
@@ -171,10 +154,10 @@ admin.patch(
     });
 
     if (!service) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+      throw new V2Error('not_found', 404, 'Service not found');
     }
 
-    return c.json<AdminServiceSettingsResponse>({
+    const response = c.json({
       service: {
         id: service.id,
         name: service.name,
@@ -185,14 +168,17 @@ admin.patch(
         created_at: service.created_at,
       },
     });
+    logV2Request(c, start, { route_family: 'admin', operation: 'update_settings' });
+    return response;
   }
 );
 
 admin.get('/service/usage', async (c) => {
+  const start = Date.now();
   const serviceId = c.get('serviceId');
   const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
-    return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+    throw new V2Error('not_found', 404, 'Service not found');
   }
 
   const used_percent =
@@ -200,12 +186,14 @@ admin.get('/service/usage', async (c) => {
       ? Math.round((service.current_used_bytes / service.max_storage_bytes) * 10000) / 100
       : 0;
 
-  return c.json<ServiceUsageResponse>({
+  const response = c.json({
     service_id: serviceId,
     max_storage_bytes: service.max_storage_bytes,
     current_used_bytes: service.current_used_bytes,
     used_percent,
   });
+  logV2Request(c, start, { route_family: 'admin', operation: 'get_usage' });
+  return response;
 });
 
 const auditLogQuerySchema = z.object({
@@ -224,8 +212,9 @@ const auditLogQuerySchema = z.object({
 
 admin.get(
   '/audit-log',
-  zValidator('query', auditLogQuerySchema, validationErrorHook),
+  zValidator('query', auditLogQuerySchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const serviceId = c.get('serviceId');
     const query = c.req.valid('query');
 
@@ -238,14 +227,16 @@ admin.get(
         limit: query.limit,
       });
 
-      return c.json<AuditLogListResponse>({
+      const response = c.json({
         items: result.items,
         next_cursor: result.next_cursor,
         limit: query.limit,
       });
+      logV2Request(c, start, { route_family: 'admin', operation: 'list_audit_log' });
+      return response;
     } catch (err) {
       if (err instanceof Error && err.message === 'Invalid cursor') {
-        return c.json({ error: 'Bad Request', message: 'cursor is invalid' }, 400);
+        throw new V2Error('cursor_invalid', 400, 'cursor is invalid');
       }
       throw err;
     }
@@ -266,13 +257,14 @@ const userListQuerySchema = z.object({
     .pipe(z.number().int().min(1).max(100)),
 });
 
-admin.get('/users', zValidator('query', userListQuerySchema, validationErrorHook), async (c) => {
+admin.get('/users', zValidator('query', userListQuerySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const serviceId = c.get('serviceId');
   const query = c.req.valid('query');
   const service = await getServiceDetails(c.env.APP_DB, serviceId);
 
   if (!service) {
-    return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+    throw new V2Error('not_found', 404, 'Service not found');
   }
 
   const [appwriteUsers, serviceUsers, usageMap] = await Promise.all([
@@ -287,7 +279,7 @@ admin.get('/users', zValidator('query', userListQuerySchema, validationErrorHook
 
   const metadataByUserId = new Map(serviceUsers.map((item) => [item.user_id, item]));
 
-  return c.json<AdminUserListResponse>({
+  const response = c.json({
     items: appwriteUsers.users.map((user) =>
       mapAdminUser(user, service, usageMap, metadataByUserId.get(user.$id) ?? null)
     ),
@@ -295,6 +287,8 @@ admin.get('/users', zValidator('query', userListQuerySchema, validationErrorHook
     offset: query.offset,
     limit: query.limit,
   });
+  logV2Request(c, start, { route_family: 'admin', operation: 'list_users' });
+  return response;
 });
 
 const userIdParamSchema = z.object({
@@ -312,16 +306,17 @@ const userUpdateSchema = z.object({
 
 admin.patch(
   '/users/:userId',
-  zValidator('param', userIdParamSchema, validationErrorHook),
-  zValidator('json', userUpdateSchema, validationErrorHook),
+  zValidator('param', userIdParamSchema, v2ValidationHook),
+  zValidator('json', userUpdateSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const serviceId = c.get('serviceId');
     const { userId } = c.req.valid('param');
     const body = c.req.valid('json');
     const service = await getServiceDetails(c.env.APP_DB, serviceId);
 
     if (!service) {
-      return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+      throw new V2Error('not_found', 404, 'Service not found');
     }
 
     let user = await getAppwriteUser(c.env, userId);
@@ -361,9 +356,11 @@ admin.patch(
       getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
-    return c.json<AdminUserUpdateResponse>({
+    const response = c.json({
       user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
     });
+    logV2Request(c, start, { route_family: 'admin', operation: 'update_user' });
+    return response;
   }
 );
 
@@ -373,18 +370,21 @@ const userPasswordSchema = z.object({
 
 admin.post(
   '/users/:userId/password',
-  zValidator('param', userIdParamSchema, validationErrorHook),
-  zValidator('json', userPasswordSchema, validationErrorHook),
+  zValidator('param', userIdParamSchema, v2ValidationHook),
+  zValidator('json', userPasswordSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const { userId } = c.req.valid('param');
     const { password } = c.req.valid('json');
 
     await updateAppwriteUserPassword(c.env, userId, password);
 
-    return c.json<AdminUserPasswordResetResponse>({
+    const response = c.json({
       success: true,
       user_id: userId,
     });
+    logV2Request(c, start, { route_family: 'admin', operation: 'reset_password' });
+    return response;
   }
 );
 
@@ -394,14 +394,15 @@ const roleUpdateSchema = z.object({
 
 admin.patch(
   '/users/:userId/role',
-  zValidator('param', userIdParamSchema, validationErrorHook),
-  zValidator('json', roleUpdateSchema, validationErrorHook),
+  zValidator('param', userIdParamSchema, v2ValidationHook),
+  zValidator('json', roleUpdateSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const serviceId = c.get('serviceId');
     const { userId } = c.req.valid('param');
     const { role } = c.req.valid('json');
     const service = await getServiceDetails(c.env.APP_DB, serviceId);
-    if (!service) return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+    if (!service) throw new V2Error('not_found', 404, 'Service not found');
 
     let user = await getAppwriteUser(c.env, userId);
     const syncedLabels = syncRoleLabels(user.labels, role);
@@ -422,9 +423,11 @@ admin.patch(
       getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
-    return c.json<AdminUserUpdateResponse>({
+    const response = c.json({
       user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
     });
+    logV2Request(c, start, { route_family: 'admin', operation: 'update_role' });
+    return response;
   }
 );
 
@@ -434,14 +437,15 @@ const storageLimitUpdateSchema = z.object({
 
 admin.patch(
   '/users/:userId/storage-limit',
-  zValidator('param', userIdParamSchema, validationErrorHook),
-  zValidator('json', storageLimitUpdateSchema, validationErrorHook),
+  zValidator('param', userIdParamSchema, v2ValidationHook),
+  zValidator('json', storageLimitUpdateSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const serviceId = c.get('serviceId');
     const { userId } = c.req.valid('param');
     const { limit_bytes } = c.req.valid('json');
     const service = await getServiceDetails(c.env.APP_DB, serviceId);
-    if (!service) return c.json({ error: 'Not Found', message: 'Service not found' }, 404);
+    if (!service) throw new V2Error('not_found', 404, 'Service not found');
 
     const user = await getAppwriteUser(c.env, userId);
     const currentSettings = await getServiceUser(c.env.APP_DB, serviceId, userId);
@@ -457,13 +461,16 @@ admin.patch(
       getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
-    return c.json<AdminUserUpdateResponse>({
+    const response = c.json({
       user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
     });
+    logV2Request(c, start, { route_family: 'admin', operation: 'update_storage_limit' });
+    return response;
   }
 );
 
 admin.post('/quota/reconcile', async (c) => {
+  const start = Date.now();
   const serviceId = c.get('serviceId');
   const dryRun = c.req.query('dry_run') === 'true';
 
@@ -483,7 +490,9 @@ admin.post('/quota/reconcile', async (c) => {
     );
   }
 
-  return c.json(result);
+  const response = c.json(result);
+  logV2Request(c, start, { route_family: 'admin', operation: 'reconcile_quota' });
+  return response;
 });
 
 export default admin;

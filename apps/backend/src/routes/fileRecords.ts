@@ -21,35 +21,14 @@ import {
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
 import { deactivateShareLinksForFile } from '../db/shareLinks';
-import {
-  FILES_DEFAULT_LIMIT,
-  FILES_MAX_LIMIT,
-  fileMoveRequestSchema,
-  type FileRecordDetailResponse,
-  type FileRecordsListResponse,
-  type FileDownloadUrlResponse,
-  type FileUpdateResponse,
-} from '@unisource/sdk';
+import { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT, fileMoveRequestSchema } from '@unisource/sdk';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
 const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
-
-function validationErrorHook(
-  result: {
-    success: boolean;
-    error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> };
-  },
-  c: { json: (value: unknown, status?: number) => Response }
-) {
-  if (result.success) return;
-  const firstIssue = result.error?.issues[0];
-  const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : '';
-  return c.json(
-    { error: 'Bad Request', message: `${issuePath}${firstIssue?.message ?? 'Validation failed'}` },
-    400
-  );
-}
 
 const fileIdParamSchema = z.object({ id: z.string().trim().min(1) });
 
@@ -97,10 +76,11 @@ function mapFileRecord(record: FileRecord): import('@unisource/sdk').FileRecord 
 const myFiles = new Hono<HonoEnv>();
 
 // List user's files — optionally filtered by folder
-myFiles.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
+myFiles.get('/', zValidator('query', listQuerySchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const query = c.req.valid('query');
+  const start = Date.now();
 
   try {
     const result = await listFileRecords(c.env.APP_DB, {
@@ -112,24 +92,27 @@ myFiles.get('/', zValidator('query', listQuerySchema, validationErrorHook), asyn
       cursor: query.cursor,
     });
 
-    return c.json<FileRecordsListResponse>({
+    const response = c.json({
       items: result.items.map(mapFileRecord),
       next_cursor: result.next_cursor,
       limit: query.limit,
     });
+    logV2Request(c, start, { route_family: 'fileRecords', operation: 'list' });
+    return response;
   } catch (err) {
     if (err instanceof Error && err.message === 'Invalid cursor') {
-      return c.json({ error: 'Bad Request', message: 'cursor is invalid' }, 400);
+      throw new V2Error('cursor_invalid', 400, 'cursor is invalid');
     }
     throw err;
   }
 });
 
 // List user's trash
-myFiles.get('/trash', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
+myFiles.get('/trash', zValidator('query', listQuerySchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const query = c.req.valid('query');
+  const start = Date.now();
 
   try {
     const result = await listFileRecords(c.env.APP_DB, {
@@ -140,45 +123,51 @@ myFiles.get('/trash', zValidator('query', listQuerySchema, validationErrorHook),
       cursor: query.cursor,
     });
 
-    return c.json<FileRecordsListResponse>({
+    const response = c.json({
       items: result.items.map(mapFileRecord),
       next_cursor: result.next_cursor,
       limit: query.limit,
     });
+    logV2Request(c, start, { route_family: 'fileRecords', operation: 'list_trash' });
+    return response;
   } catch (err) {
     if (err instanceof Error && err.message === 'Invalid cursor') {
-      return c.json({ error: 'Bad Request', message: 'cursor is invalid' }, 400);
+      throw new V2Error('cursor_invalid', 400, 'cursor is invalid');
     }
     throw err;
   }
 });
 
 // Get single file
-myFiles.get('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
+myFiles.get('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
+  const start = Date.now();
 
   const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) {
-    return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+    throw new V2Error('not_found', 404, 'File not found');
   }
 
-  return c.json<FileRecordDetailResponse>({ file: mapFileRecord(record) });
+  const response = c.json({ file: mapFileRecord(record) });
+  logV2Request(c, start, { route_family: 'fileRecords', operation: 'get' });
+  return response;
 });
 
 // Generate download URL — internal storage_key used here but never exposed to client
-myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
+myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
+  const start = Date.now();
 
   const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) {
-    return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+    throw new V2Error('not_found', 404, 'File not found');
   }
   if (record.is_trashed) {
-    return c.json({ error: 'Conflict', message: 'File is in trash' }, 409);
+    throw new V2Error('conflict', 409, 'File is in trash');
   }
 
   if (record.storage_destination === 'r2') {
@@ -193,21 +182,23 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validati
       c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       c.header('Pragma', 'no-cache');
       c.header('Expires', '0');
-      
-      return c.json<FileDownloadUrlResponse>({
+
+      const response = c.json({
         upload_id: record.id,
         destination: record.storage_destination,
         download_url: presigned_url,
         expires_at,
       });
+      logV2Request(c, start, { route_family: 'fileRecords', operation: 'download_url' });
+      return response;
     } catch {
-      return c.json({ error: 'Bad Gateway', message: 'Unable to generate R2 download URL' }, 502);
+      throw new V2Error('bad_gateway', 502, 'Unable to generate R2 download URL');
     }
   }
 
   const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
   if (!appwriteFileId) {
-    return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key format' }, 500);
+    throw new V2Error('internal_error', 500, 'Invalid Appwrite storage key format');
   }
 
   try {
@@ -218,27 +209,30 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, validati
     c.header('Pragma', 'no-cache');
     c.header('Expires', '0');
 
-    return c.json<FileDownloadUrlResponse>({
+    const response = c.json({
       upload_id: record.id,
       destination: record.storage_destination,
       download_url: downloadUrl,
       expires_at: token.expires_at,
     });
+    logV2Request(c, start, { route_family: 'fileRecords', operation: 'download_url' });
+    return response;
   } catch {
-    return c.json({ error: 'Bad Gateway', message: 'Unable to generate Appwrite download URL' }, 502);
+    throw new V2Error('bad_gateway', 502, 'Unable to generate Appwrite download URL');
   }
 });
 
 // Soft-delete (trash) or permanent delete
-myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
+myFiles.delete('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
   const permanent = c.req.query('permanent') === 'true';
+  const start = Date.now();
 
   const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) {
-    return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+    throw new V2Error('not_found', 404, 'File not found');
   }
 
   if (permanent) {
@@ -248,12 +242,13 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
       } else {
         const appwriteFileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
         if (!appwriteFileId) {
-          return c.json({ error: 'Internal Server Error', message: 'Invalid Appwrite storage key' }, 500);
+          throw new V2Error('internal_error', 500, 'Invalid Appwrite storage key');
         }
         await deleteAppwriteFile(c.env, record.bucket, appwriteFileId);
       }
-    } catch {
-      return c.json({ error: 'Bad Gateway', message: 'Unable to delete file from storage' }, 502);
+    } catch (err) {
+      if (err instanceof V2Error) throw err;
+      throw new V2Error('bad_gateway', 502, 'Unable to delete file from storage');
     }
 
     await deactivateShareLinksForFile(c.env.APP_DB, id, serviceId);
@@ -276,29 +271,36 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, validationErrorHoo
       })
     );
 
-    return c.json({ success: true, id, permanent: true });
+    const response = c.json({ success: true, id, permanent: true });
+    logV2Request(c, start, { route_family: 'fileRecords', operation: 'delete' });
+    return response;
   }
 
   const trashed = await trashFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!trashed) {
-    return c.json({ error: 'Conflict', message: 'File already in trash' }, 409);
+    throw new V2Error('conflict', 409, 'File already in trash');
   }
 
-  return c.json({ success: true, id, permanent: false });
+  const response = c.json({ success: true, id, permanent: false });
+  logV2Request(c, start, { route_family: 'fileRecords', operation: 'delete' });
+  return response;
 });
 
 // Restore file from trash
-myFiles.post('/:id/restore', zValidator('param', fileIdParamSchema, validationErrorHook), async (c) => {
+myFiles.post('/:id/restore', zValidator('param', fileIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
+  const start = Date.now();
 
   const restored = await restoreFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!restored) {
-    return c.json({ error: 'Not Found', message: 'File not found or not in trash' }, 404);
+    throw new V2Error('not_found', 404, 'File not found or not in trash');
   }
 
-  return c.json({ success: true, id });
+  const response = c.json({ success: true, id });
+  logV2Request(c, start, { route_family: 'fileRecords', operation: 'restore' });
+  return response;
 });
 
 const fileUpdateBodySchema = z.object({
@@ -308,51 +310,57 @@ const fileUpdateBodySchema = z.object({
 // Rename file
 myFiles.patch(
   '/:id',
-  zValidator('param', fileIdParamSchema, validationErrorHook),
-  zValidator('json', fileUpdateBodySchema, validationErrorHook),
+  zValidator('param', fileIdParamSchema, v2ValidationHook),
+  zValidator('json', fileUpdateBodySchema, v2ValidationHook),
   async (c) => {
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const { id } = c.req.valid('param');
     const { filename } = c.req.valid('json');
+    const start = Date.now();
 
     const file = await updateFileRecord(c.env.APP_DB, id, userId, serviceId, { filename });
     if (!file) {
-      return c.json({ error: 'Not Found', message: 'File not found' }, 404);
+      throw new V2Error('not_found', 404, 'File not found');
     }
 
-    return c.json<FileUpdateResponse>({ file: mapFileRecord(file) });
+    const response = c.json({ file: mapFileRecord(file) });
+    logV2Request(c, start, { route_family: 'fileRecords', operation: 'rename' });
+    return response;
   }
 );
 
 // Move file to target folder — verifies target folder ownership (fixes bug #4)
 myFiles.patch(
   '/:id/move',
-  zValidator('param', fileIdParamSchema, validationErrorHook),
-  zValidator('json', fileMoveRequestSchema, validationErrorHook),
+  zValidator('param', fileIdParamSchema, v2ValidationHook),
+  zValidator('json', fileMoveRequestSchema, v2ValidationHook),
   async (c) => {
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const { id } = c.req.valid('param');
     const { folder_id } = c.req.valid('json');
+    const start = Date.now();
 
     // Bug #4 fix: verify the target folder belongs to this user+service before moving
     if (folder_id != null) {
       const targetFolder = await getFolderForUser(c.env.APP_DB, folder_id, userId, serviceId);
       if (!targetFolder) {
-        return c.json({ error: 'Not Found', message: 'Target folder not found' }, 404);
+        throw new V2Error('not_found', 404, 'Target folder not found');
       }
       if (targetFolder.is_trashed) {
-        return c.json({ error: 'Conflict', message: 'Cannot move file into a trashed folder' }, 409);
+        throw new V2Error('conflict', 409, 'Cannot move file into a trashed folder');
       }
     }
 
     const moved = await moveFileRecord(c.env.APP_DB, id, userId, serviceId, folder_id ?? null);
     if (!moved) {
-      return c.json({ error: 'Not Found', message: 'File not found or in trash' }, 404);
+      throw new V2Error('not_found', 404, 'File not found or in trash');
     }
 
-    return c.json({ success: true, id, folder_id: folder_id ?? null });
+    const response = c.json({ success: true, id, folder_id: folder_id ?? null });
+    logV2Request(c, start, { route_family: 'fileRecords', operation: 'move' });
+    return response;
   }
 );
 

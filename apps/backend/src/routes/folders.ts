@@ -3,7 +3,6 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import {
   createFolder,
-  deleteFolderPermanently,
   getDescendantFolderIds,
   getFolderForUser,
   listFolders,
@@ -20,30 +19,12 @@ import {
   folderCreateRequestSchema,
   folderUpdateRequestSchema,
   type Folder,
-  type FolderCreateResponse,
-  type FolderUpdateResponse,
-  type FolderListResponse,
-  type FolderDeleteResponse,
-  type FolderRestoreResponse,
 } from '@unisource/sdk';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
-
-function validationErrorHook(
-  result: {
-    success: boolean;
-    error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> };
-  },
-  c: { json: (value: unknown, status?: number) => Response }
-) {
-  if (result.success) return;
-  const firstIssue = result.error?.issues[0];
-  const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : '';
-  return c.json(
-    { error: 'Bad Request', message: `${issuePath}${firstIssue?.message ?? 'Validation failed'}` },
-    400
-  );
-}
 
 const folderIdParamSchema = z.object({ id: z.string().trim().min(1) });
 
@@ -92,18 +73,19 @@ function mapFolder(folder: FolderRecord): Folder {
 const folders = new Hono<HonoEnv>();
 
 // Create folder
-folders.post('/', zValidator('json', folderCreateRequestSchema, validationErrorHook), async (c) => {
+folders.post('/', zValidator('json', folderCreateRequestSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const body = c.req.valid('json');
+  const start = Date.now();
 
   if (body.parent_id) {
     const parent = await getFolderForUser(c.env.APP_DB, body.parent_id, userId, serviceId);
     if (!parent) {
-      return c.json({ error: 'Not Found', message: 'Parent folder not found' }, 404);
+      throw new V2Error('not_found', 404, 'Parent folder not found');
     }
     if (parent.is_trashed) {
-      return c.json({ error: 'Conflict', message: 'Cannot create folder inside a trashed folder' }, 409);
+      throw new V2Error('conflict', 409, 'Cannot create folder inside a trashed folder');
     }
   }
 
@@ -117,14 +99,17 @@ folders.post('/', zValidator('json', folderCreateRequestSchema, validationErrorH
     color_tag: body.color_tag ?? null,
   });
 
-  return c.json<FolderCreateResponse>({ folder: mapFolder(folder) }, 201);
+  const response = c.json({ folder: mapFolder(folder) }, 201);
+  logV2Request(c, start, { route_family: 'folders', operation: 'create' });
+  return response;
 });
 
 // List folders — with cursor pagination
-folders.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
+folders.get('/', zValidator('query', listQuerySchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const query = c.req.valid('query');
+  const start = Date.now();
 
   try {
     const result = await listFolders(c.env.APP_DB, {
@@ -136,43 +121,49 @@ folders.get('/', zValidator('query', listQuerySchema, validationErrorHook), asyn
       cursor: query.cursor,
     });
 
-    return c.json<FolderListResponse>({
+    const response = c.json({
       items: result.items.map(mapFolder),
       next_cursor: result.next_cursor,
       limit: query.limit,
     });
+    logV2Request(c, start, { route_family: 'folders', operation: 'list' });
+    return response;
   } catch (err) {
     if (err instanceof Error && err.message === 'Invalid cursor') {
-      return c.json({ error: 'Bad Request', message: 'cursor is invalid' }, 400);
+      throw new V2Error('cursor_invalid', 400);
     }
     throw err;
   }
 });
 
 // Get single folder
-folders.get('/:id', zValidator('param', folderIdParamSchema, validationErrorHook), async (c) => {
+folders.get('/:id', zValidator('param', folderIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
+  const start = Date.now();
 
   const folder = await getFolderForUser(c.env.APP_DB, id, userId, serviceId);
   if (!folder) {
-    return c.json({ error: 'Not Found', message: 'Folder not found' }, 404);
+    throw new V2Error('not_found', 404, 'Folder not found');
   }
 
-  return c.json({ folder: mapFolder(folder) });
+  const response = c.json({ folder: mapFolder(folder) });
+  logV2Request(c, start, { route_family: 'folders', operation: 'get' });
+  return response;
 });
 
 // Update folder (rename / color)
 folders.patch(
   '/:id',
-  zValidator('param', folderIdParamSchema, validationErrorHook),
-  zValidator('json', folderUpdateRequestSchema, validationErrorHook),
+  zValidator('param', folderIdParamSchema, v2ValidationHook),
+  zValidator('json', folderUpdateRequestSchema, v2ValidationHook),
   async (c) => {
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
     const { id } = c.req.valid('param');
     const body = c.req.valid('json');
+    const start = Date.now();
 
     const updated = await updateFolder(c.env.APP_DB, id, userId, serviceId, {
       name: body.name,
@@ -180,25 +171,28 @@ folders.patch(
     });
 
     if (!updated) {
-      return c.json({ error: 'Not Found', message: 'Folder not found or already trashed' }, 404);
+      throw new V2Error('not_found', 404, 'Folder not found or already trashed');
     }
 
-    return c.json<FolderUpdateResponse>({ folder: mapFolder(updated) });
+    const response = c.json({ folder: mapFolder(updated) });
+    logV2Request(c, start, { route_family: 'folders', operation: 'update' });
+    return response;
   }
 );
 
 // Soft-delete (trash) or permanent delete
-folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorHook), async (c) => {
+folders.delete('/:id', zValidator('param', folderIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
   const permanent = c.req.query('permanent') === 'true';
+  const start = Date.now();
 
   if (permanent) {
     // Get all descendant folder IDs (including this folder) via recursive CTE
     const descendantIds = await getDescendantFolderIds(c.env.APP_DB, id, userId, serviceId);
     if (descendantIds.length === 0) {
-      return c.json({ error: 'Not Found', message: 'Folder not found' }, 404);
+      throw new V2Error('not_found', 404, 'Folder not found');
     }
 
     // Mark all files in descendant folders as trashed (mark-for-deletion pattern).
@@ -232,29 +226,36 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, validationErrorH
       })
     );
 
-    return c.json<FolderDeleteResponse>({ success: true, id, permanent: true, folders_deleted: descendantIds.length });
+    const response = c.json({ success: true, id, permanent: true, folders_deleted: descendantIds.length });
+    logV2Request(c, start, { route_family: 'folders', operation: 'delete' });
+    return response;
   }
 
   const trashed = await trashFolder(c.env.APP_DB, id, userId, serviceId);
   if (!trashed) {
-    return c.json({ error: 'Not Found', message: 'Folder not found or already trashed' }, 404);
+    throw new V2Error('not_found', 404, 'Folder not found or already trashed');
   }
 
-  return c.json<FolderDeleteResponse>({ success: true, id, permanent: false });
+  const response = c.json({ success: true, id, permanent: false });
+  logV2Request(c, start, { route_family: 'folders', operation: 'delete' });
+  return response;
 });
 
 // Restore folder from trash
-folders.post('/:id/restore', zValidator('param', folderIdParamSchema, validationErrorHook), async (c) => {
+folders.post('/:id/restore', zValidator('param', folderIdParamSchema, v2ValidationHook), async (c) => {
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
   const { id } = c.req.valid('param');
+  const start = Date.now();
 
   const restored = await restoreFolder(c.env.APP_DB, id, userId, serviceId);
   if (!restored) {
-    return c.json({ error: 'Not Found', message: 'Folder not found or not in trash' }, 404);
+    throw new V2Error('not_found', 404, 'Folder not found or not in trash');
   }
 
-  return c.json<FolderRestoreResponse>({ success: true, id });
+  const response = c.json({ success: true, id });
+  logV2Request(c, start, { route_family: 'folders', operation: 'restore' });
+  return response;
 });
 
 export default folders;
