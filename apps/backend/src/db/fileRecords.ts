@@ -274,27 +274,66 @@ export async function listFileRecordsV2(
   };
 }
 
+export type BulkItemResult =
+  | { id: string; ok: true }
+  | { id: string; ok: false; code: 'not_found' | 'conflict'; message: string }
+
+export type BulkResult = {
+  processed: string[]
+  failed: Array<{ id: string; code: 'not_found' | 'conflict'; message: string }>
+}
+
+export function partitionBulkResults(items: BulkItemResult[]): BulkResult {
+  const processed: string[] = []
+  const failed: BulkResult['failed'] = []
+  for (const r of items) {
+    if (r.ok) processed.push(r.id)
+    else failed.push({ id: r.id, code: r.code, message: r.message })
+  }
+  return { processed, failed }
+}
+
 export async function bulkTrashFileRecords(
   db: D1Database,
   ids: string[],
   userId: string,
   serviceId: string
-): Promise<string[]> {
-  if (ids.length === 0) return [];
+): Promise<BulkResult> {
+  if (ids.length === 0) return { processed: [], failed: [] };
   const now = Math.floor(Date.now() / 1000);
 
-  const stmts = ids.map(id => db.prepare(
-    `UPDATE files
-     SET is_trashed = 1, trashed_at = ?, updated_at = ?
-     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
-  ).bind(now, now, id, userId, serviceId));
+  const probeStmts = ids.map(id => db.prepare(
+    `SELECT id, is_trashed FROM files WHERE id = ? AND user_id = ? AND service_id = ?`
+  ).bind(id, userId, serviceId));
+  const probeResults = await db.batch<{ id: string; is_trashed: number }>(probeStmts);
 
-  const results = await db.batch(stmts);
-  const successIds: string[] = [];
-  results.forEach((r, idx) => {
-    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
+  const items: BulkItemResult[] = [];
+  const toTrash: string[] = [];
+  ids.forEach((id, idx) => {
+    const row = probeResults[idx].results[0];
+    if (!row) {
+      items.push({ id, ok: false, code: 'not_found', message: 'File not found' });
+    } else if (row.is_trashed === 1) {
+      items.push({ id, ok: false, code: 'conflict', message: 'File already in trash' });
+    } else {
+      toTrash.push(id);
+    }
   });
-  return successIds;
+
+  if (toTrash.length > 0) {
+    const trashStmts = toTrash.map(id => db.prepare(
+      `UPDATE files SET is_trashed = 1, trashed_at = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
+    ).bind(now, now, id, userId, serviceId));
+    const trashResults = await db.batch(trashStmts);
+    trashResults.forEach((r, idx) => {
+      const id = toTrash[idx];
+      if ((r.meta.changes ?? 0) > 0) items.push({ id, ok: true });
+      else items.push({ id, ok: false, code: 'conflict', message: 'File state changed concurrently' });
+    });
+  }
+
+  return partitionBulkResults(items);
 }
 
 export async function bulkRestoreFileRecords(
@@ -302,22 +341,42 @@ export async function bulkRestoreFileRecords(
   ids: string[],
   userId: string,
   serviceId: string
-): Promise<string[]> {
-  if (ids.length === 0) return [];
+): Promise<BulkResult> {
+  if (ids.length === 0) return { processed: [], failed: [] };
   const now = Math.floor(Date.now() / 1000);
 
-  const stmts = ids.map(id => db.prepare(
-    `UPDATE files
-     SET is_trashed = 0, trashed_at = NULL, updated_at = ?
-     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 1`
-  ).bind(now, id, userId, serviceId));
+  const probeStmts = ids.map(id => db.prepare(
+    `SELECT id, is_trashed FROM files WHERE id = ? AND user_id = ? AND service_id = ?`
+  ).bind(id, userId, serviceId));
+  const probeResults = await db.batch<{ id: string; is_trashed: number }>(probeStmts);
 
-  const results = await db.batch(stmts);
-  const successIds: string[] = [];
-  results.forEach((r, idx) => {
-    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
+  const items: BulkItemResult[] = [];
+  const toRestore: string[] = [];
+  ids.forEach((id, idx) => {
+    const row = probeResults[idx].results[0];
+    if (!row) {
+      items.push({ id, ok: false, code: 'not_found', message: 'File not found' });
+    } else if (row.is_trashed === 0) {
+      items.push({ id, ok: false, code: 'conflict', message: 'File is not in trash' });
+    } else {
+      toRestore.push(id);
+    }
   });
-  return successIds;
+
+  if (toRestore.length > 0) {
+    const stmts = toRestore.map(id => db.prepare(
+      `UPDATE files SET is_trashed = 0, trashed_at = NULL, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 1`
+    ).bind(now, id, userId, serviceId));
+    const results = await db.batch(stmts);
+    results.forEach((r, idx) => {
+      const id = toRestore[idx];
+      if ((r.meta.changes ?? 0) > 0) items.push({ id, ok: true });
+      else items.push({ id, ok: false, code: 'conflict', message: 'File state changed concurrently' });
+    });
+  }
+
+  return partitionBulkResults(items);
 }
 
 export async function bulkMoveFileRecords(
@@ -326,22 +385,42 @@ export async function bulkMoveFileRecords(
   userId: string,
   serviceId: string,
   newFolderId: string | null
-): Promise<string[]> {
-  if (ids.length === 0) return [];
+): Promise<BulkResult> {
+  if (ids.length === 0) return { processed: [], failed: [] };
   const now = Math.floor(Date.now() / 1000);
 
-  const stmts = ids.map(id => db.prepare(
-    `UPDATE files
-     SET folder_id = ?, updated_at = ?
-     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
-  ).bind(newFolderId, now, id, userId, serviceId));
+  const probeStmts = ids.map(id => db.prepare(
+    `SELECT id, is_trashed FROM files WHERE id = ? AND user_id = ? AND service_id = ?`
+  ).bind(id, userId, serviceId));
+  const probeResults = await db.batch<{ id: string; is_trashed: number }>(probeStmts);
 
-  const results = await db.batch(stmts);
-  const successIds: string[] = [];
-  results.forEach((r, idx) => {
-    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
+  const items: BulkItemResult[] = [];
+  const toMove: string[] = [];
+  ids.forEach((id, idx) => {
+    const row = probeResults[idx].results[0];
+    if (!row) {
+      items.push({ id, ok: false, code: 'not_found', message: 'File not found' });
+    } else if (row.is_trashed === 1) {
+      items.push({ id, ok: false, code: 'conflict', message: 'Cannot move a trashed file' });
+    } else {
+      toMove.push(id);
+    }
   });
-  return successIds;
+
+  if (toMove.length > 0) {
+    const stmts = toMove.map(id => db.prepare(
+      `UPDATE files SET folder_id = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
+    ).bind(newFolderId, now, id, userId, serviceId));
+    const results = await db.batch(stmts);
+    results.forEach((r, idx) => {
+      const id = toMove[idx];
+      if ((r.meta.changes ?? 0) > 0) items.push({ id, ok: true });
+      else items.push({ id, ok: false, code: 'conflict', message: 'File state changed concurrently' });
+    });
+  }
+
+  return partitionBulkResults(items);
 }
 
 export async function trashFileRecord(

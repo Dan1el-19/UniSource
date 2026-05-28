@@ -2,8 +2,7 @@ import { Hono } from 'hono'
 import { v2RequestIdGuard } from '../../middleware/v2RequestIdGuard'
 import { v2ErrorHandler } from '../../middleware/v2Errors'
 import filesV2 from './files'
-import filesLegacy from './files.legacy'
-import foldersV2Legacy from './folders'
+import foldersV2 from './folders'
 
 type V2Env = { Bindings: CloudflareBindings; Variables: WorkerVariables }
 
@@ -15,7 +14,6 @@ v2.use('*', v2RequestIdGuard)
 v2.onError(v2ErrorHandler)
 
 v2.route('/files', filesV2)
-v2.route('/files', filesLegacy)
-v2.route('/folders', foldersV2Legacy)
+v2.route('/folders', foldersV2)
 
 export default v2
