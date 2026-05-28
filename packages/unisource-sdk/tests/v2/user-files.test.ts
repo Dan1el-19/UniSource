@@ -331,7 +331,7 @@ describe('UnisourceV2Client.userFiles.restore', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.userFiles.restore('f1')).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 409, code: 'not_trashed', requestId: 'req-409',
+      name: 'UnisourceV2Error', status: 409, code: 'unknown', rawCode: 'not_trashed', requestId: 'req-409',
     })
   })
 
@@ -411,7 +411,7 @@ describe('UnisourceV2Client.userFiles.downloadUrl', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.userFiles.downloadUrl('f1')).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 409, code: 'file_trashed', requestId: 'req-409',
+      name: 'UnisourceV2Error', status: 409, code: 'unknown', rawCode: 'file_trashed', requestId: 'req-409',
     })
   })
 

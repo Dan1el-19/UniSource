@@ -165,7 +165,7 @@ describe('UnisourceV2Client.folders.breadcrumbs', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.folders.breadcrumbs('missing')).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 404, code: 'folder_not_found', message: 'Folder not found', requestId: 'req-404',
+      name: 'UnisourceV2Error', status: 404, code: 'unknown', rawCode: 'folder_not_found', message: 'Folder not found', requestId: 'req-404',
     })
   })
 
@@ -250,7 +250,7 @@ describe('UnisourceV2Client.folders.bulkTrash', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.folders.bulkTrash({ ids: ['a'] })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 422, code: 'ids_required', message: 'ids required', requestId: 'req-422',
+      name: 'UnisourceV2Error', status: 422, code: 'unknown', rawCode: 'ids_required', message: 'ids required', requestId: 'req-422',
     })
   })
 
@@ -328,7 +328,7 @@ describe('UnisourceV2Client.folders.bulkRestore', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.folders.bulkRestore({ ids: ['a'] })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 422, code: 'ids_required', message: 'ids required', requestId: 'req-422',
+      name: 'UnisourceV2Error', status: 422, code: 'unknown', rawCode: 'ids_required', message: 'ids required', requestId: 'req-422',
     })
   })
 

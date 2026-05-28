@@ -413,7 +413,7 @@ describe('UnisourceV2Client.mainStorage.restore', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.mainStorage.restore('f1')).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 409, code: 'not_trashed', requestId: 'req-409',
+      name: 'UnisourceV2Error', status: 409, code: 'unknown', rawCode: 'not_trashed', requestId: 'req-409',
     })
   })
 

@@ -74,7 +74,7 @@ describe('UnisourceV2Client.files.bulkTrash', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.files.bulkTrash({ ids: ['a'] })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 422, code: 'ids_required', message: 'ids required', requestId: 'req-422',
+      name: 'UnisourceV2Error', status: 422, code: 'unknown', rawCode: 'ids_required', message: 'ids required', requestId: 'req-422',
     })
   })
 
@@ -152,7 +152,7 @@ describe('UnisourceV2Client.files.bulkRestore', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.files.bulkRestore({ ids: ['a'] })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 422, code: 'ids_required', message: 'ids required', requestId: 'req-422',
+      name: 'UnisourceV2Error', status: 422, code: 'unknown', rawCode: 'ids_required', message: 'ids required', requestId: 'req-422',
     })
   })
 
@@ -247,7 +247,7 @@ describe('UnisourceV2Client.files.bulkMove', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.files.bulkMove({ ids: ['a'], folder_id: 'trashed-folder' })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 409, code: 'folder_trashed', message: 'Target folder is trashed', requestId: 'req-409',
+      name: 'UnisourceV2Error', status: 409, code: 'unknown', rawCode: 'folder_trashed', message: 'Target folder is trashed', requestId: 'req-409',
     })
   })
 

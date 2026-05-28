@@ -83,7 +83,7 @@ describe('UnisourceV2Client.app.latestRelease', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.app.latestRelease()).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 404, code: 'release_not_found', requestId: 'req-404',
+      name: 'UnisourceV2Error', status: 404, code: 'unknown', rawCode: 'release_not_found', requestId: 'req-404',
     })
   })
 

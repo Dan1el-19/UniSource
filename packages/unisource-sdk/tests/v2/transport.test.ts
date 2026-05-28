@@ -85,7 +85,7 @@ describe('createV2Request', () => {
       headers: { get: () => 'req-409' },
       json: () => Promise.resolve({
         error: {
-          code: 'cycle_detected',
+          code: 'conflict',
           message: 'Cannot move folder into itself',
           details: { folder_id: 'f1' },
         },
@@ -97,7 +97,7 @@ describe('createV2Request', () => {
     await expect(request('POST', '/v2/folders/bulk-move', { parser })).rejects.toMatchObject({
       name: 'UnisourceV2Error',
       status: 409,
-      code: 'cycle_detected',
+      code: 'conflict',
       requestId: 'req-409',
       details: { folder_id: 'f1' },
     })

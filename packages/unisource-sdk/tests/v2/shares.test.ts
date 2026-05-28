@@ -232,7 +232,7 @@ describe('UnisourceV2Client.shares.get', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.shares.get('missing')).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 404, code: 'share_not_found', requestId: 'req-404',
+      name: 'UnisourceV2Error', status: 404, code: 'unknown', rawCode: 'share_not_found', requestId: 'req-404',
     })
   })
 
@@ -304,7 +304,7 @@ describe('UnisourceV2Client.shares.delete', () => {
     }))
     const client = new UnisourceV2Client(mockConfig)
     await expect(client.shares.delete('missing')).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 404, code: 'share_not_found', requestId: 'req-404',
+      name: 'UnisourceV2Error', status: 404, code: 'unknown', rawCode: 'share_not_found', requestId: 'req-404',
     })
   })
 

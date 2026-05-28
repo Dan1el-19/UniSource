@@ -12,7 +12,16 @@ let warned = false
 export interface UnisourceV2ClientConfig {
   baseUrl: string
   serviceId: string
-  getToken: () => string | null | undefined | Promise<string | null | undefined>
+  /**
+   * JWT/user auth: token fetched per request (frontend, auto-refresh).
+   * Mutually exclusive with apiKey.
+   */
+  getToken?: () => string | null | undefined | Promise<string | null | undefined>
+  /**
+   * API key auth: static secret from env (server-to-server, no refresh).
+   * Mutually exclusive with getToken.
+   */
+  apiKey?: string
   /** Set to true to suppress the beta warning in console */
   silentBeta?: boolean
 }
@@ -27,6 +36,12 @@ export class UnisourceV2Client {
   readonly userFiles: ReturnType<typeof createUserFilesResource>
 
   constructor(config: UnisourceV2ClientConfig) {
+    if (config.apiKey && config.getToken) {
+      throw new Error(
+        'UnisourceV2Client: provide either apiKey or getToken, not both'
+      )
+    }
+
     if (!warned && !config.silentBeta) {
       console.warn(
         '[unisource-sdk] V2 API is in beta. Breaking changes possible. ' +

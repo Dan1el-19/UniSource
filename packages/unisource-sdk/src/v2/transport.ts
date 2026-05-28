@@ -1,7 +1,11 @@
 import type { UnisourceV2ClientConfig } from './client'
+import type { V2ErrorCode } from './error-codes'
+import { isV2ErrorCode } from './error-codes'
 import { UnisourceV2Error } from './errors'
 
 export type V2HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE'
+
+export type V2AuthMode = 'default' | 'none'
 
 export type V2Query = object
 
@@ -14,6 +18,13 @@ export interface V2RequestOptions<T> {
   query?: V2Query
   signal?: AbortSignal
   asUser?: string
+  /**
+   * Override authentication for this request.
+   * - 'default' (or omitted): use apiKey or getToken from client config.
+   * - 'none': do NOT send Authorization header, even if credentials are configured.
+   *   Used by client.public.* for anonymous endpoints.
+   */
+  auth?: V2AuthMode
   parser: V2ResponseParser<T>
 }
 
@@ -41,17 +52,32 @@ function parseErrorBody(value: unknown): V2ErrorBody {
   }
 }
 
+async function resolveAuthHeader(
+  config: UnisourceV2ClientConfig,
+  authMode: V2AuthMode
+): Promise<string | undefined> {
+  if (authMode === 'none') return undefined
+  if (config.apiKey) return `Bearer ${config.apiKey}`
+  if (config.getToken) {
+    const token = await config.getToken()
+    if (token) return `Bearer ${token}`
+  }
+  return undefined
+}
+
 export function createV2Request(config: UnisourceV2ClientConfig): V2Request {
   return async function request<T>(
     method: V2HttpMethod,
     path: string,
     options: V2RequestOptions<T>
   ): Promise<T> {
-    const token = await config.getToken()
+    const authMode: V2AuthMode = options.auth ?? 'default'
+    const authHeader = await resolveAuthHeader(config, authMode)
+
     const headers: Record<string, string> = {
       'X-Service-ID': config.serviceId,
     }
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (authHeader) headers['Authorization'] = authHeader
     if (options.asUser) headers['X-Target-User-ID'] = options.asUser
     if (options.body !== undefined) headers['Content-Type'] = 'application/json'
 
@@ -79,13 +105,19 @@ export function createV2Request(config: UnisourceV2ClientConfig): V2Request {
       const requestId = response.headers.get('X-Request-Id') ?? 'unknown'
       let body: V2ErrorBody
       try { body = parseErrorBody(await response.json()) } catch { body = {} }
+
+      const rawCode = body.error?.code
+      const code: V2ErrorCode | 'unknown' =
+        rawCode && isV2ErrorCode(rawCode) ? rawCode : 'unknown'
+      const rawCodeForError = code === 'unknown' && rawCode ? rawCode : undefined
+
       throw new UnisourceV2Error(
         body.error?.message ?? response.statusText,
         response.status,
-        // Temporary cast — replaced with proper narrowing in Task 3 (transport rewrite).
-        (body.error?.code ?? 'unknown') as 'unknown',
+        code,
         requestId,
-        body.error?.details
+        body.error?.details,
+        rawCodeForError
       )
     }
 
