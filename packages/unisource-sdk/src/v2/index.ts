@@ -13,6 +13,20 @@ export type { V2ErrorCode } from './error-codes'
 export { v2BulkResponseSchema, v2BulkFailureSchema } from './bulk-schemas'
 export type { V2BulkResponse, V2BulkFailure } from './bulk-schemas'
 export type { V2FoldersBulkRequest } from './resources/folders'
+export {
+  publicShareLinkResponseSchema,
+  publicShareLinkUnlockedResponseSchema,
+  publicShareLinkLockedResponseSchema,
+  publicUnlockResponseSchema,
+  unlockShareLinkRequestSchema,
+} from './public-schemas'
+export type {
+  PublicShareLinkResponse,
+  PublicShareLinkUnlockedResponse,
+  PublicShareLinkLockedResponse,
+  PublicUnlockResponse,
+  UnlockShareLinkRequest,
+} from './public-schemas'
 export { UnisourceV2Client } from './client'
 export type { UnisourceV2ClientConfig } from './client'
 
