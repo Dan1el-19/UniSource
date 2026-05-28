@@ -13,6 +13,7 @@ export type { V2ErrorCode } from './error-codes'
 export { v2BulkResponseSchema, v2BulkFailureSchema } from './bulk-schemas'
 export type { V2BulkResponse, V2BulkFailure } from './bulk-schemas'
 export type { V2FoldersBulkRequest } from './resources/folders'
+export type { V2FilesBulkRequest } from './resources/files'
 export {
   publicShareLinkResponseSchema,
   publicShareLinkUnlockedResponseSchema,
