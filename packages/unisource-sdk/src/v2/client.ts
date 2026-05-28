@@ -1,4 +1,5 @@
 import { createV2Request } from './transport'
+import { createAdminResource } from './resources/admin'
 import { createAppResource } from './resources/app'
 import { createFilesResource } from './resources/files'
 import { createFoldersResource } from './resources/folders'
@@ -34,6 +35,7 @@ export class UnisourceV2Client {
   readonly folders: ReturnType<typeof createFoldersResource>
   readonly mainStorage: ReturnType<typeof createMainStorageResource>
   readonly userFiles: ReturnType<typeof createUserFilesResource>
+  readonly admin: ReturnType<typeof createAdminResource>
 
   constructor(config: UnisourceV2ClientConfig) {
     if (config.apiKey && config.getToken) {
@@ -58,5 +60,6 @@ export class UnisourceV2Client {
     this.folders = createFoldersResource(request)
     this.mainStorage = createMainStorageResource(request)
     this.userFiles = createUserFilesResource(request)
+    this.admin = createAdminResource(request)
   }
 }
