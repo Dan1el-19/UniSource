@@ -2,16 +2,17 @@
 
 > Stan na **2026-05-26**. Wszystko na branchu `beta`. Praca w toku.
 
-Refaktor UniSource do "standardu V2" obejmuje trzy warstwy: backend, SDK i frontend. Każda jest na innym etapie. Ten dokument trzyma jedno spójne źródło prawdy o tym, co jest zrobione, a co nie.
+Refaktor UniSource do "standardu V2" obejmuje **dwie warstwy w zakresie**: backend (routes → V2 standard) i SDK (`UnisourceV2Client`). Frontend i integratorzy są **poza zakresem** — `UnisourceClient` (legacy) zostaje stable, bez zmian. Ten dokument trzyma jedno spójne źródło prawdy o tym, co jest zrobione, a co nie.
 
 ## TL;DR
 
 | Warstwa | Postęp | Co dalej |
 |---|---|---|
 | **Backend (Hono routes → V2 standard)** | ~59% (60/101 handlerów) | Zmigrować `upload.ts`, `releases.ts`, `superadmin.ts` |
-| **SDK — `UnisourceClient` (legacy)** | ~100% pokrycie API legacy | Tylko maintenance — nowych metod się nie dodaje |
-| **SDK — `UnisourceV2Client` (nowy)** | ~38% pokrycie endpointów V2 (27 metod / 7 zasobów) | Dobudowywać metody w miarę stabilizacji V2 |
-| **Frontend (`apps/frontend/src/lib/api.ts`)** | 0% adopcji `UnisourceV2Client` | Migracja po dobudowaniu kluczowych metod V2 SDK |
+| **SDK — `UnisourceClient` (legacy)** | ~100% pokrycia API legacy, **stable, bez zmian** | Tylko maintenance — żadnych breakingów, żadnego deprecation |
+| **SDK — `UnisourceV2Client` (nowy)** | ~38% pokrycia endpointów V2 (27 metod / 7 zasobów) | Dobudowywać metody do parytetu z V2 backendem |
+
+Frontend (`apps/frontend` — admin panel UniSource) oraz integratorzy zewnętrzni są **poza zakresem** tej refaktoryzacji. V2 powstaje jako równoległy, gotowy kontrakt; integracja po stronie konsumentów to osobna decyzja na przyszłość.
 
 ---
 
@@ -93,7 +94,7 @@ V2 to ujednolicony kontrakt na całe API:
 | `shares.*` (Plan 2 `/shares`) | list/create/get/delete | ✅ pełne |
 | `app.releases.latest` | `/app/releases/latest` | ✅ pełne |
 | `getPublicFileInfo`, `unlockPublicFile` | `/public/:slug` + `/unlock` | ✅ pełne (top-level fns) |
-| `client.v2.*` | files (list, bulkMove/Trash/Restore), folders (list, breadcrumbs, bulkMove/Trash/Restore) | 🚫 **`@deprecated FROZEN`** — używać `UnisourceV2Client` |
+| `client.v2.*` | files (list, bulkMove/Trash/Restore), folders (list, breadcrumbs, bulkMove/Trash/Restore) | 🚫 **`@deprecated FROZEN`** — używać `UnisourceV2Client`; zostaje w SDK (legacy stable) |
 
 ### `UnisourceV2Client` (nowy) — `src/v2/client.ts`
 
@@ -118,13 +119,20 @@ V2 to ujednolicony kontrakt na całe API:
 - `admin.*` — 10 endpointów dla server-to-server, backend już V2.
 - `public.*` — 3 endpointy do anonymous resolution.
 
-**Werdykt**: `UnisourceV2Client` jest gotowym, dobrze zaprojektowanym fundamentem, ale jeszcze niegotowy do publikacji jako standalone integration SDK — nie zastępuje `UnisourceClient`. Oba są publikowane razem; integratorzy używają `UnisourceClient`, my migrujemy ich stopniowo na `UnisourceV2Client` w miarę dobudowywania metod.
+**Werdykt**: `UnisourceV2Client` jest dobrze zaprojektowanym fundamentem, ale jeszcze niepełny względem powierzchni V2 backendu. Oba klienty są publikowane razem i pozostają tak długo, aż V2 osiągnie stabilność i kompletność. `UnisourceClient` (legacy, stable na `main`) jest bez zmian; `UnisourceV2Client` rozwijamy na `beta` do parytetu z V2 backendem. **Ta refaktoryzacja nie obejmuje migracji żadnych konsumentów na V2 klient** — produkcyjnie V2 nie jest nigdzie wykorzystywane do czasu stabilizacji.
 
 ---
 
-## 3. Frontend — `apps/frontend/src/lib/api.ts`
+## 3. Frontend i integratorzy — poza zakresem
 
-**Stan: 0% adopcji `UnisourceV2Client`.** Frontend nadal używa `UnisourceClient` (legacy). Migracja zaplanowana osobnym PR-em po dobudowaniu kluczowych metod w SDK V2.
+Frontend (`apps/frontend`, admin panel API) oraz wszelcy konsumenci `UnisourceClient` **nie są ruszani** w tej refaktoryzacji:
+
+- `apps/frontend` pozostaje na `UnisourceClient` (legacy). Brak migracji.
+- `UnisourceClient` (legacy) jest stable na branchu `main`, ma realnych konsumentów produkcyjnych — żadnych breakingów, żadnego deprecation timeline.
+- Branch `beta` (gdzie żyje refaktor V2) **nie jest używany produkcyjnie**. V2 nie wraca do `main` ani nie jest integrowane u konsumentów dopóki nie osiągnie stabilności i kompletności.
+- Decyzja o ewentualnej migracji jakichkolwiek konsumentów na `UnisourceV2Client` to osobna inicjatywa, **poza zakresem tego dokumentu**.
+
+V2 jest budowane jako równoległy, kompletny kontrakt — gotowy, ale bez wymuszania migracji.
 
 ---
 
@@ -139,32 +147,32 @@ V2 to ujednolicony kontrakt na całe API:
 
 ### Backend — drobiazgi do sprzątnięcia po migracji
 - Plik `v2/files.legacy.ts` do scalenia z `v2/files.ts`.
-- 3 pliki z własnym `validationErrorHook` (`releases.ts`, `upload.ts`) → przejście na `v2ValidationHook` przy migracji.
-- Usunąć namespace `client.v2.*` z `UnisourceClient` po pełnej migracji frontendu na `UnisourceV2Client` (release breaking change).
+- Pliki z własnym `validationErrorHook` (`releases.ts`, `upload.ts`) → przejście na `v2ValidationHook` przy migracji.
 
 ---
 
 ## 5. Pozostała praca — kolejność wykonania
 
-1. **`upload.ts` backend → V2** (9 handlerów). Krytyczne dla integratorów; bez tego nie ma sensu dodawać `upload` do `UnisourceV2Client`.
+1. **`upload.ts` backend → V2** (9 handlerów). Najbardziej złożony route; bez tego nie ma sensu dodawać `upload` do `UnisourceV2Client`.
 2. **`UnisourceV2Client.upload.*`** (po kroku 1). Pełny flow + multipart.
-3. **`UnisourceV2Client.folders.*` CRUD** + **`UnisourceV2Client.myFiles.*`** listy/move (backend jest gotowy).
+3. **`UnisourceV2Client.folders.*` CRUD** + **`UnisourceV2Client.myFiles.*`** listy/move (backend jest gotowy — szybki win, dobudowanie do parytetu).
 4. **`UnisourceV2Client` — wsparcie API-key path** w `transport.ts`. Mała zmiana, duży zysk dla server-to-server.
 5. **`releases.ts` backend → V2** (14 handlerów) + odpowiedniki w `UnisourceV2Client`.
 6. **`UnisourceV2Client.admin.*`** (backend już V2, 10 endpointów).
 7. **`superadmin.ts` backend → V2** (18 handlerów). Internal, nie wymaga SDK.
-8. **Frontend `api.ts`** — migracja na `UnisourceV2Client`. Dopiero po krokach 2-3.
-9. **Cleanup**: usunąć `client.v2.*` namespace z `UnisourceClient` (breaking, major bump).
-10. **Cleanup**: zmienić nazwę `v2/files.legacy.ts` → scalić z `v2/files.ts`.
+8. **Cleanup**: scalić `v2/files.legacy.ts` z `v2/files.ts`.
+
+**Poza zakresem**: migracja frontendu/integratorów na `UnisourceV2Client`, jakiekolwiek zmiany w `UnisourceClient` (legacy) wykraczające poza maintenance, merge `beta` → `main` przed osiągnięciem stabilności i kompletności V2.
 
 ---
 
-## Definicja "skończonej migracji V2"
+## Definicja "skończonej refaktoryzacji V2"
+
+Zakres: backend + SDK na branchu `beta`. **Konsumenci (frontend, integratorzy) nie są w zakresie** — `UnisourceClient` (legacy) na `main` zostaje stable. Dopiero po spełnieniu wszystkich poniższych punktów V2 jest kandydatem do produkcyjnego wykorzystania:
 
 - [ ] Wszystkie route'y backendu używają V2Error / V2 helpers — **brak własnych `validationErrorHook`**.
 - [ ] `UnisourceV2Client` pokrywa wszystkie publiczne endpointy (poza `superadmin/*` i czysto wewnętrznymi).
-- [ ] Frontend `api.ts` używa wyłącznie `UnisourceV2Client`.
-- [ ] `UnisourceClient` (legacy) wycofany lub mocno odchudzony — namespace `v2.*` usunięty.
 - [ ] Spójny error envelope + spójny success envelope (rozwiązany problem bulk).
 - [ ] API-key auth path obsługiwany w transport SDK.
 - [ ] Wszystkie kody błędów typowane przez enum `V2ErrorCode` w SDK.
+- [ ] `v2/files.legacy.ts` scalony z `v2/files.ts`.
