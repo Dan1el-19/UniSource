@@ -19,6 +19,8 @@ export const V2_ERROR_CODES = [
   'conflict',
   'bad_gateway',
   'gone',
+  'file_too_large',
+  'quota_exceeded',
 ] as const
 
 export type V2ErrorCode = typeof V2_ERROR_CODES[number]
