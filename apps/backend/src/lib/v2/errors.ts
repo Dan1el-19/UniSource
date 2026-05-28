@@ -1,17 +1,7 @@
 import type { Context } from 'hono'
+import type { V2ErrorCode } from './error-codes'
 
-export type V2ErrorCode =
-  | 'validation_error'
-  | 'cursor_invalid'
-  | 'search_too_long'
-  | 'unauthorized'
-  | 'forbidden'
-  | 'not_found'
-  | 'rate_limited'
-  | 'internal_error'
-  | 'conflict'
-  | 'bad_gateway'
-  | 'gone'
+export type { V2ErrorCode }
 
 export class V2Error extends Error {
   constructor(
