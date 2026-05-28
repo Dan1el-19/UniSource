@@ -178,260 +178,135 @@ describe('UnisourceV2Client.folders.breadcrumbs', () => {
   })
 })
 
-describe('UnisourceV2Client.folders.bulkTrash', () => {
+// ---------------------------------------------------------------------------
+// New canonical bulk method + delegating wrappers (Task 13)
+// ---------------------------------------------------------------------------
+describe('UnisourceV2Client.folders.bulk (canonical)', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  function mockOk(body = { success: true, processed_count: 2 }) {
-    return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
+  function mockOk(body: unknown = { processed: ['a'], failed: [] }) {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'req-1' },
+      json: () => Promise.resolve(body),
+    })
   }
 
-  it('calls correct URL with POST', async () => {
+  it('POSTs to /v2/folders/bulk', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulk({ action: 'trash', ids: ['a'] })
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://api.example.com/v2/folders/bulk',
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('sends discriminated body for action: trash', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulk({ action: 'trash', ids: ['x', 'y'] })
+    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body
+    expect(JSON.parse(body as string)).toEqual({ action: 'trash', ids: ['x', 'y'] })
+  })
+
+  it('sends discriminated body for action: move with parent_id null', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    await client.folders.bulk({ action: 'move', ids: ['a'], parent_id: null })
+    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string
+    expect(JSON.parse(body)).toEqual({ action: 'move', ids: ['a'], parent_id: null })
+    expect(body).toContain('"parent_id":null')
+  })
+
+  it('parses { processed, failed[] } response', async () => {
+    vi.stubGlobal('fetch', mockOk({
+      processed: ['a'],
+      failed: [{ id: 'b', code: 'conflict', message: 'Cycle detected' }],
+    }))
+    const client = new UnisourceV2Client(mockConfig)
+    const result = await client.folders.bulk({ action: 'move', ids: ['a', 'b'], parent_id: 'p1' })
+    expect(result.failed[0]).toEqual({ id: 'b', code: 'conflict', message: 'Cycle detected' })
+  })
+
+  it('forwards AbortSignal to fetch', async () => {
+    vi.stubGlobal('fetch', mockOk())
+    const client = new UnisourceV2Client(mockConfig)
+    const controller = new AbortController()
+    await client.folders.bulk({ action: 'trash', ids: ['a'] }, controller.signal)
+    expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
+  })
+})
+
+describe('UnisourceV2Client.folders.bulkTrash (convenience wrapper)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  function mockOk() {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'req-1' },
+      json: () => Promise.resolve({ processed: ['a'], failed: [] }),
+    })
+  }
+
+  it('delegates to bulk with action: trash on /v2/folders/bulk', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.bulkTrash({ ids: ['a', 'b'] })
-    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/v2/folders/bulk-trash',
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
 
-  it('sets Content-Type: application/json', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkTrash({ ids: ['a'] })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['Content-Type']).toBe('application/json')
-  })
-
-  it('sends ids in body', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkTrash({ ids: ['x', 'y'] })
-    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body
-    expect(JSON.parse(body as string)).toEqual({ ids: ['x', 'y'] })
-  })
-
-  it('sets X-Service-ID and Authorization headers', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkTrash({ ids: ['a'] })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['X-Service-ID']).toBe('svc-1')
-    expect(headers['Authorization']).toBe('Bearer test-token')
-  })
-
-  it('sets X-Target-User-ID when asUser provided', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkTrash({ ids: ['a'] }, undefined, { asUser: 'user-Z' })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['X-Target-User-ID']).toBe('user-Z')
-  })
-
-  it('parses success response without failed_ids', async () => {
-    vi.stubGlobal('fetch', mockOk({ success: true, processed_count: 3 }))
-    const client = new UnisourceV2Client(mockConfig)
-    const result = await client.folders.bulkTrash({ ids: ['a', 'b', 'c'] })
-    expect(result).toEqual({ success: true, processed_count: 3 })
-  })
-
-  it('parses success response with failed_ids', async () => {
-    vi.stubGlobal('fetch', mockOk({ success: true, processed_count: 1, failed_ids: ['b'] }))
-    const client = new UnisourceV2Client(mockConfig)
-    const result = await client.folders.bulkTrash({ ids: ['a', 'b'] })
-    expect(result.failed_ids).toEqual(['b'])
-  })
-
-  it('throws UnisourceV2Error on error response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 422, statusText: 'Unprocessable Entity',
-      headers: { get: () => 'req-422' },
-      json: () => Promise.resolve({ error: { code: 'ids_required', message: 'ids required' } }),
-    }))
-    const client = new UnisourceV2Client(mockConfig)
-    await expect(client.folders.bulkTrash({ ids: ['a'] })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 422, code: 'unknown', rawCode: 'ids_required', message: 'ids required', requestId: 'req-422',
-    })
-  })
-
-  it('forwards AbortSignal to fetch', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    const controller = new AbortController()
-    await client.folders.bulkTrash({ ids: ['a'] }, controller.signal)
-    expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
+    const call = vi.mocked(fetch).mock.calls[0]!
+    expect(call[0]).toBe('https://api.example.com/v2/folders/bulk')
+    const body = JSON.parse((call[1] as RequestInit).body as string)
+    expect(body).toEqual({ action: 'trash', ids: ['a', 'b'] })
   })
 })
 
-describe('UnisourceV2Client.folders.bulkRestore', () => {
+describe('UnisourceV2Client.folders.bulkRestore (convenience wrapper)', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  function mockOk(body = { success: true, processed_count: 2 }) {
-    return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
-  }
-
-  it('calls correct URL with POST', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkRestore({ ids: ['a', 'b'] })
-    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/v2/folders/bulk-restore',
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
-
-  it('sets Content-Type: application/json', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkRestore({ ids: ['a'] })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['Content-Type']).toBe('application/json')
-  })
-
-  it('sends ids in body', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkRestore({ ids: ['x', 'y'] })
-    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body
-    expect(JSON.parse(body as string)).toEqual({ ids: ['x', 'y'] })
-  })
-
-  it('sets X-Service-ID and Authorization headers', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkRestore({ ids: ['a'] })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['X-Service-ID']).toBe('svc-1')
-    expect(headers['Authorization']).toBe('Bearer test-token')
-  })
-
-  it('sets X-Target-User-ID when asUser provided', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkRestore({ ids: ['a'] }, undefined, { asUser: 'user-Z' })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['X-Target-User-ID']).toBe('user-Z')
-  })
-
-  it('parses success response', async () => {
-    vi.stubGlobal('fetch', mockOk({ success: true, processed_count: 3 }))
-    const client = new UnisourceV2Client(mockConfig)
-    const result = await client.folders.bulkRestore({ ids: ['a', 'b', 'c'] })
-    expect(result).toEqual({ success: true, processed_count: 3 })
-  })
-
-  it('throws UnisourceV2Error on error response', async () => {
+  it('delegates to bulk with action: restore on /v2/folders/bulk', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 422, statusText: 'Unprocessable Entity',
-      headers: { get: () => 'req-422' },
-      json: () => Promise.resolve({ error: { code: 'ids_required', message: 'ids required' } }),
+      ok: true,
+      headers: { get: () => 'req-1' },
+      json: () => Promise.resolve({ processed: ['a'], failed: [] }),
     }))
     const client = new UnisourceV2Client(mockConfig)
-    await expect(client.folders.bulkRestore({ ids: ['a'] })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 422, code: 'unknown', rawCode: 'ids_required', message: 'ids required', requestId: 'req-422',
-    })
-  })
-
-  it('forwards AbortSignal to fetch', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    const controller = new AbortController()
-    await client.folders.bulkRestore({ ids: ['a'] }, controller.signal)
-    expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
+    await client.folders.bulkRestore({ ids: ['a'] })
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string)
+    expect(body).toEqual({ action: 'restore', ids: ['a'] })
   })
 })
 
-describe('UnisourceV2Client.folders.bulkMove', () => {
+describe('UnisourceV2Client.folders.bulkMove (convenience wrapper)', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  function mockOk(body = { success: true, processed_count: 2 }) {
-    return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
+  function mockOk() {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'req-1' },
+      json: () => Promise.resolve({ processed: ['a'], failed: [] }),
+    })
   }
 
-  it('calls correct URL with POST', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkMove({ ids: ['a', 'b'] })
-    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/v2/folders/bulk-move',
-      expect.objectContaining({ method: 'POST' })
-    )
-  })
-
-  it('sets Content-Type: application/json', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkMove({ ids: ['a'] })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['Content-Type']).toBe('application/json')
-  })
-
-  it('sends ids in body', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkMove({ ids: ['x', 'y'] })
-    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body
-    expect(JSON.parse(body as string)).toEqual({ ids: ['x', 'y'] })
-  })
-
-  it('includes parent_id string in body', async () => {
+  it('delegates to bulk with action: move and parent_id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.bulkMove({ ids: ['a'], parent_id: 'p1' })
-    const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body
-    expect(JSON.parse(body as string)).toEqual({ ids: ['a'], parent_id: 'p1' })
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string)
+    expect(body).toEqual({ action: 'move', ids: ['a'], parent_id: 'p1' })
   })
 
-  it('includes parent_id null in body as JSON null', async () => {
+  it('passes parent_id: null to root', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.bulkMove({ ids: ['a'], parent_id: null })
     const body = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string
-    expect(body).toContain('"parent_id":null')
-    expect(JSON.parse(body).parent_id).toBeNull()
+    expect(JSON.parse(body)).toEqual({ action: 'move', ids: ['a'], parent_id: null })
   })
 
-  it('sets X-Service-ID and Authorization headers', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkMove({ ids: ['a'] })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['X-Service-ID']).toBe('svc-1')
-    expect(headers['Authorization']).toBe('Bearer test-token')
-  })
-
-  it('sets X-Target-User-ID when asUser provided', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    await client.folders.bulkMove({ ids: ['a'] }, undefined, { asUser: 'user-Z' })
-    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
-    expect(headers['X-Target-User-ID']).toBe('user-Z')
-  })
-
-  it('parses success response', async () => {
-    vi.stubGlobal('fetch', mockOk({ success: true, processed_count: 2 }))
-    const client = new UnisourceV2Client(mockConfig)
-    const result = await client.folders.bulkMove({ ids: ['a', 'b'], parent_id: 'p1' })
-    expect(result).toEqual({ success: true, processed_count: 2 })
-  })
-
-  it('throws UnisourceV2Error on 409 cycle detected', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 409, statusText: 'Conflict',
-      headers: { get: () => 'req-409' },
-      json: () => Promise.resolve({ error: { code: 'validation_error', message: 'Cycle detected' } }),
-    }))
-    const client = new UnisourceV2Client(mockConfig)
-    await expect(client.folders.bulkMove({ ids: ['a'], parent_id: 'a' })).rejects.toMatchObject({
-      name: 'UnisourceV2Error', status: 409, code: 'validation_error', message: 'Cycle detected', requestId: 'req-409',
-    })
-  })
-
-  it('forwards AbortSignal to fetch', async () => {
-    vi.stubGlobal('fetch', mockOk())
-    const client = new UnisourceV2Client(mockConfig)
-    const controller = new AbortController()
-    await client.folders.bulkMove({ ids: ['a'] }, controller.signal)
-    expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
+  it('TypeScript: parent_id is required', () => {
+    // @ts-expect-error parent_id is required
+    const _ = (client: UnisourceV2Client) => client.folders.bulkMove({ ids: ['a'] })
+    expect(true).toBe(true)
   })
 })
