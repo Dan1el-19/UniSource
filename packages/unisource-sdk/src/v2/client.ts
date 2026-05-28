@@ -3,6 +3,7 @@ import { createAppResource } from './resources/app'
 import { createFilesResource } from './resources/files'
 import { createFoldersResource } from './resources/folders'
 import { createMainStorageResource } from './resources/main-storage'
+import { createPublicResource } from './resources/public'
 import { createShareLinksResource } from './resources/share-links'
 import { createSharesResource } from './resources/shares'
 import { createUserFilesResource } from './resources/user-files'
@@ -34,6 +35,7 @@ export class UnisourceV2Client {
   readonly folders: ReturnType<typeof createFoldersResource>
   readonly mainStorage: ReturnType<typeof createMainStorageResource>
   readonly userFiles: ReturnType<typeof createUserFilesResource>
+  readonly public: ReturnType<typeof createPublicResource>
 
   constructor(config: UnisourceV2ClientConfig) {
     if (config.apiKey && config.getToken) {
@@ -58,5 +60,6 @@ export class UnisourceV2Client {
     this.folders = createFoldersResource(request)
     this.mainStorage = createMainStorageResource(request)
     this.userFiles = createUserFilesResource(request)
+    this.public = createPublicResource(request, config.baseUrl)
   }
 }
