@@ -82,7 +82,8 @@ export function createV2Request(config: UnisourceV2ClientConfig): V2Request {
       throw new UnisourceV2Error(
         body.error?.message ?? response.statusText,
         response.status,
-        body.error?.code ?? 'unknown',
+        // Temporary cast — replaced with proper narrowing in Task 3 (transport rewrite).
+        (body.error?.code ?? 'unknown') as 'unknown',
         requestId,
         body.error?.details
       )
