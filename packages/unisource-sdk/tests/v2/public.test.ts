@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { UnisourceV2Client } from '../../src/v2/client'
 import {
   publicShareLinkResponseSchema,
+  publicUnlockResponseSchema,
 } from '../../src/v2/public-schemas'
 
 const validUnlockedResponse = {
@@ -153,6 +154,124 @@ describe('UnisourceV2Client.public.getShareLink', () => {
   })
 })
 
+describe('UnisourceV2Client.public.unlockShareLink', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('calls POST /public/:slug/unlock with password body', async () => {
+    vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    await client.public.unlockShareLink('abc', { password: 'p@ss' })
+    const call = vi.mocked(fetch).mock.calls[0]!
+    expect(call[0]).toBe('https://api.example.com/public/abc/unlock')
+    expect((call[1] as RequestInit).method).toBe('POST')
+    expect((call[1] as RequestInit).body).toBe(JSON.stringify({ password: 'p@ss' }))
+  })
+
+  it('URL-encodes slug', async () => {
+    vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    await client.public.unlockShareLink('my slug/x', { password: 'pw' })
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://api.example.com/public/my%20slug%2Fx/unlock',
+      expect.anything()
+    )
+  })
+
+  it('does NOT send Authorization even when getToken is configured', async () => {
+    vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      getToken: () => 'jwt_token',
+      silentBeta: true,
+    })
+    await client.public.unlockShareLink('abc', { password: 'pw' })
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['Authorization']).toBeUndefined()
+  })
+
+  it('does NOT send Authorization even when apiKey is configured', async () => {
+    vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      apiKey: 'key_xxx',
+      silentBeta: true,
+    })
+    await client.public.unlockShareLink('abc', { password: 'pw' })
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['Authorization']).toBeUndefined()
+  })
+
+  it('sets Content-Type: application/json', async () => {
+    vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    await client.public.unlockShareLink('abc', { password: 'pw' })
+    const headers = (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).headers as Record<string, string>
+    expect(headers['Content-Type']).toBe('application/json')
+  })
+
+  it('parses unlocked response (always requires_password: false)', async () => {
+    vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    const result = await client.public.unlockShareLink('abc', { password: 'pw' })
+    expect(result.requires_password).toBe(false)
+    expect(result.file_id).toBe('f1')
+    expect(result.download_url).toContain('token=xyz')
+  })
+
+  it('throws UnisourceV2Error on 401 (incorrect password)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { get: () => 'req-pub-2' },
+      json: () => Promise.resolve({ error: { code: 'unauthorized', message: 'Incorrect password' } }),
+    }))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    await expect(
+      client.public.unlockShareLink('abc', { password: 'wrong' })
+    ).rejects.toMatchObject({
+      name: 'UnisourceV2Error',
+      status: 401,
+      code: 'unauthorized',
+      requestId: 'req-pub-2',
+    })
+  })
+
+  it('forwards AbortSignal to fetch', async () => {
+    vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    const controller = new AbortController()
+    await client.public.unlockShareLink('abc', { password: 'pw' }, controller.signal)
+    expect((vi.mocked(fetch).mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal)
+  })
+})
+
 describe('public-schemas: discriminated union round-trips', () => {
   it('publicShareLinkResponseSchema accepts the unlocked variant', () => {
     const parsed = publicShareLinkResponseSchema.parse(validUnlockedResponse)
@@ -162,5 +281,9 @@ describe('public-schemas: discriminated union round-trips', () => {
   it('publicShareLinkResponseSchema accepts the locked variant', () => {
     const parsed = publicShareLinkResponseSchema.parse(validLockedResponse)
     expect(parsed.requires_password).toBe(true)
+  })
+
+  it('publicUnlockResponseSchema rejects locked-shape (must always be unlocked)', () => {
+    expect(() => publicUnlockResponseSchema.parse(validLockedResponse)).toThrow()
   })
 })
