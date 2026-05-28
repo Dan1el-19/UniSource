@@ -1,4 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import type { BulkResult, BulkItemResult } from './fileRecords';
+import { partitionBulkResults } from './fileRecords';
 
 export interface FolderRecord {
   id: string;
@@ -273,22 +275,42 @@ export async function bulkTrashFolders(
   ids: string[],
   userId: string,
   serviceId: string
-): Promise<string[]> {
-  if (ids.length === 0) return [];
+): Promise<BulkResult> {
+  if (ids.length === 0) return { processed: [], failed: [] };
   const now = Math.floor(Date.now() / 1000);
 
-  const stmts = ids.map(id => db.prepare(
-    `UPDATE folders
-     SET is_trashed = 1, trashed_at = ?, updated_at = ?
-     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
-  ).bind(now, now, id, userId, serviceId));
+  const probeStmts = ids.map(id => db.prepare(
+    `SELECT id, is_trashed FROM folders WHERE id = ? AND user_id = ? AND service_id = ?`
+  ).bind(id, userId, serviceId));
+  const probeResults = await db.batch<{ id: string; is_trashed: number }>(probeStmts);
 
-  const results = await db.batch(stmts);
-  const successIds: string[] = [];
-  results.forEach((r, idx) => {
-    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
+  const items: BulkItemResult[] = [];
+  const toTrash: string[] = [];
+  ids.forEach((id, idx) => {
+    const row = probeResults[idx].results[0];
+    if (!row) {
+      items.push({ id, ok: false, code: 'not_found', message: 'Folder not found' });
+    } else if (row.is_trashed === 1) {
+      items.push({ id, ok: false, code: 'conflict', message: 'Folder already in trash' });
+    } else {
+      toTrash.push(id);
+    }
   });
-  return successIds;
+
+  if (toTrash.length > 0) {
+    const stmts = toTrash.map(id => db.prepare(
+      `UPDATE folders SET is_trashed = 1, trashed_at = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
+    ).bind(now, now, id, userId, serviceId));
+    const results = await db.batch(stmts);
+    results.forEach((r, idx) => {
+      const id = toTrash[idx];
+      if ((r.meta.changes ?? 0) > 0) items.push({ id, ok: true });
+      else items.push({ id, ok: false, code: 'conflict', message: 'Folder state changed concurrently' });
+    });
+  }
+
+  return partitionBulkResults(items);
 }
 
 export async function bulkRestoreFolders(
@@ -296,22 +318,55 @@ export async function bulkRestoreFolders(
   ids: string[],
   userId: string,
   serviceId: string
-): Promise<string[]> {
-  if (ids.length === 0) return [];
+): Promise<BulkResult> {
+  if (ids.length === 0) return { processed: [], failed: [] };
   const now = Math.floor(Date.now() / 1000);
 
-  const stmts = ids.map(id => db.prepare(
-    `UPDATE folders
-     SET is_trashed = 0, trashed_at = NULL, updated_at = ?
-     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 1`
-  ).bind(now, id, userId, serviceId));
+  const probeStmts = ids.map(id => db.prepare(
+    `SELECT id, is_trashed, parent_id FROM folders WHERE id = ? AND user_id = ? AND service_id = ?`
+  ).bind(id, userId, serviceId));
+  const probeResults = await db.batch<{ id: string; is_trashed: number; parent_id: string | null }>(probeStmts);
 
-  const results = await db.batch(stmts);
-  const successIds: string[] = [];
-  results.forEach((r, idx) => {
-    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
-  });
-  return successIds;
+  const items: BulkItemResult[] = [];
+  const toRestore: string[] = [];
+  for (let idx = 0; idx < ids.length; idx++) {
+    const id = ids[idx];
+    const row = probeResults[idx].results[0];
+    if (!row) {
+      items.push({ id, ok: false, code: 'not_found', message: 'Folder not found' });
+      continue;
+    }
+    if (row.is_trashed === 0) {
+      items.push({ id, ok: false, code: 'conflict', message: 'Folder is not in trash' });
+      continue;
+    }
+    // api-v2-architecture.md §5: restore tylko gdy parent jest aktywny
+    if (row.parent_id) {
+      const parent = await db.prepare(
+        `SELECT is_trashed FROM folders WHERE id = ? AND user_id = ? AND service_id = ?`
+      ).bind(row.parent_id, userId, serviceId).first<{ is_trashed: number }>();
+      if (!parent || parent.is_trashed === 1) {
+        items.push({ id, ok: false, code: 'conflict', message: 'Parent folder is trashed or missing' });
+        continue;
+      }
+    }
+    toRestore.push(id);
+  }
+
+  if (toRestore.length > 0) {
+    const stmts = toRestore.map(id => db.prepare(
+      `UPDATE folders SET is_trashed = 0, trashed_at = NULL, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 1`
+    ).bind(now, id, userId, serviceId));
+    const results = await db.batch(stmts);
+    results.forEach((r, idx) => {
+      const id = toRestore[idx];
+      if ((r.meta.changes ?? 0) > 0) items.push({ id, ok: true });
+      else items.push({ id, ok: false, code: 'conflict', message: 'Folder state changed concurrently' });
+    });
+  }
+
+  return partitionBulkResults(items);
 }
 
 export async function bulkMoveFolders(
@@ -320,26 +375,60 @@ export async function bulkMoveFolders(
   userId: string,
   serviceId: string,
   newParentId: string | null
-): Promise<string[]> {
-  if (ids.length === 0) return [];
+): Promise<BulkResult> {
+  if (ids.length === 0) return { processed: [], failed: [] };
   const now = Math.floor(Date.now() / 1000);
 
-  // Basic cycle prevention would require CTEs in app code.
-  // We assume the caller or the DB handles tree loops (or we just allow it and let UI fail if they create cycles, though we should avoid cycles if possible.
-  // For simplicity we execute the update here. Real cycle checks can be complex in D1 batch.
+  const probeStmts = ids.map(id => db.prepare(
+    `SELECT id, is_trashed FROM folders WHERE id = ? AND user_id = ? AND service_id = ?`
+  ).bind(id, userId, serviceId));
+  const probeResults = await db.batch<{ id: string; is_trashed: number }>(probeStmts);
 
-  const stmts = ids.map(id => db.prepare(
-    `UPDATE folders
-     SET parent_id = ?, updated_at = ?
-     WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0 AND id != ?`
-  ).bind(newParentId, now, id, userId, serviceId, newParentId ?? ''));
+  const items: BulkItemResult[] = [];
+  const toMove: string[] = [];
 
-  const results = await db.batch(stmts);
-  const successIds: string[] = [];
-  results.forEach((r, idx) => {
-    if ((r.meta.changes ?? 0) > 0) successIds.push(ids[idx]);
-  });
-  return successIds;
+  for (let idx = 0; idx < ids.length; idx++) {
+    const id = ids[idx];
+    const row = probeResults[idx].results[0];
+
+    if (!row) {
+      items.push({ id, ok: false, code: 'not_found', message: 'Folder not found' });
+      continue;
+    }
+    if (row.is_trashed === 1) {
+      items.push({ id, ok: false, code: 'conflict', message: 'Cannot move a trashed folder' });
+      continue;
+    }
+    if (newParentId === id) {
+      items.push({ id, ok: false, code: 'conflict', message: 'Cannot move folder into itself' });
+      continue;
+    }
+    if (newParentId !== null) {
+      // Cycle check: target parent must NOT be a descendant of `id`.
+      const descendants = await getDescendantFolderIds(db, id, userId, serviceId);
+      const descendantsExcludingSelf = descendants.filter(d => d !== id);
+      if (descendantsExcludingSelf.includes(newParentId)) {
+        items.push({ id, ok: false, code: 'conflict', message: 'Cycle detected: target parent is a descendant of this folder' });
+        continue;
+      }
+    }
+    toMove.push(id);
+  }
+
+  if (toMove.length > 0) {
+    const stmts = toMove.map(id => db.prepare(
+      `UPDATE folders SET parent_id = ?, updated_at = ?
+       WHERE id = ? AND user_id = ? AND service_id = ? AND is_trashed = 0`
+    ).bind(newParentId, now, id, userId, serviceId));
+    const results = await db.batch(stmts);
+    results.forEach((r, idx) => {
+      const id = toMove[idx];
+      if ((r.meta.changes ?? 0) > 0) items.push({ id, ok: true });
+      else items.push({ id, ok: false, code: 'conflict', message: 'Folder state changed concurrently' });
+    });
+  }
+
+  return partitionBulkResults(items);
 }
 
 export async function updateFolder(

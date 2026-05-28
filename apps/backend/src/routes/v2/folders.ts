@@ -8,7 +8,6 @@ import { V2Error } from '../../lib/v2/errors'
 import { logV2Request } from '../../lib/v2/log'
 import { v2ValidationHook } from '../../lib/v2/zodHook'
 
-// ─── DB helpers ───────────────────────────────────────────────────────────
 import {
   getFolderBreadcrumbs,
   bulkTrashFolders,
@@ -18,11 +17,8 @@ import {
   getDescendantFolderIds,
   type FolderRecord,
 } from '../../db/folders'
-import {
-  bulkFolderIdsSchema,
-  bulkFolderMoveRequestSchema,
-  type BulkOperationResponse,
-} from '@unisource/sdk'
+import { trashFilesInFolders } from '../../db/fileRecords'
+import type { BulkResult } from '../../db/fileRecords'
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables }
 
@@ -41,6 +37,19 @@ const querySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(LIST_MAX_LIMIT).default(25),
 })
+
+const bulkIdsSchema = z.array(z.string().min(1)).min(1).max(100)
+
+const foldersBulkBodySchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('trash'), ids: bulkIdsSchema }),
+  z.object({ action: z.literal('restore'), ids: bulkIdsSchema }),
+  z.object({
+    action: z.literal('move'),
+    ids: bulkIdsSchema,
+    parent_id: z.string().min(1).nullable(),
+  }),
+  z.object({ action: z.literal('delete'), ids: bulkIdsSchema }),
+])
 
 const foldersV2 = new Hono<HonoEnv>()
 
@@ -109,69 +118,53 @@ foldersV2.get('/:id/breadcrumbs', zValidator('param', folderIdParamSchema, v2Val
   return c.json({ breadcrumbs: breadcrumbs.map(mapFolderV2) })
 })
 
-foldersV2.post('/bulk-trash', zValidator('json', bulkFolderIdsSchema, v2ValidationHook), async (c) => {
+foldersV2.post('/bulk', zValidator('json', foldersBulkBodySchema, v2ValidationHook), async (c) => {
+  const start = Date.now()
+  const body = c.req.valid('json')
   const userId = c.get('userId')
   const serviceId = c.get('serviceId')
-  const { ids } = c.req.valid('json')
-  const successIds = await bulkTrashFolders(c.env.APP_DB, ids, userId, serviceId)
-  const failedIds = ids.filter(id => !successIds.includes(id))
-  return c.json<BulkOperationResponse>({
-    success: successIds.length > 0,
-    processed_count: successIds.length,
-    failed_ids: failedIds.length > 0 ? failedIds : undefined,
-  })
-})
 
-foldersV2.post('/bulk-restore', zValidator('json', bulkFolderIdsSchema, v2ValidationHook), async (c) => {
-  const userId = c.get('userId')
-  const serviceId = c.get('serviceId')
-  const { ids } = c.req.valid('json')
-  const successIds = await bulkRestoreFolders(c.env.APP_DB, ids, userId, serviceId)
-  const failedIds = ids.filter(id => !successIds.includes(id))
-  return c.json<BulkOperationResponse>({
-    success: successIds.length > 0,
-    processed_count: successIds.length,
-    failed_ids: failedIds.length > 0 ? failedIds : undefined,
-  })
-})
+  let result: BulkResult
 
-foldersV2.post('/bulk-move', zValidator('json', bulkFolderMoveRequestSchema, v2ValidationHook), async (c) => {
-  const userId = c.get('userId')
-  const serviceId = c.get('serviceId')
-  const { ids, parent_id } = c.req.valid('json')
-
-  if (parent_id) {
-    const targetFolder = await getFolderForUser(c.env.APP_DB, parent_id, userId, serviceId)
-    if (!targetFolder) {
-      throw new V2Error('not_found', 404, 'Target folder not found')
+  if (body.action === 'trash') {
+    result = await bulkTrashFolders(c.env.APP_DB, body.ids, userId, serviceId)
+  } else if (body.action === 'restore') {
+    result = await bulkRestoreFolders(c.env.APP_DB, body.ids, userId, serviceId)
+  } else if (body.action === 'move') {
+    if (body.parent_id !== null) {
+      const target = await getFolderForUser(c.env.APP_DB, body.parent_id, userId, serviceId)
+      if (!target) throw new V2Error('not_found', 404, 'Target parent folder not found')
+      if (target.is_trashed) throw new V2Error('conflict', 409, 'Cannot move into a trashed folder')
     }
-    if (targetFolder.is_trashed) {
-      throw new V2Error('validation_error', 409, 'Cannot move folders into a trashed folder')
-    }
-    if (ids.includes(parent_id)) {
-      throw new V2Error('validation_error', 409, 'Cannot move a folder into itself')
-    }
-
-    // Cycle prevention: check if target is a descendant of any moved folder
-    for (const folderId of ids) {
-      const descendants = await getDescendantFolderIds(c.env.APP_DB, folderId, userId, serviceId)
-      if (descendants.includes(parent_id)) {
-        throw new V2Error(
-          'validation_error',
-          409,
-          'Cannot move a folder into its own descendant (cycle detected)'
-        )
+    result = await bulkMoveFolders(c.env.APP_DB, body.ids, userId, serviceId, body.parent_id)
+  } else {
+    // action === 'delete' — permanent delete subtree per id
+    const items: Array<{ id: string; ok: boolean; code?: 'not_found' | 'conflict'; message?: string }> = []
+    for (const id of body.ids) {
+      const descendants = await getDescendantFolderIds(c.env.APP_DB, id, userId, serviceId)
+      if (descendants.length === 0) {
+        items.push({ id, ok: false, code: 'not_found', message: 'Folder not found' })
+        continue
       }
+      // Mark files trashed (R2 cleanup via lifecycle), batch-delete folders
+      await trashFilesInFolders(c.env.APP_DB, descendants, userId, serviceId)
+      const stmts = descendants.map(fid => c.env.APP_DB.prepare(
+        'DELETE FROM folders WHERE id = ? AND user_id = ? AND service_id = ?'
+      ).bind(fid, userId, serviceId))
+      if (stmts.length > 0) await c.env.APP_DB.batch(stmts)
+      items.push({ id, ok: true })
+    }
+    result = {
+      processed: items.filter(i => i.ok).map(i => i.id),
+      failed: items.filter(i => !i.ok).map(i => ({
+        id: i.id, code: (i.code ?? 'not_found') as 'not_found' | 'conflict', message: i.message ?? '',
+      })),
     }
   }
 
-  const successIds = await bulkMoveFolders(c.env.APP_DB, ids, userId, serviceId, parent_id ?? null)
-  const failedIds = ids.filter(id => !successIds.includes(id))
-  return c.json<BulkOperationResponse>({
-    success: successIds.length > 0,
-    processed_count: successIds.length,
-    failed_ids: failedIds.length > 0 ? failedIds : undefined,
-  })
+  const response = c.json(result)
+  logV2Request(c, start, { route_family: 'v2.folders', operation: `bulk_${body.action}` })
+  return response
 })
 
 export default foldersV2
