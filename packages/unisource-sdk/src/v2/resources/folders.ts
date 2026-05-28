@@ -1,9 +1,20 @@
 import type {
   V2FolderBreadcrumbsResponse,
+  V2FolderCreateRequest,
+  V2FolderDeleteResponse,
+  V2FolderDetailResponse,
   V2FolderListQuery,
   V2FolderListResponse,
+  V2FolderRestoreResponse,
+  V2FolderUpdateRequest,
 } from '../folders'
-import { v2FolderBreadcrumbsResponseSchema, v2FolderListResponseSchema } from '../folders'
+import {
+  v2FolderBreadcrumbsResponseSchema,
+  v2FolderDeleteResponseSchema,
+  v2FolderDetailResponseSchema,
+  v2FolderListResponseSchema,
+  v2FolderRestoreResponseSchema,
+} from '../folders'
 import type { V2BulkResponse } from '../bulk-schemas'
 import { v2BulkResponseSchema } from '../bulk-schemas'
 import type { V2Request } from '../transport'
@@ -80,5 +91,88 @@ export function createFoldersResource(request: V2Request) {
       options?: { asUser?: string }
     ): Promise<V2BulkResponse> =>
       bulk({ action: 'move', ids: args.ids, parent_id: args.parent_id }, signal, options),
+
+    // ─── CRUD methods (mounted on the legacy /folders router) ─────────────────
+
+    /**
+     * Create a new folder.
+     * POST /folders → { folder }
+     */
+    create: (
+      body: V2FolderCreateRequest,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<V2FolderDetailResponse> =>
+      request('POST', '/folders', {
+        body,
+        signal,
+        asUser: options?.asUser,
+        parser: v2FolderDetailResponseSchema,
+      }),
+
+    /**
+     * Fetch a single folder by id.
+     * GET /folders/:id → { folder }
+     */
+    get: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<V2FolderDetailResponse> =>
+      request('GET', `/folders/${encodeURIComponent(id)}`, {
+        signal,
+        asUser: options?.asUser,
+        parser: v2FolderDetailResponseSchema,
+      }),
+
+    /**
+     * Update a folder (rename / change color).
+     * PATCH /folders/:id → { folder }
+     */
+    update: (
+      id: string,
+      body: V2FolderUpdateRequest,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<V2FolderDetailResponse> =>
+      request('PATCH', `/folders/${encodeURIComponent(id)}`, {
+        body,
+        signal,
+        asUser: options?.asUser,
+        parser: v2FolderDetailResponseSchema,
+      }),
+
+    /**
+     * Soft-delete (trash) a folder, or permanently delete the entire subtree.
+     * DELETE /folders/:id (?permanent=true)
+     * - Soft: { success, id, permanent: false }
+     * - Permanent: { success, id, permanent: true, folders_deleted }
+     */
+    delete: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string; permanent?: boolean }
+    ): Promise<V2FolderDeleteResponse> =>
+      request('DELETE', `/folders/${encodeURIComponent(id)}`, {
+        query: options?.permanent ? { permanent: true } : undefined,
+        signal,
+        asUser: options?.asUser,
+        parser: v2FolderDeleteResponseSchema,
+      }),
+
+    /**
+     * Restore a folder from trash.
+     * POST /folders/:id/restore → { success, id }
+     */
+    restore: (
+      id: string,
+      signal?: AbortSignal,
+      options?: { asUser?: string }
+    ): Promise<V2FolderRestoreResponse> =>
+      request('POST', `/folders/${encodeURIComponent(id)}/restore`, {
+        signal,
+        asUser: options?.asUser,
+        parser: v2FolderRestoreResponseSchema,
+      }),
   }
 }
