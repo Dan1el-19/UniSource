@@ -15,3 +15,41 @@ export type { V2BulkResponse, V2BulkFailure } from './bulk-schemas'
 export type { V2FoldersBulkRequest } from './resources/folders'
 export { UnisourceV2Client } from './client'
 export type { UnisourceV2ClientConfig } from './client'
+
+// Admin (V2 namespace)
+export {
+  adminServiceResponseSchema,
+  adminServiceUpdateRequestSchema,
+  adminServiceSettingsUpdateRequestSchema,
+  adminServiceUsageResponseSchema,
+  adminAuditLogQuerySchema,
+  adminAuditLogListResponseSchema,
+  adminUsersListQuerySchema,
+  adminUsersListResponseSchema,
+  adminUserResponseSchema,
+  adminUserUpdateRequestSchema,
+  adminUserPasswordResetRequestSchema,
+  adminPasswordResetResponseSchema,
+  adminUserRoleUpdateRequestSchema,
+  adminUserStorageLimitUpdateRequestSchema,
+  adminQuotaReconcileRequestSchema,
+  adminQuotaReconcileResponseSchema,
+} from './admin-schemas'
+export type {
+  AdminServiceResponse,
+  AdminServiceUpdateRequest,
+  AdminServiceSettingsUpdateRequest,
+  AdminServiceUsageResponse,
+  AdminAuditLogQuery,
+  AdminAuditLogListResponse,
+  AdminUsersListQuery,
+  AdminUsersListResponse,
+  AdminUserResponse,
+  AdminUserUpdateRequest,
+  AdminUserPasswordResetRequest,
+  AdminPasswordResetResponse,
+  AdminUserRoleUpdateRequest,
+  AdminUserStorageLimitUpdateRequest,
+  AdminQuotaReconcileRequest,
+  AdminQuotaReconcileResponse,
+} from './admin-schemas'
