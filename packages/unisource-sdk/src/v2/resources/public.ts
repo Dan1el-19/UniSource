@@ -11,7 +11,7 @@ import type { V2Request } from '../transport'
  * — Authorization header is intentionally omitted even when the parent client
  * is configured with `apiKey` or `getToken`.
  */
-export function createPublicResource(request: V2Request, _baseUrl: string) {
+export function createPublicResource(request: V2Request, baseUrl: string) {
   return {
     /**
      * GET /public/:slug — fetch share-link metadata.
@@ -44,5 +44,17 @@ export function createPublicResource(request: V2Request, _baseUrl: string) {
         auth: 'none',
         parser: publicUnlockResponseSchema,
       }),
+
+    /**
+     * Construct the redirect URL for `GET /public/:slug/download?token=...`
+     * — pure URL builder, does NOT perform a network request. The caller is
+     * expected to navigate the browser to this URL (the backend issues a 302
+     * to the real storage URL).
+     */
+    buildDownloadUrl: (slug: string, token: string): string => {
+      const url = new URL(`/public/${encodeURIComponent(slug)}/download`, baseUrl)
+      url.searchParams.set('token', token)
+      return url.toString()
+    },
   }
 }

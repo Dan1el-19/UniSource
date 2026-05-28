@@ -272,6 +272,80 @@ describe('UnisourceV2Client.public.unlockShareLink', () => {
   })
 })
 
+describe('UnisourceV2Client.public.buildDownloadUrl', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns URL with /public/:slug/download path and token query param', () => {
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    const url = client.public.buildDownloadUrl('abc', 'tok123')
+    expect(url).toBe('https://api.example.com/public/abc/download?token=tok123')
+  })
+
+  it('does NOT call fetch (pure URL builder)', () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    client.public.buildDownloadUrl('abc', 'tok')
+    expect(fetchSpy.mock.calls.length).toBe(0)
+  })
+
+  it('URL-encodes slug with special characters', () => {
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    const url = client.public.buildDownloadUrl('my slug/with?special=chars', 'tok')
+    expect(url).toBe(
+      'https://api.example.com/public/my%20slug%2Fwith%3Fspecial%3Dchars/download?token=tok'
+    )
+  })
+
+  it('encodes token containing dots and special chars (e.g. JWT-style)', () => {
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    const url = client.public.buildDownloadUrl('abc', 'jwt.with.dots')
+    // URL.searchParams.set encodes through standard application/x-www-form-urlencoded rules.
+    // Dots are NOT reserved in the URL spec, so they should round-trip as-is.
+    const parsed = new URL(url)
+    expect(parsed.searchParams.get('token')).toBe('jwt.with.dots')
+  })
+
+  it('encodes special characters in token (=, &, +)', () => {
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    const url = client.public.buildDownloadUrl('abc', 'a=b&c+d')
+    const parsed = new URL(url)
+    expect(parsed.searchParams.get('token')).toBe('a=b&c+d')
+  })
+
+  it('respects baseUrl with a path prefix', () => {
+    const client = new UnisourceV2Client({
+      baseUrl: 'https://api.example.com',
+      serviceId: 'svc',
+      silentBeta: true,
+    })
+    const url = client.public.buildDownloadUrl('slug', 'tok')
+    const parsed = new URL(url)
+    expect(parsed.host).toBe('api.example.com')
+    expect(parsed.pathname).toBe('/public/slug/download')
+  })
+})
+
 describe('public-schemas: discriminated union round-trips', () => {
   it('publicShareLinkResponseSchema accepts the unlocked variant', () => {
     const parsed = publicShareLinkResponseSchema.parse(validUnlockedResponse)
