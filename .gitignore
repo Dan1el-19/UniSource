@@ -79,8 +79,6 @@ wrangler.generated.jsonc
 npm-debug.log*
 
 .claude/
-apps/backend/CLAUDE.md
-docs/
 
 # Git worktrees
 .worktrees/
