@@ -26,6 +26,9 @@ import {
   listUploadedParts,
   signUploadPart,
 } from '../services/r2';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -35,22 +38,6 @@ const RELEASES_DEFAULT_LIMIT = 25;
 const RELEASES_MAX_LIMIT = 100;
 
 const releases = new Hono<HonoEnv>();
-
-function validationErrorHook(
-  result: {
-    success: boolean;
-    error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> };
-  },
-  c: { json: (value: unknown, status?: number) => Response }
-) {
-  if (result.success) return;
-  const firstIssue = result.error?.issues[0];
-  const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : '';
-  return c.json(
-    { error: 'Bad Request', message: `${issuePath}${firstIssue?.message ?? 'Validation failed'}` },
-    400
-  );
-}
 
 const releaseIdSchema = z.string().trim().min(1).max(128);
 const releaseNameSchema = z.string().trim().min(1).max(256);
@@ -140,7 +127,7 @@ const multipartAbortBodySchema = z.object({
   upload_id: releaseIdSchema,
 });
 
-releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validationErrorHook), async (c) => {
+releases.post('/upload/init', zValidator('json', uploadInitBodySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const userId = c.get('userId');
 
@@ -180,7 +167,7 @@ releases.post('/upload/init', zValidator('json', uploadInitBodySchema, validatio
   );
 });
 
-releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, validationErrorHook), async (c) => {
+releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const { release_id, size } = c.req.valid('json');
   const release = await getRelease(c.env.APP_DB, release_id, service.id);
@@ -213,7 +200,7 @@ releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, v
   return c.json({ success: true, release_id, status: 'completed' });
 });
 
-releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, validationErrorHook), async (c) => {
+releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const { release_id } = c.req.valid('json');
   const release = await getRelease(c.env.APP_DB, release_id, service.id);
@@ -269,7 +256,7 @@ async function getOwnedMultipartRelease(
  */
 releases.post(
   '/upload/multipart/create',
-  zValidator('json', multipartCreateBodySchema, validationErrorHook),
+  zValidator('json', multipartCreateBodySchema, v2ValidationHook),
   async (c) => {
     const service = c.get('service')!;
     const userId = c.get('userId');
@@ -334,7 +321,7 @@ releases.post(
  */
 releases.get(
   '/upload/multipart/sign-part',
-  zValidator('query', multipartSignPartQuerySchema, validationErrorHook),
+  zValidator('query', multipartSignPartQuerySchema, v2ValidationHook),
   async (c) => {
     const { upload_id, part_number } = c.req.valid('query');
     const service = c.get('service')!;
@@ -369,7 +356,7 @@ releases.get(
  */
 releases.get(
   '/upload/multipart/list-parts',
-  zValidator('query', multipartListPartsQuerySchema, validationErrorHook),
+  zValidator('query', multipartListPartsQuerySchema, v2ValidationHook),
   async (c) => {
     const { upload_id } = c.req.valid('query');
     const service = c.get('service')!;
@@ -399,7 +386,7 @@ releases.get(
  */
 releases.post(
   '/upload/multipart/complete',
-  zValidator('json', multipartCompleteBodySchema, validationErrorHook),
+  zValidator('json', multipartCompleteBodySchema, v2ValidationHook),
   async (c) => {
     const { upload_id, parts } = c.req.valid('json');
     const service = c.get('service')!;
@@ -462,7 +449,7 @@ releases.post(
  */
 releases.delete(
   '/upload/multipart/abort',
-  zValidator('json', multipartAbortBodySchema, validationErrorHook),
+  zValidator('json', multipartAbortBodySchema, v2ValidationHook),
   async (c) => {
     const { upload_id } = c.req.valid('json');
     const service = c.get('service')!;
@@ -502,7 +489,7 @@ releases.get('/latest', async (c) => {
   return c.json(release);
 });
 
-releases.get('/', zValidator('query', listQuerySchema, validationErrorHook), async (c) => {
+releases.get('/', zValidator('query', listQuerySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const query = c.req.valid('query');
   const result = await listReleases(c.env.APP_DB, service.id, {
@@ -521,7 +508,7 @@ releases.get('/:id', async (c) => {
   return c.json(release);
 });
 
-releases.patch('/:id', zValidator('json', updateBodySchema, validationErrorHook), async (c) => {
+releases.patch('/:id', zValidator('json', updateBodySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const updated = await updateRelease(c.env.APP_DB, c.req.param('id'), service.id, c.req.valid('json'));
   if (!updated) {
@@ -547,7 +534,7 @@ releases.delete('/:id', async (c) => {
   return c.json({ success: true, release_id: releaseId });
 });
 
-releases.post('/sync', zValidator('json', syncBodySchema, validationErrorHook), async (c) => {
+releases.post('/sync', zValidator('json', syncBodySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const userId = c.get('userId');
   const body = c.req.valid('json');

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { V2Error, errorResponse } from '../src/lib/v2/errors';
 
 vi.mock('../src/db/releases', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/db/releases')>();
@@ -51,6 +52,8 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'defaul
     c.set('userId', userId as WorkerVariables['userId']);
     c.set('authType', 'apikey' as WorkerVariables['authType']);
     c.set('isAdmin', isAdmin as WorkerVariables['isAdmin']);
+    c.set('serviceId', serviceId as WorkerVariables['serviceId']);
+    c.set('requestId', 'req-test');
     c.set('service', {
       id: serviceId,
       name: serviceId,
@@ -64,6 +67,10 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'defaul
       created_at: 0,
     } as WorkerVariables['service']);
     await next();
+  });
+  app.onError((err, c) => {
+    if (err instanceof V2Error) return errorResponse(c, err);
+    throw err;
   });
   app.route('/releases', releasesRouter);
   return app;
@@ -199,6 +206,9 @@ describe('POST /releases/upload/init', () => {
       relEnv
     );
     expect(res.status).toBe(400);
+    const body = await res.json() as { error: { code: string; request_id: string } };
+    expect(body.error.code).toBe('validation_error');
+    expect(body.error.request_id).toBe('req-test');
   });
 });
 
