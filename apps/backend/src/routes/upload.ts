@@ -629,21 +629,21 @@ upload.get(
 /**
  * R2 Multipart — List uploaded parts (ListPartsCommand) for resume support.
  */
+const MULTIPART_LIST_PARTS_LIMIT = 1000;
+
 upload.get(
   '/r2/multipart/list-parts',
-  zValidator('query', multipartListPartsQuerySchema, validationErrorHook),
+  zValidator('query', multipartListPartsQuerySchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const { upload_id } = c.req.valid('query');
 
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {
       if (result.error === 'not_found') {
-        return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
+        throw new V2Error('not_found', 404, 'Upload record not found');
       }
-      return c.json(
-        { error: 'Conflict', message: 'Upload is not a multipart R2 upload' },
-        409
-      );
+      throw new V2Error('conflict', 409, 'Upload is not a multipart R2 upload');
     }
 
     const { record } = result;
@@ -655,7 +655,15 @@ upload.get(
       record.r2_upload_id!
     );
 
-    return c.json<MultipartListPartsResponse>({ parts });
+    const response = c.json({
+      items: parts,
+      page: {
+        limit: MULTIPART_LIST_PARTS_LIMIT,
+        next_cursor: null as string | null,
+      },
+    });
+    logV2Request(c, start, { route_family: 'upload', operation: 'multipart_list_parts' });
+    return response;
   }
 );
 

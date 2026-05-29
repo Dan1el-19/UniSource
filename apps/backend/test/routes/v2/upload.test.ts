@@ -375,3 +375,18 @@ describe('GET /upload/r2/multipart/sign-part — V2 envelope', () => {
     expect(body.error.code).toBe('validation_error')
   })
 })
+
+describe('GET /upload/r2/multipart/list-parts — V2 envelope', () => {
+  it('returns 404 not_found when upload record missing', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/multipart/list-parts?upload_id=nonexistent', {
+        method: 'GET',
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('not_found')
+  })
+})
