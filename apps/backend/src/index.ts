@@ -5,7 +5,9 @@ import { authMiddleware } from './middleware/auth';
 import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
-import { V2Error, errorResponse } from './lib/v2/errors';
+import { V2Error, errorResponse, statusToV2Code, statusToLegacyLabel } from './lib/v2/errors';
+import { v2RequestIdGuard } from './middleware/v2RequestIdGuard';
+import { wantsV2 } from './lib/v2/negotiation';
 import { foreignKeysMiddleware } from './middleware/foreignKeys';
 import { rateLimit } from './middleware/ratelimit';
 import upload from './routes/upload';
@@ -33,7 +35,7 @@ app.use('*', async (c, next) => {
       if (!origin) return null;
       return allowed.includes(origin) ? origin : null;
     },
-    allowHeaders: ['Authorization', 'Content-Type', 'X-Service-ID', 'X-Appwrite-JWT', 'X-Target-User-ID'],
+    allowHeaders: ['Authorization', 'Content-Type', 'X-Service-ID', 'X-Appwrite-JWT', 'X-Target-User-ID', 'X-Unisource-API-Version'],
     allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     maxAge: 600
@@ -43,6 +45,34 @@ app.use('*', async (c, next) => {
 app.use('*', loggerMiddleware);
 // B6: enforce SQLite foreign keys for ON DELETE SET NULL etc.
 app.use('*', foreignKeysMiddleware);
+app.use('*', v2RequestIdGuard);
+
+// V2 response wrapper — transforms legacy error responses to V2 envelopes
+// when V2 is requested (always for /v2/* and /superadmin/*, opt-in via header for shared routes)
+app.use('*', async (c, next) => {
+  await next();
+  if (!wantsV2(c)) return;
+
+  const rawRes = c.res;
+  if (!rawRes || rawRes.ok) return;
+
+  const contentType = rawRes.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) return;
+
+  const body = await rawRes.clone().json().catch(() => null) as { error?: unknown; message?: string } | null;
+
+  // Heuristic: if body.error is already an object (V2 envelope with code/message/request_id),
+  // skip the transformation. Legacy errors have body.error as a string.
+  if (body && typeof body === 'object' && body.error && typeof body.error === 'object') {
+    return;
+  }
+
+  const code = statusToV2Code(rawRes.status);
+  const message: string | undefined =
+    body?.message ?? (typeof body?.error === 'string' ? body.error : undefined);
+
+  c.res = errorResponse(c, new V2Error(code, rawRes.status, message));
+});
 
 // Health check — no auth required
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Math.floor(Date.now() / 1000) }));
@@ -132,12 +162,23 @@ app.route('/superadmin', superadminRouter);
 
 app.onError((err, c) => {
   if (err instanceof V2Error) {
-    return errorResponse(c, err);
+    if (wantsV2(c)) return errorResponse(c, err);
+
+    const legacyLabel = statusToLegacyLabel(err.status);
+
+    return c.json({ error: legacyLabel, message: err.message }, err.status as never);
   }
+
   if (err instanceof HTTPException) {
+    if (wantsV2(c)) {
+      const code = statusToV2Code(err.status);
+      return errorResponse(c, new V2Error(code, err.status, err.message));
+    }
     return err.getResponse();
   }
+
   logError('Unhandled Application Error', err, c as any);
+  if (wantsV2(c)) return errorResponse(c, new V2Error('internal_error', 500, 'Internal server error'));
   return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
 });
 

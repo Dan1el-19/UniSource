@@ -25,6 +25,7 @@ import { deactivateShareLinksForFile } from '../db/shareLinks';
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -64,7 +65,8 @@ userFiles.get('/:id', zValidator('param', idParam, v2ValidationHook), async (c) 
   const record = await getFileRecordForUser(c.env.APP_DB, id, userId, serviceId);
   if (!record) throw new V2Error('not_found', 404, 'File not found');
 
-  const response = c.json({ file: mapFileRecord(record) });
+  const mapped = mapFileRecord(record);
+  const response = c.json(itemOrLegacy(c, mapped, { file: mapped }));
   logV2Request(c, start, { route_family: 'userFiles', operation: 'get' });
   return response;
 });
@@ -84,7 +86,8 @@ userFiles.patch(
     const file = await updateFileRecord(c.env.APP_DB, id, userId, serviceId, { filename });
     if (!file) throw new V2Error('not_found', 404, 'File not found');
 
-    const response = c.json({ file: mapFileRecord(file) });
+    const mapped = mapFileRecord(file);
+    const response = c.json(itemOrLegacy(c, mapped, { file: mapped }));
     logV2Request(c, start, { route_family: 'userFiles', operation: 'update' });
     return response;
   }
@@ -132,7 +135,10 @@ userFiles.delete('/:id', zValidator('param', idParam, v2ValidationHook), async (
       })
     );
 
-    const permResponse = c.json({ success: true, id, permanent: true });
+    const permResponse = c.json(actionOrLegacy(c,
+      { id, deleted: true, permanent: true },
+      { success: true, id, permanent: true }
+    ));
     logV2Request(c, start, { route_family: 'userFiles', operation: 'delete' });
     return permResponse;
   }
@@ -140,7 +146,10 @@ userFiles.delete('/:id', zValidator('param', idParam, v2ValidationHook), async (
   const trashed = await trashFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!trashed) throw new V2Error('conflict', 409, 'File already in trash');
 
-  const response = c.json({ success: true, id, permanent: false });
+  const response = c.json(actionOrLegacy(c,
+    { id, deleted: false, permanent: false },
+    { success: true, id, permanent: false }
+  ));
   logV2Request(c, start, { route_family: 'userFiles', operation: 'delete' });
   return response;
 });
@@ -155,7 +164,10 @@ userFiles.post('/:id/restore', zValidator('param', idParam, v2ValidationHook), a
   const restored = await restoreFileRecord(c.env.APP_DB, id, userId, serviceId);
   if (!restored) throw new V2Error('not_found', 404, 'File not found or not in trash');
 
-  const response = c.json({ success: true, id });
+  const response = c.json(actionOrLegacy(c,
+    { id, restored: true },
+    { success: true, id }
+  ));
   logV2Request(c, start, { route_family: 'userFiles', operation: 'restore' });
   return response;
 });
@@ -183,12 +195,13 @@ userFiles.get('/:id/download-url', zValidator('param', idParam, v2ValidationHook
       c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       c.header('Pragma', 'no-cache');
       c.header('Expires', '0');
-      const r2Response = c.json({
+      const data = {
         upload_id: record.id,
         destination: record.storage_destination,
         download_url: presigned_url,
         expires_at,
-      });
+      };
+      const r2Response = c.json(itemOrLegacy(c, data, data));
       logV2Request(c, start, { route_family: 'userFiles', operation: 'download_url' });
       return r2Response;
     } catch {
@@ -205,12 +218,13 @@ userFiles.get('/:id/download-url', zValidator('param', idParam, v2ValidationHook
     c.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     c.header('Pragma', 'no-cache');
     c.header('Expires', '0');
-    const appwriteResponse = c.json({
+    const data = {
       upload_id: record.id,
       destination: record.storage_destination,
       download_url: downloadUrl,
       expires_at: token.expires_at,
-    });
+    };
+    const appwriteResponse = c.json(itemOrLegacy(c, data, data));
     logV2Request(c, start, { route_family: 'userFiles', operation: 'download_url' });
     return appwriteResponse;
   } catch {

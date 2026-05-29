@@ -21,6 +21,7 @@ import { generateSlug, isValidSlug } from '../utils/slug';
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { itemOrLegacy, actionOrLegacy, unpaginatedListOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -59,8 +60,8 @@ sharesRouter.get('/', async (c) => {
   const start = Date.now();
   const userId = c.get('userId');
   const serviceId = c.get('serviceId');
-  const links = await listShareLinksForUser(c.env.APP_DB, userId, serviceId);
-  const response = c.json({ items: links.map(mapShareLink) });
+  const items = (await listShareLinksForUser(c.env.APP_DB, userId, serviceId)).map(mapShareLink);
+  const response = c.json(unpaginatedListOrLegacy(c, items, { items }));
   logV2Request(c, start, { route_family: 'shares', operation: 'list' });
   return response;
 });
@@ -106,7 +107,8 @@ sharesRouter.post(
       max_downloads: body.max_downloads ?? null,
     });
 
-    const response = c.json({ link: mapShareLink(link) }, 201);
+    const mapped = mapShareLink(link);
+    const response = c.json(itemOrLegacy(c, mapped, { link: mapped }), 201);
     logV2Request(c, start, { route_family: 'shares', operation: 'create' });
     return response;
   }
@@ -124,7 +126,8 @@ sharesRouter.get('/:id', zValidator('param', idParam, v2ValidationHook), async (
     throw new V2Error('not_found', 404, 'Share link not found');
   }
 
-  const response = c.json({ link: mapShareLink(link) });
+  const mapped = mapShareLink(link);
+  const response = c.json(itemOrLegacy(c, mapped, { link: mapped }));
   logV2Request(c, start, { route_family: 'shares', operation: 'get' });
   return response;
 });
@@ -139,7 +142,10 @@ sharesRouter.delete('/:id', zValidator('param', idParam, v2ValidationHook), asyn
   const deleted = await deleteShareLink(c.env.APP_DB, id, userId, serviceId);
   if (!deleted) throw new V2Error('not_found', 404, 'Share link not found');
 
-  const response = c.json({ success: true as const, id });
+  const response = c.json(actionOrLegacy(c,
+    { id, deleted: true },
+    { success: true as const, id }
+  ));
   logV2Request(c, start, { route_family: 'shares', operation: 'delete' });
   return response;
 });

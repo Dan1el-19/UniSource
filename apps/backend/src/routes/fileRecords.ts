@@ -25,6 +25,7 @@ import { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT, fileMoveRequestSchema } from '@un
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -92,11 +93,10 @@ myFiles.get('/', zValidator('query', listQuerySchema, v2ValidationHook), async (
       cursor: query.cursor,
     });
 
-    const response = c.json({
-      items: result.items.map(mapFileRecord),
-      next_cursor: result.next_cursor,
+    const response = c.json(listOrLegacy(c, result.items.map(mapFileRecord), {
       limit: query.limit,
-    });
+      next_cursor: result.next_cursor,
+    }));
     logV2Request(c, start, { route_family: 'fileRecords', operation: 'list' });
     return response;
   } catch (err) {
@@ -123,11 +123,10 @@ myFiles.get('/trash', zValidator('query', listQuerySchema, v2ValidationHook), as
       cursor: query.cursor,
     });
 
-    const response = c.json({
-      items: result.items.map(mapFileRecord),
-      next_cursor: result.next_cursor,
+    const response = c.json(listOrLegacy(c, result.items.map(mapFileRecord), {
       limit: query.limit,
-    });
+      next_cursor: result.next_cursor,
+    }));
     logV2Request(c, start, { route_family: 'fileRecords', operation: 'list_trash' });
     return response;
   } catch (err) {
@@ -150,7 +149,8 @@ myFiles.get('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook), as
     throw new V2Error('not_found', 404, 'File not found');
   }
 
-  const response = c.json({ file: mapFileRecord(record) });
+  const file = mapFileRecord(record);
+  const response = c.json(itemOrLegacy(c, file, { file }));
   logV2Request(c, start, { route_family: 'fileRecords', operation: 'get' });
   return response;
 });
@@ -183,12 +183,13 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, v2Valida
       c.header('Pragma', 'no-cache');
       c.header('Expires', '0');
 
-      const response = c.json({
+      const data = {
         upload_id: record.id,
         destination: record.storage_destination,
         download_url: presigned_url,
         expires_at,
-      });
+      };
+      const response = c.json(itemOrLegacy(c, data, data));
       logV2Request(c, start, { route_family: 'fileRecords', operation: 'download_url' });
       return response;
     } catch {
@@ -209,12 +210,13 @@ myFiles.get('/:id/download-url', zValidator('param', fileIdParamSchema, v2Valida
     c.header('Pragma', 'no-cache');
     c.header('Expires', '0');
 
-    const response = c.json({
+    const data = {
       upload_id: record.id,
       destination: record.storage_destination,
       download_url: downloadUrl,
       expires_at: token.expires_at,
-    });
+    };
+    const response = c.json(itemOrLegacy(c, data, data));
     logV2Request(c, start, { route_family: 'fileRecords', operation: 'download_url' });
     return response;
   } catch {
@@ -271,7 +273,10 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook),
       })
     );
 
-    const response = c.json({ success: true, id, permanent: true });
+    const response = c.json(actionOrLegacy(c,
+      { id, deleted: true, permanent: true },
+      { success: true, id, permanent: true }
+    ));
     logV2Request(c, start, { route_family: 'fileRecords', operation: 'delete' });
     return response;
   }
@@ -281,7 +286,10 @@ myFiles.delete('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook),
     throw new V2Error('conflict', 409, 'File already in trash');
   }
 
-  const response = c.json({ success: true, id, permanent: false });
+  const response = c.json(actionOrLegacy(c,
+    { id, deleted: false, permanent: false },
+    { success: true, id, permanent: false }
+  ));
   logV2Request(c, start, { route_family: 'fileRecords', operation: 'delete' });
   return response;
 });
@@ -298,7 +306,10 @@ myFiles.post('/:id/restore', zValidator('param', fileIdParamSchema, v2Validation
     throw new V2Error('not_found', 404, 'File not found or not in trash');
   }
 
-  const response = c.json({ success: true, id });
+  const response = c.json(actionOrLegacy(c,
+    { id, restored: true },
+    { success: true, id }
+  ));
   logV2Request(c, start, { route_family: 'fileRecords', operation: 'restore' });
   return response;
 });
@@ -324,7 +335,8 @@ myFiles.patch(
       throw new V2Error('not_found', 404, 'File not found');
     }
 
-    const response = c.json({ file: mapFileRecord(file) });
+    const mapped = mapFileRecord(file);
+    const response = c.json(itemOrLegacy(c, mapped, { file: mapped }));
     logV2Request(c, start, { route_family: 'fileRecords', operation: 'rename' });
     return response;
   }
@@ -358,7 +370,10 @@ myFiles.patch(
       throw new V2Error('not_found', 404, 'File not found or in trash');
     }
 
-    const response = c.json({ success: true, id, folder_id: folder_id ?? null });
+    const response = c.json(actionOrLegacy(c,
+      { id, success: true, folder_id: folder_id ?? null },
+      { success: true, id, folder_id: folder_id ?? null }
+    ));
     logV2Request(c, start, { route_family: 'fileRecords', operation: 'move' });
     return response;
   }

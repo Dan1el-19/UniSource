@@ -15,6 +15,7 @@ import {
 import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
 import { buildStorageKey, buildAppwriteStorageKey } from '../services/storageKeys';
 import { canWriteMainStorage } from '../middleware/mainStorageGuard';
+import { requireApiKeyPermission } from '../middleware/apiKeyPermissions';
 import { V2Error } from '../lib/v2/errors';
 import { v2ValidationHook } from '../lib/v2/zodHook';
 import { logV2Request } from '../lib/v2/log';
@@ -54,6 +55,8 @@ upload.post(
     const serviceId = c.get('serviceId');
     const userId = c.get('userId');
     const service = c.get('service')!;
+
+    requireApiKeyPermission(c, 'upload');
 
     if (body.is_main_storage === true && !canWriteMainStorage(c)) {
       throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
@@ -158,6 +161,8 @@ upload.post(
     const userId = c.get('userId');
     const service = c.get('service')!;
 
+    requireApiKeyPermission(c, 'upload');
+
     if (body.is_main_storage === true && !canWriteMainStorage(c)) {
       throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
     }
@@ -257,13 +262,13 @@ upload.post(
     const userId = c.get('userId');
     const serviceId = c.get('serviceId');
 
-    // Bug #15: use getUploadForUser to prevent cross-user upload hijacking
-    // API key path (userId='system') uses getUpload without owner restriction
+    requireApiKeyPermission(c, 'upload');
+
     const record = userId === 'system'
       ? await getUpload(c.env.APP_DB, upload_id)
       : await getUploadForUser(c.env.APP_DB, upload_id, userId, serviceId);
 
-    if (!record) {
+    if (!record || record.service_id !== serviceId) {
       throw new V2Error('not_found', 404, 'Upload record not found');
     }
 
@@ -390,6 +395,51 @@ upload.post(
   }
 );
 
+/**
+ * Mark upload as failed — fails the upload and releases quota
+ */
+upload.post(
+  '/fail',
+  zValidator('json', uploadLifecycleRequestSchema, v2ValidationHook),
+  async (c) => {
+    const start = Date.now();
+    const { upload_id } = c.req.valid('json');
+    const userId = c.get('userId');
+    const serviceId = c.get('serviceId');
+
+    requireApiKeyPermission(c, 'upload');
+
+    const record = userId === 'system'
+      ? await getUpload(c.env.APP_DB, upload_id)
+      : await getUploadForUser(c.env.APP_DB, upload_id, userId, serviceId);
+
+    if (!record || record.service_id !== serviceId) {
+      throw new V2Error('not_found', 404, 'Upload record not found');
+    }
+
+    const updated = await failUpload(c.env.APP_DB, upload_id);
+    if (updated) {
+      if (record.is_main_storage === 1) {
+        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
+      } else {
+        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+      }
+    }
+
+    const response = c.json({
+      item: {
+        id: upload_id,
+        status: 'failed' as const,
+        upload_type: (record.upload_type ?? 'single') as 'single' | 'multipart',
+        file_id: null,
+      },
+    });
+
+    logV2Request(c, start, { route_family: 'upload', operation: 'fail' });
+    return response;
+  }
+);
+
 // ─── Multipart Upload endpoints ───────────────────────────────────────────────
 
 const MULTIPART_PART_URL_TTL_SECONDS = 900; // 15 min per part presigned URL
@@ -440,6 +490,8 @@ upload.post(
     const serviceId = c.get('serviceId');
     const userId = c.get('userId');
     const service = c.get('service')!;
+
+    requireApiKeyPermission(c, 'upload');
 
     if (body.is_main_storage === true && !canWriteMainStorage(c)) {
       throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
@@ -553,6 +605,8 @@ upload.get(
     const start = Date.now();
     const { upload_id, part_number } = c.req.valid('query');
 
+    requireApiKeyPermission(c, 'upload');
+
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {
       if (result.error === 'not_found') {
@@ -599,6 +653,8 @@ upload.get(
     const start = Date.now();
     const { upload_id } = c.req.valid('query');
 
+    requireApiKeyPermission(c, 'upload');
+
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {
       if (result.error === 'not_found') {
@@ -640,6 +696,8 @@ upload.post(
     const { upload_id, parts } = body;
     const serviceId = c.get('serviceId');
     const userId = c.get('userId');
+
+    requireApiKeyPermission(c, 'upload');
 
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {
@@ -793,6 +851,8 @@ upload.delete(
     const start = Date.now();
     const body = c.req.valid('json');
     const { upload_id } = body;
+
+    requireApiKeyPermission(c, 'upload');
 
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {

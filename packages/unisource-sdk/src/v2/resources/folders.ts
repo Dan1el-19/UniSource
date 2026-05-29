@@ -96,7 +96,7 @@ export function createFoldersResource(request: V2Request) {
 
     /**
      * Create a new folder.
-     * POST /folders → { folder }
+     * POST /folders → { item }
      */
     create: (
       body: V2FolderCreateRequest,
@@ -112,7 +112,7 @@ export function createFoldersResource(request: V2Request) {
 
     /**
      * Fetch a single folder by id.
-     * GET /folders/:id → { folder }
+     * GET /folders/:id → { item }
      */
     get: (
       id: string,
@@ -127,7 +127,7 @@ export function createFoldersResource(request: V2Request) {
 
     /**
      * Update a folder (rename / change color).
-     * PATCH /folders/:id → { folder }
+     * PATCH /folders/:id → { item }
      */
     update: (
       id: string,

@@ -13,6 +13,7 @@ import {
 } from '../../db/fileRecords'
 import { getFolderForUser } from '../../db/folders'
 import { V2Error } from '../../lib/v2/errors'
+import { getV2StorageUserId } from '../../lib/v2/principal'
 import { logV2Request } from '../../lib/v2/log'
 import { v2ValidationHook } from '../../lib/v2/zodHook'
 
@@ -51,7 +52,7 @@ const filesV2 = new Hono<V2Env>()
 filesV2.get('/', zValidator('query', querySchema, v2ValidationHook), async (c) => {
   const start = Date.now()
   const query = c.req.valid('query')
-  const userId = c.get('userId')
+  const userId = getV2StorageUserId(c, 'files:read')
   const serviceId = c.get('serviceId')
   const hmacSecret = c.env.CURSOR_HMAC_SECRET
 
@@ -82,7 +83,10 @@ filesV2.get('/', zValidator('query', querySchema, v2ValidationHook), async (c) =
 filesV2.post('/bulk', zValidator('json', filesBulkBodySchema, v2ValidationHook), async (c) => {
   const start = Date.now()
   const body = c.req.valid('json')
-  const userId = c.get('userId')
+  const requiredPermission = body.action === 'delete' || body.action === 'trash' || body.action === 'restore'
+    ? 'files:delete'
+    : 'files:read'
+  const userId = getV2StorageUserId(c, requiredPermission)
   const serviceId = c.get('serviceId')
 
   let result: BulkResult

@@ -11,7 +11,6 @@ import {
   v2ReleaseMultipartListPartsResponseSchema,
   v2ReleaseMultipartCompleteRequestSchema,
   v2ReleaseMultipartAbortRequestSchema,
-  v2ReleaseListQuerySchema,
   v2ReleaseListResponseSchema,
   v2ReleaseResourceResponseSchema,
   v2ReleaseUpdateRequestSchema,

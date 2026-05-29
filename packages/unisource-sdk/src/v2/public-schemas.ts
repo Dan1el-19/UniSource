@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { nonEmptyString, positiveInt, unixTimestamp } from '../primitives'
+import { v2ResourceResponseSchema } from './schemas'
 
 /**
  * Response shape from `GET /public/:slug` and `POST /public/:slug/unlock`
@@ -43,9 +44,13 @@ export type PublicShareLinkLockedResponse = z.infer<
  * Discriminated union for `GET /public/:slug` responses.
  * Use the `requires_password` flag to narrow.
  */
-export const publicShareLinkResponseSchema = z.discriminatedUnion('requires_password', [
+const publicShareLinkDataSchema = z.discriminatedUnion('requires_password', [
   publicShareLinkUnlockedResponseSchema,
   publicShareLinkLockedResponseSchema,
+])
+export const publicShareLinkResponseSchema = z.union([
+  v2ResourceResponseSchema(publicShareLinkDataSchema),
+  publicShareLinkDataSchema,
 ])
 export type PublicShareLinkResponse = z.infer<typeof publicShareLinkResponseSchema>
 
@@ -53,8 +58,11 @@ export type PublicShareLinkResponse = z.infer<typeof publicShareLinkResponseSche
  * Response shape from `POST /public/:slug/unlock` — the link must be unlocked
  * after a successful password check, so this is always the "unlocked" shape.
  */
-export const publicUnlockResponseSchema = publicShareLinkUnlockedResponseSchema
-export type PublicUnlockResponse = PublicShareLinkUnlockedResponse
+export const publicUnlockResponseSchema = z.union([
+  v2ResourceResponseSchema(publicShareLinkUnlockedResponseSchema),
+  publicShareLinkUnlockedResponseSchema,
+])
+export type PublicUnlockResponse = z.infer<typeof publicUnlockResponseSchema>
 
 export const unlockShareLinkRequestSchema = z.object({
   password: z.string().min(1),

@@ -46,25 +46,41 @@ describe('default-backend worker', () => {
   }, TEST_TIMEOUT_MS)
 
   it('protects upload routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/upload/r2/init'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/upload/r2/init', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
   }, TEST_TIMEOUT_MS)
 
   it('protects files routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/files'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/files', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
   }, TEST_TIMEOUT_MS)
 
   it('protects folders routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/folders'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/folders', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
   }, TEST_TIMEOUT_MS)
 
   it('protects my-files routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/my-files'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/my-files', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
   }, TEST_TIMEOUT_MS)
@@ -76,7 +92,11 @@ describe('default-backend worker', () => {
       'http://localhost/admin/audit-log',
     ]
     for (const url of adminRoutes) {
-      const response = await workerExports.default.fetch(new Request(url))
+      const response = await workerExports.default.fetch(
+        new Request(url, {
+          headers: { 'X-Service-ID': 'default' },
+        })
+      )
       expect(response.status, `expected 401 for ${url}`).toBe(401)
       expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
     }
@@ -86,7 +106,10 @@ describe('default-backend worker', () => {
     const response = await workerExports.default.fetch(
       new Request('http://localhost/my-files/some-file-id', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-ID': 'default',
+        },
         body: JSON.stringify({ filename: 'new-name.pdf' }),
       })
     )

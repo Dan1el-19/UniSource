@@ -722,6 +722,12 @@ import { requireAdminMiddleware } from '../src/middleware/admin';
 describe('releases routes — admin enforcement', () => {
   it('returns 403 for non-admin JWT user', async () => {
     const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+    app.onError((err, c) => {
+      if (err instanceof V2Error) {
+        return errorResponse(c, err);
+      }
+      return c.text('Internal Server Error', 500);
+    });
     app.use('*', async (c, next) => {
       c.set('userId', 'user-123' as WorkerVariables['userId']);
       c.set('authType', 'jwt' as WorkerVariables['authType']);

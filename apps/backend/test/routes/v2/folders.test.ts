@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { applyD1Migrations, env } from 'cloudflare:test'
 import type { D1Migration } from '@cloudflare/vitest-pool-workers'
 import v2Router from '../../../src/routes/v2/index'
+import { v2RequestIdGuard } from '../../../src/middleware/v2RequestIdGuard'
 
 declare global {
   namespace Cloudflare {
@@ -38,8 +39,10 @@ function buildApp() {
     c.set('userId', USER_ID as WorkerVariables['userId'])
     c.set('serviceId', SERVICE_ID as WorkerVariables['serviceId'])
     c.set('authType', 'apikey' as WorkerVariables['authType'])
+    c.set('apiKeyPermissions', ['admin'])
     await next()
   })
+  app.use('*', v2RequestIdGuard)
   app.route('/v2', v2Router)
   return app
 }

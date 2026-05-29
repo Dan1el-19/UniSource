@@ -16,6 +16,7 @@ import { rateLimit } from '../middleware/ratelimit';
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { itemOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -103,13 +104,14 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
   }
 
   if (link.password_hash) {
-    const response = c.json({
+    const passwordData = {
       filename: file.filename,
       size: file.size,
       mime_type: file.mime_type,
       requires_password: true,
       link_name: link.name,
-    });
+    };
+    const response = c.json(itemOrLegacy(c, passwordData, passwordData));
     logV2Request(c, start, { route_family: 'public', operation: 'get_share_link' });
     return response;
   }
@@ -124,7 +126,7 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
     );
 
     c.header('Cache-Control', 'no-store');
-    const response = c.json({
+    const publicData = {
       file_id: file.id,
       filename: file.filename,
       size: file.size,
@@ -134,7 +136,8 @@ publicRouter.get('/:slug', rateLimit('public-read'), zValidator('param', slugPar
       url_expires_at,
       link_name: link.name,
       link_expires_at: link.expires_at,
-    });
+    };
+    const response = c.json(itemOrLegacy(c, publicData, publicData));
     logV2Request(c, start, { route_family: 'public', operation: 'get_share_link' });
     return response;
   } catch {
@@ -185,7 +188,7 @@ publicRouter.post(
       );
 
       c.header('Cache-Control', 'no-store');
-      const response = c.json({
+      const publicData = {
         file_id: file.id,
         filename: file.filename,
         size: file.size,
@@ -195,7 +198,8 @@ publicRouter.post(
         url_expires_at,
         link_name: link.name,
         link_expires_at: link.expires_at,
-      });
+      };
+      const response = c.json(itemOrLegacy(c, publicData, publicData));
       logV2Request(c, start, { route_family: 'public', operation: 'unlock' });
       return response;
     } catch {

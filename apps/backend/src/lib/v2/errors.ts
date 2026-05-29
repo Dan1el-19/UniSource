@@ -24,6 +24,26 @@ export interface V2ErrorBody {
   }
 }
 
+export function statusToV2Code(status: number): V2ErrorCode {
+  switch (status) {
+    case 401: return 'unauthorized'
+    case 403: return 'forbidden'
+    case 404: return 'not_found'
+    case 429: return 'rate_limited'
+    default: return 'internal_error'
+  }
+}
+
+export function statusToLegacyLabel(status: number): string {
+  switch (status) {
+    case 401: return 'Unauthorized'
+    case 403: return 'Forbidden'
+    case 404: return 'Not Found'
+    case 429: return 'Too Many Requests'
+    default: return status >= 500 ? 'Internal Server Error' : 'Bad Request'
+  }
+}
+
 export function errorResponse(c: Context, error: V2Error): Response {
   const body: V2ErrorBody = {
     error: {

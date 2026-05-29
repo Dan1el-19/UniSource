@@ -7,6 +7,7 @@ import type { FolderRowV2 } from '../../db/v2/folders'
 import { V2Error } from '../../lib/v2/errors'
 import { logV2Request } from '../../lib/v2/log'
 import { v2ValidationHook } from '../../lib/v2/zodHook'
+import { getV2StorageUserId } from '../../lib/v2/principal'
 
 import {
   getFolderBreadcrumbs,
@@ -56,7 +57,7 @@ const foldersV2 = new Hono<HonoEnv>()
 foldersV2.get('/', zValidator('query', querySchema, v2ValidationHook), async (c) => {
   const start = Date.now()
   const query = c.req.valid('query')
-  const userId = c.get('userId')
+  const userId = getV2StorageUserId(c, 'files:read')
   const serviceId = c.get('serviceId')
   const hmacSecret = c.env.CURSOR_HMAC_SECRET
 
@@ -105,7 +106,7 @@ function mapFolderV2(folder: FolderRecord): FolderRowV2 {
 }
 
 foldersV2.get('/:id/breadcrumbs', zValidator('param', folderIdParamSchema, v2ValidationHook), async (c) => {
-  const userId = c.get('userId')
+  const userId = getV2StorageUserId(c, 'files:read')
   const serviceId = c.get('serviceId')
   const { id } = c.req.valid('param')
 
@@ -121,7 +122,10 @@ foldersV2.get('/:id/breadcrumbs', zValidator('param', folderIdParamSchema, v2Val
 foldersV2.post('/bulk', zValidator('json', foldersBulkBodySchema, v2ValidationHook), async (c) => {
   const start = Date.now()
   const body = c.req.valid('json')
-  const userId = c.get('userId')
+  const requiredPermission = body.action === 'delete' || body.action === 'trash' || body.action === 'restore'
+    ? 'files:delete'
+    : 'files:read'
+  const userId = getV2StorageUserId(c, requiredPermission)
   const serviceId = c.get('serviceId')
 
   let result: BulkResult

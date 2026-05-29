@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { LIST_MAX_LIMIT } from '../primitives'
-import { v2ListResponseSchema } from './schemas'
+import { v2ListResponseSchema, v2ResourceResponseSchema } from './schemas'
 
 // ─── V2 Folder ──────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ export type V2Folder = z.infer<typeof v2FolderSchema>
 // ─── Query ──────────────────────────────────────────────────────────────────
 
 export const v2FolderListQuerySchema = z.object({
-  parent_id: z.string().optional(),
+  parent_id: z.string().nullable().optional(),
   search: z.string().max(100).optional(),
   trash: z.enum(['active', 'trashed', 'all']).optional(),
   sort_by: z.enum(['created_at', 'updated_at', 'name']).optional(),
@@ -54,9 +54,10 @@ export const v2FolderCreateRequestSchema = z.object({
 export type V2FolderCreateRequest = z.infer<typeof v2FolderCreateRequestSchema>
 
 /** Response body for POST /folders, GET /folders/:id, PATCH /folders/:id. */
-export const v2FolderDetailResponseSchema = z.object({
-  folder: v2FolderSchema,
-})
+export const v2FolderDetailResponseSchema = z.union([
+  v2ResourceResponseSchema(v2FolderSchema),
+  z.object({ folder: v2FolderSchema }),
+])
 export type V2FolderDetailResponse = z.infer<typeof v2FolderDetailResponseSchema>
 
 // ─── CRUD: Update ────────────────────────────────────────────────────────────
@@ -75,19 +76,27 @@ export type V2FolderUpdateRequest = z.infer<typeof v2FolderUpdateRequestSchema>
  * - Soft delete (default): { success, id, permanent: false }
  * - Permanent delete (?permanent=true): { success, id, permanent: true, folders_deleted }
  */
-export const v2FolderDeleteResponseSchema = z.object({
+const v2FolderDeleteActionSchema = z.object({
   success: z.literal(true),
   id: z.string(),
   permanent: z.boolean(),
   folders_deleted: z.number().int().nonnegative().optional(),
 })
+export const v2FolderDeleteResponseSchema = z.union([
+  v2ResourceResponseSchema(v2FolderDeleteActionSchema),
+  v2FolderDeleteActionSchema,
+])
 export type V2FolderDeleteResponse = z.infer<typeof v2FolderDeleteResponseSchema>
 
 // ─── CRUD: Restore ───────────────────────────────────────────────────────────
 
 /** Response body for POST /folders/:id/restore. */
-export const v2FolderRestoreResponseSchema = z.object({
+const v2FolderRestoreActionSchema = z.object({
   success: z.literal(true),
   id: z.string(),
 })
+export const v2FolderRestoreResponseSchema = z.union([
+  v2ResourceResponseSchema(v2FolderRestoreActionSchema),
+  v2FolderRestoreActionSchema,
+])
 export type V2FolderRestoreResponse = z.infer<typeof v2FolderRestoreResponseSchema>

@@ -52,9 +52,7 @@ jobs:
       - name: Publish to npm beta
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cd packages/unisource-sdk
-          npm publish --tag beta --provenance --access public
+        run: pnpm --filter @unisource/sdk publish --tag beta --provenance --access public --no-git-checks
 
       - name: Commit version bump and tag
         env:

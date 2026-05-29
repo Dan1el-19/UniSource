@@ -24,6 +24,7 @@ import {
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
 
 const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
 
@@ -100,11 +101,10 @@ files.get('/', zValidator('query', filesListQuerySchema, v2ValidationHook), asyn
 			service_id: serviceId,
 		});
 
-		const response = c.json({
-			items: result.items.map(toApiUpload),
-			next_cursor: result.next_cursor,
+		const response = c.json(listOrLegacy(c, result.items.map(toApiUpload), {
 			limit: query.limit,
-		});
+			next_cursor: result.next_cursor,
+		}));
 		logV2Request(c, start, { route_family: 'files', operation: 'list' });
 		return response;
 	} catch (error) {
@@ -126,7 +126,8 @@ files.get('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook), asyn
 		throw new V2Error('not_found', 404, 'File not found');
 	}
 
-	const response = c.json({ upload: toApiUpload(record) });
+	const upload = toApiUpload(record);
+	const response = c.json(itemOrLegacy(c, upload, { upload }));
 	logV2Request(c, start, { route_family: 'files', operation: 'get' });
 	return response;
 });
@@ -159,12 +160,13 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, v2Validati
 			c.header('Pragma', 'no-cache');
 			c.header('Expires', '0');
 
-			const response = c.json({
+			const data = {
 				upload_id: record.id,
 				destination: record.destination,
 				download_url: presigned_url,
 				expires_at,
-			});
+			};
+			const response = c.json(itemOrLegacy(c, data, data));
 			logV2Request(c, start, { route_family: 'files', operation: 'download_url' });
 			return response;
 		} catch {
@@ -191,12 +193,13 @@ files.get('/:id/download-url', zValidator('param', fileIdParamSchema, v2Validati
 		c.header('Pragma', 'no-cache');
 		c.header('Expires', '0');
 
-		const response = c.json({
+		const data = {
 			upload_id: record.id,
 			destination: record.destination,
 			download_url: downloadUrl,
 			expires_at: token.expires_at,
-		});
+		};
+		const response = c.json(itemOrLegacy(c, data, data));
 		logV2Request(c, start, { route_family: 'files', operation: 'download_url' });
 		return response;
 	} catch {
@@ -239,11 +242,10 @@ files.delete('/:id', zValidator('param', fileIdParamSchema, v2ValidationHook), a
 		throw new V2Error('bad_gateway', 502, 'Unable to delete file in upstream storage');
 	}
 
-	const response = c.json({
-		success: true,
-		id,
-		permanent: true,
-	});
+	const response = c.json(actionOrLegacy(c,
+		{ id, deleted: true, permanent: true },
+		{ success: true, id, permanent: true }
+	));
 	logV2Request(c, start, { route_family: 'files', operation: 'delete' });
 	return response;
 });

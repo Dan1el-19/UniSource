@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { V2Error, errorResponse } from '../src/lib/v2/errors';
 
 vi.mock('../src/db/services', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/db/services')>();
@@ -9,17 +10,21 @@ vi.mock('../src/db/services', async (importOriginal) => {
 import { requireRoleMiddleware } from '../src/middleware/requireRole';
 import { getServiceUser } from '../src/db/services';
 
-function buildRoleApp(allowedRoles: string[], userId: string, authType: 'appwrite' | 'apikey') {
+function buildRoleApp(allowedRoles: string[], userId: string, authType: 'appwrite' | 'apikey', isAdmin = false) {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
   app.use('*', async (c, next) => {
     c.set('userId', userId as WorkerVariables['userId']);
     c.set('serviceId', 'default' as WorkerVariables['serviceId']);
     c.set('authType', authType as WorkerVariables['authType']);
-    c.set('isAdmin', false as WorkerVariables['isAdmin']);
+    c.set('isAdmin', isAdmin as WorkerVariables['isAdmin']);
     await next();
   });
   app.use('*', requireRoleMiddleware(allowedRoles));
   app.get('/protected', (c) => c.json({ ok: true }));
+  app.onError((err, c) => {
+    if (err instanceof V2Error) return errorResponse(c, err);
+    throw err;
+  });
   return app;
 }
 
@@ -31,10 +36,16 @@ describe('requireRoleMiddleware', () => {
     vi.resetAllMocks();
   });
 
-  it('allows API key callers regardless of role', async () => {
-    const app = buildRoleApp(['plus', 'admin'], 'system', 'apikey');
+  it('allows API keys with admin permission', async () => {
+    const app = buildRoleApp(['plus', 'admin'], 'system', 'apikey', true);
     const res = await app.fetch(new Request('http://localhost/protected'), env);
     expect(res.status).toBe(200);
+  });
+
+  it('blocks API keys without admin permission', async () => {
+    const app = buildRoleApp(['plus', 'admin'], 'system', 'apikey');
+    const res = await app.fetch(new Request('http://localhost/protected'), env);
+    expect(res.status).toBe(403);
   });
 
   it('blocks user with insufficient role', async () => {

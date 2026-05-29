@@ -76,6 +76,8 @@ export function createV2Request(config: UnisourceV2ClientConfig): V2Request {
 
     const headers: Record<string, string> = {
       'X-Service-ID': config.serviceId,
+      'X-Unisource-API-Version': '2',
+      Accept: 'application/vnd.unisource.v2+json',
     }
     if (authHeader) headers['Authorization'] = authHeader
     if (options.asUser) headers['X-Target-User-ID'] = options.asUser

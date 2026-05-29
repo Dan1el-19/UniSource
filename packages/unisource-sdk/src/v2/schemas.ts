@@ -33,4 +33,10 @@ export const v2ErrorSchema = z.object({
   }),
 })
 
+export function v2ResourceResponseSchema<T extends z.ZodTypeAny>(itemSchema: T) {
+  return z.object({
+    item: itemSchema,
+  })
+}
+
 export const v2FilesListResponseSchema = v2ListResponseSchema(v2FileSchema)

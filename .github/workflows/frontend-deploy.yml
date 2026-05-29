@@ -49,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --config.link-workspace-packages=false
 
+      - name: Typecheck frontend
+        run: pnpm --filter ./apps/frontend typecheck
+
       - name: Build frontend
         run: pnpm --filter ./apps/frontend build
 

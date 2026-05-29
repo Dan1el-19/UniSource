@@ -1,11 +1,11 @@
 import { z } from 'zod'
+import { v2ListResponseSchema, v2ResourceResponseSchema } from './schemas'
 
 /**
  * Schemas for the `client.myFiles` resource — bound to the legacy
  * `/my-files` router (apps/backend/src/routes/fileRecords.ts).
  *
- * The response shape here is the V1-style flat envelope `{ items, next_cursor, limit }`
- * (NOT the V2 sub-API shape `{ items, page: { ... } }`).
+ * V2 clients opt into the shared-route V2 envelope `{ items, page }`.
  */
 
 // ─── File record (public projection — storage_key/bucket excluded) ──────────
@@ -40,11 +40,16 @@ export type V2MyFilesListQuery = z.infer<typeof v2MyFilesListQuerySchema>
 
 // ─── List / trash response (flat V1-style envelope) ────────────────────────
 
-export const v2MyFilesListResponseSchema = z.object({
+const v2MyFilesLegacyListResponseSchema = z.object({
   items: z.array(v2MyFileSchema),
   next_cursor: z.string().nullable(),
   limit: z.number().int().positive(),
 })
+
+export const v2MyFilesListResponseSchema = z.union([
+  v2ListResponseSchema(v2MyFileSchema),
+  v2MyFilesLegacyListResponseSchema,
+])
 
 export type V2MyFilesListResponse = z.infer<typeof v2MyFilesListResponseSchema>
 
@@ -66,10 +71,15 @@ export const v2MyFilesMoveRequestSchema = z.object({
 
 export type V2MyFilesMoveRequest = z.infer<typeof v2MyFilesMoveRequestSchema>
 
-export const v2MyFilesMoveResponseSchema = z.object({
+const v2MyFilesMoveActionSchema = z.object({
   success: z.literal(true),
   id: z.string(),
   folder_id: z.string().nullable(),
 })
+
+export const v2MyFilesMoveResponseSchema = z.union([
+  v2ResourceResponseSchema(v2MyFilesMoveActionSchema),
+  v2MyFilesMoveActionSchema,
+])
 
 export type V2MyFilesMoveResponse = z.infer<typeof v2MyFilesMoveResponseSchema>

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { describe, it, expect } from 'vitest';
+import { V2Error, errorResponse } from '../src/lib/v2/errors';
 import { adminPreviewMiddleware } from '../src/middleware/adminPreview';
 
 function buildPreviewApp(isAdmin: boolean) {
@@ -13,6 +14,10 @@ function buildPreviewApp(isAdmin: boolean) {
   });
   app.use('*', adminPreviewMiddleware);
   app.get('/test', (c) => c.json({ userId: c.get('userId'), actorId: c.get('actorId') }));
+  app.onError((err, c) => {
+    if (err instanceof V2Error) return errorResponse(c, err);
+    throw err;
+  });
   return app;
 }
 
@@ -59,6 +64,10 @@ describe('adminPreviewMiddleware', () => {
     });
     app.use('*', adminPreviewMiddleware);
     app.get('/test', (c) => c.json({ userId: c.get('userId') }));
+    app.onError((err, c) => {
+      if (err instanceof V2Error) return errorResponse(c, err);
+      throw err;
+    });
 
     const res = await app.fetch(
       new Request('http://localhost/test', { headers: { 'X-Target-User-ID': 'target-user' } }),

@@ -23,6 +23,7 @@ import {
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -99,7 +100,8 @@ folders.post('/', zValidator('json', folderCreateRequestSchema, v2ValidationHook
     color_tag: body.color_tag ?? null,
   });
 
-  const response = c.json({ folder: mapFolder(folder) }, 201);
+  const mapped = mapFolder(folder);
+  const response = c.json(itemOrLegacy(c, mapped, { folder: mapped }), 201);
   logV2Request(c, start, { route_family: 'folders', operation: 'create' });
   return response;
 });
@@ -121,11 +123,10 @@ folders.get('/', zValidator('query', listQuerySchema, v2ValidationHook), async (
       cursor: query.cursor,
     });
 
-    const response = c.json({
-      items: result.items.map(mapFolder),
-      next_cursor: result.next_cursor,
+    const response = c.json(listOrLegacy(c, result.items.map(mapFolder), {
       limit: query.limit,
-    });
+      next_cursor: result.next_cursor,
+    }));
     logV2Request(c, start, { route_family: 'folders', operation: 'list' });
     return response;
   } catch (err) {
@@ -148,7 +149,8 @@ folders.get('/:id', zValidator('param', folderIdParamSchema, v2ValidationHook), 
     throw new V2Error('not_found', 404, 'Folder not found');
   }
 
-  const response = c.json({ folder: mapFolder(folder) });
+  const mapped = mapFolder(folder);
+  const response = c.json(itemOrLegacy(c, mapped, { folder: mapped }));
   logV2Request(c, start, { route_family: 'folders', operation: 'get' });
   return response;
 });
@@ -174,7 +176,8 @@ folders.patch(
       throw new V2Error('not_found', 404, 'Folder not found or already trashed');
     }
 
-    const response = c.json({ folder: mapFolder(updated) });
+    const mapped = mapFolder(updated);
+    const response = c.json(itemOrLegacy(c, mapped, { folder: mapped }));
     logV2Request(c, start, { route_family: 'folders', operation: 'update' });
     return response;
   }
@@ -226,7 +229,10 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, v2ValidationHook
       })
     );
 
-    const response = c.json({ success: true, id, permanent: true, folders_deleted: descendantIds.length });
+    const response = c.json(actionOrLegacy(c,
+      { id, deleted: true, permanent: true, folders_deleted: descendantIds.length },
+      { success: true, id, permanent: true, folders_deleted: descendantIds.length }
+    ));
     logV2Request(c, start, { route_family: 'folders', operation: 'delete' });
     return response;
   }
@@ -236,7 +242,10 @@ folders.delete('/:id', zValidator('param', folderIdParamSchema, v2ValidationHook
     throw new V2Error('not_found', 404, 'Folder not found or already trashed');
   }
 
-  const response = c.json({ success: true, id, permanent: false });
+  const response = c.json(actionOrLegacy(c,
+    { id, deleted: false, permanent: false },
+    { success: true, id, permanent: false }
+  ));
   logV2Request(c, start, { route_family: 'folders', operation: 'delete' });
   return response;
 });
@@ -253,7 +262,10 @@ folders.post('/:id/restore', zValidator('param', folderIdParamSchema, v2Validati
     throw new V2Error('not_found', 404, 'Folder not found or not in trash');
   }
 
-  const response = c.json({ success: true, id });
+  const response = c.json(actionOrLegacy(c,
+    { id, restored: true },
+    { success: true, id }
+  ));
   logV2Request(c, start, { route_family: 'folders', operation: 'restore' });
   return response;
 });

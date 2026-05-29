@@ -34,6 +34,7 @@ function buildApp() {
     c.set('userId', USER_ID as WorkerVariables['userId'])
     c.set('serviceId', SERVICE_ID as WorkerVariables['serviceId'])
     c.set('authType', 'apikey' as WorkerVariables['authType'])
+    c.set('apiKeyPermissions', ['admin'])
     await next()
   })
   app.route('/v2', v2Router)

@@ -4,6 +4,7 @@ import { checkUserServiceAccess, getServiceDetails, type ServiceRecord } from '.
 import { DEFAULT_SERVICE_ID } from '../config/services';
 import { validateApiKeyByHash } from '../db/apiKeys';
 import { consumeRateLimit } from './ratelimit';
+import { V2Error } from '../lib/v2/errors';
 
 export type AuthRouteMode = 'user' | 'dual';
 
@@ -19,7 +20,8 @@ function getAuthRouteMode(pathname: string): AuthRouteMode {
     pathname.startsWith('/admin') ||
     pathname.startsWith('/main') ||
     pathname.startsWith('/releases') ||
-    pathname.startsWith('/app')
+    pathname.startsWith('/app') ||
+    pathname.startsWith('/v2')
   ) {
     return 'dual';
   }
@@ -120,13 +122,16 @@ export const authMiddleware = createMiddleware<{
     c.req.header('X-Appwrite-JWT') ?? null
   );
 
-  // Derive service from header — treat as hint, ALWAYS verify access below
+  // Derive service from header — strictly required
   const rawServiceId = c.req.header('X-Service-ID')?.trim().toLowerCase();
-  const serviceId = rawServiceId ?? DEFAULT_SERVICE_ID;
+  if (!rawServiceId) {
+    throw new V2Error('validation_error', 400, 'X-Service-ID header is required');
+  }
+  const serviceId = rawServiceId;
 
   const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
-    return c.json({ error: 'Bad Request', message: `Unknown service: ${serviceId}` }, 400);
+    throw new V2Error('validation_error', 400, `Unknown service: ${serviceId}`);
   }
   c.set('service', service);
 
@@ -143,7 +148,7 @@ export const authMiddleware = createMiddleware<{
       if (serviceId !== DEFAULT_SERVICE_ID) {
         const access = await checkUserServiceAccess(c.env.APP_DB, serviceId, authenticatedUser.userId);
         if (!access) {
-          return c.json({ error: 'Forbidden', message: 'Access to this service is not permitted' }, 403);
+          throw new V2Error('forbidden', 403, 'Access to this service is not permitted');
         }
         // Per-service role overrides Appwrite labels for non-default services.
         if (access.role === 'admin' || access.role === 'plus' || access.role === 'user') {
@@ -169,12 +174,9 @@ export const authMiddleware = createMiddleware<{
     if (routeMode === 'user') {
       const limit = await consumeRateLimit(c, 'auth-fail');
       if (!limit.allowed) {
-        return c.json(
-          { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
-          429
-        );
+        throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
       }
-      return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
+      throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
     }
   }
 
@@ -189,6 +191,8 @@ export const authMiddleware = createMiddleware<{
       c.set('authType', 'apikey');
       c.set('isAdmin', d1Key.permissions.includes('admin'));
       c.set('serviceRole', 'system');
+      c.set('apiKeyId', d1Key.id);
+      c.set('apiKeyPermissions', d1Key.permissions);
       return next();
     }
   }
@@ -200,11 +204,8 @@ export const authMiddleware = createMiddleware<{
   // success traffic — only failures count.
   const limit = await consumeRateLimit(c, 'auth-fail');
   if (!limit.allowed) {
-    return c.json(
-      { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
-      429
-    );
+    throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
   }
 
-  return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
+  throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
 });

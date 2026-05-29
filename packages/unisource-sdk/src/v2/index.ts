@@ -88,6 +88,18 @@ export {
   v2MultipartAbortResponseSchema,
 } from './upload-schemas'
 export type {
+  V2UploadR2InitRequest,
+  V2UploadR2InitResponse,
+  V2UploadAppwriteInitRequest,
+  V2UploadAppwriteInitResponse,
+  V2UploadCompleteRequest,
+  V2UploadLifecycleResponse,
+  V2MultipartCreateRequest,
+  V2MultipartCreateResponse,
+  V2MultipartSignPartQuery,
+  V2MultipartSignPartResponse,
+  V2MultipartListPartsResponse,
+  V2MultipartCompleteRequest,
   V2MultipartCompleteResponse,
   V2MultipartAbortRequest,
   V2MultipartAbortResponse,
@@ -137,3 +149,21 @@ export type {
   V2ReleaseSyncRequest,
   V2ReleaseSyncResponse,
 } from './release-schemas'
+
+// Admin files (V2 namespace)
+export {
+  v2AdminUploadSchema,
+  v2AdminFilesListQuerySchema,
+  v2AdminFilesListResponseSchema,
+  v2AdminFileResponseSchema,
+  v2AdminFileDownloadResponseSchema,
+  v2AdminFileDeleteResponseSchema,
+} from './resources/admin-files'
+export type {
+  V2AdminUpload,
+  V2AdminFilesListQuery,
+  V2AdminFilesListResponse,
+  V2AdminFileResponse,
+  V2AdminFileDownloadResponse,
+  V2AdminFileDeleteResponse,
+} from './resources/admin-files'

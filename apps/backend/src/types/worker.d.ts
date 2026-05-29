@@ -1,4 +1,5 @@
 import type { ServiceRecord } from '../db/services';
+import type { Permission } from '../db/apiKeys';
 
 declare global {
   interface WorkerVariables {
@@ -20,6 +21,10 @@ declare global {
     requestId?: string;
     /** CF Access user info, set by cfAccessMiddleware for superadmin routes. */
     cfAccessUser?: { email: string; sub: string };
+    /** ID of the API key used to authenticate this request. Set only for API-key authenticated requests. */
+    apiKeyId?: string;
+    /** Permissions of the API key used to authenticate this request. Set only for API-key authenticated requests. */
+    apiKeyPermissions?: Permission[];
   }
 }
 

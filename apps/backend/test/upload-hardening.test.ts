@@ -59,6 +59,7 @@ vi.mock('../src/db/services', async (importOriginal) => {
 import { generatePresignedPutUrl, headObject } from '../src/services/r2';
 import { getAppwriteFileMeta } from '../src/services/appwrite';
 import { createUpload, getUpload, failUpload, completeUpload, completeUploadAndCreateFile } from '../src/db/files';
+import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/services';
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
 import { createMainStorageFileRecord } from '../src/db/fileRecords';
 import upload from '../src/routes/upload';
@@ -150,6 +151,7 @@ function buildUploadApp(userId = 'system', serviceId = 'default') {
     c.set('service', service);
     c.set('authType', 'apikey' as WorkerVariables['authType']);
     c.set('isAdmin', true as WorkerVariables['isAdmin']);
+    c.set('apiKeyPermissions', ['admin'] as WorkerVariables['apiKeyPermissions']);
     await next();
   });
   app.route('/upload', upload);
@@ -526,5 +528,213 @@ describe('rate-limit policy bypass when binding missing', () => {
 
     expect(res.status).not.toBe(429);
     expect(res.status).toBe(404);
+  });
+});
+
+// ─── Task 5: Upload Permission Hardening ───────────────────────────────────────
+
+function buildUploadAppWithPermissions(
+  permissions: string[],
+  serviceId = 'default',
+  userId = 'system'
+) {
+  const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+  app.onError(v2ErrorHandler);
+  const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
+  app.use('*', async (c, next) => {
+    c.set('userId', userId as WorkerVariables['userId']);
+    c.set('serviceId', serviceId as WorkerVariables['serviceId']);
+    c.set('service', service);
+    c.set('authType', 'apikey' as WorkerVariables['authType']);
+    c.set('isAdmin', true as WorkerVariables['isAdmin']);
+    c.set('apiKeyPermissions', permissions as WorkerVariables['apiKeyPermissions']);
+    await next();
+  });
+  app.route('/upload', upload);
+  return app;
+}
+
+describe('API key permission enforcement on upload init', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('returns 403 when API key lacks upload permission on R2 init', async () => {
+    const app = buildUploadAppWithPermissions(['files:read']); // no 'upload'
+
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'test.pdf',
+          size: 1024,
+          mime_type: 'application/pdf',
+        }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(403);
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('forbidden');
+    expect(body.error.message).toContain('upload');
+  });
+
+  it('returns 403 when API key lacks upload permission on Appwrite init', async () => {
+    const app = buildUploadAppWithPermissions(['files:read']);
+
+    const res = await app.fetch(
+      new Request('http://localhost/upload/appwrite/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'test.pdf',
+          size: 1024,
+          mime_type: 'application/pdf',
+        }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(403);
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('forbidden');
+    expect(body.error.message).toContain('upload');
+  });
+
+  it('returns 403 when API key lacks upload permission on multipart create', async () => {
+    const app = buildUploadAppWithPermissions(['files:read']);
+
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/multipart/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'test.pdf',
+          size: 1024,
+          mime_type: 'application/pdf',
+        }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(403);
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('forbidden');
+    expect(body.error.message).toContain('upload');
+  });
+
+  it('returns 403 when API key lacks upload permission on complete', async () => {
+    const app = buildUploadAppWithPermissions(['files:read']);
+
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-123' }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(403);
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('forbidden');
+    expect(body.error.message).toContain('upload');
+  });
+
+  it.each([
+    ['sign multipart part', 'GET', '/upload/r2/multipart/sign-part?upload_id=upload-123&part_number=1', undefined],
+    ['list multipart parts', 'GET', '/upload/r2/multipart/list-parts?upload_id=upload-123', undefined],
+    ['complete multipart upload', 'POST', '/upload/r2/multipart/complete', { upload_id: 'upload-123', parts: [{ PartNumber: 1, ETag: 'etag1' }] }],
+    ['abort multipart upload', 'DELETE', '/upload/r2/multipart/abort', { upload_id: 'upload-123' }],
+  ])('returns 403 when API key lacks upload permission on %s', async (_name, method, path, body) => {
+    const app = buildUploadAppWithPermissions(['files:read']);
+
+    const res = await app.fetch(
+      new Request(`http://localhost${path}`, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(403);
+    const parsed = await res.json() as { error: { code: string; message: string } };
+    expect(parsed.error.code).toBe('forbidden');
+    expect(parsed.error.message).toContain('upload');
+  });
+
+  it('allows R2 init when API key has upload permission', async () => {
+    vi.mocked(generatePresignedPutUrl).mockResolvedValue({
+      presigned_url: 'https://example.com/put',
+      storage_key: 'key',
+      expires_at: 9999999999,
+    });
+    vi.mocked(reserveQuota).mockResolvedValue({ ok: true });
+
+    const app = buildUploadAppWithPermissions(['upload']);
+
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'test.pdf',
+          size: 1024,
+          mime_type: 'application/pdf',
+        }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(201);
+  });
+});
+
+describe('Cross-service upload completion isolation', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('returns 404 when Service A tries to complete Service B upload (system caller)', async () => {
+    // Upload belongs to service-b, but caller is serviceId=default
+    vi.mocked(getUpload).mockResolvedValue({ ...pendingR2Record, service_id: 'service-b' });
+
+    const app = buildUploadAppWithPermissions(['admin'], 'default', 'system');
+
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-123' }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('not_found');
+    expect(body.error.message).toContain('Upload record not found');
+  });
+
+  it('returns 404 when Service A tries to fail Service B upload (system caller)', async () => {
+    vi.mocked(getUpload).mockResolvedValue({ ...pendingR2Record, service_id: 'service-b' });
+
+    const app = buildUploadAppWithPermissions(['admin'], 'default', 'system');
+
+    const res = await app.fetch(
+      new Request('http://localhost/upload/fail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'upload-123' }),
+      }),
+      { ...baseEnv, APP_DB: mockD1() }
+    );
+
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('not_found');
   });
 });

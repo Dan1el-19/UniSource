@@ -6,6 +6,7 @@ import { generatePresignedGetUrl } from '../services/r2';
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { itemOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -36,7 +37,7 @@ app.get('/releases/latest', zValidator('query', latestQuerySchema, v2ValidationH
     release.name
   );
 
-  const response = c.json({
+  const releaseData = {
     id: release.id,
     name: release.name,
     size: release.size,
@@ -47,7 +48,8 @@ app.get('/releases/latest', zValidator('query', latestQuerySchema, v2ValidationH
     created_at: release.created_at,
     download_url: presigned_url,
     download_url_expires_at: expires_at,
-  });
+  };
+  const response = c.json(itemOrLegacy(c, releaseData, releaseData));
   logV2Request(c, start, { route_family: 'app', operation: 'latest_release' });
   return response;
 });

@@ -49,6 +49,7 @@ function buildApp(opts?: { userId?: string; serviceRole?: 'user' | 'plus' | 'adm
       'authType',
       (userId === 'system' ? 'apikey' : 'appwrite') as WorkerVariables['authType']
     )
+    c.set('apiKeyPermissions', ['upload'])
     c.set('serviceRole', (opts?.serviceRole ?? 'user') as WorkerVariables['serviceRole'])
     c.set('isAdmin', (opts?.serviceRole === 'admin') as WorkerVariables['isAdmin'])
     c.set('service', TEST_SERVICE)

@@ -30,6 +30,8 @@ import { DEFAULT_SERVICE_ID } from '../config/services';
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
+import { wantsV2 } from '../lib/v2/negotiation';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -87,17 +89,16 @@ admin.get('/service', async (c) => {
     throw new V2Error('not_found', 404, 'Service not found');
   }
 
-  const response = c.json({
-    service: {
-      id: service.id,
-      name: service.name,
-      max_storage_bytes: service.max_storage_bytes,
-      current_used_bytes: service.current_used_bytes,
-      max_file_size_bytes: service.max_file_size_bytes,
-      recommended_upload_destination: service.recommended_upload_destination,
-      created_at: service.created_at,
-    },
-  });
+  const serviceData = {
+    id: service.id,
+    name: service.name,
+    max_storage_bytes: service.max_storage_bytes,
+    current_used_bytes: service.current_used_bytes,
+    max_file_size_bytes: service.max_file_size_bytes,
+    recommended_upload_destination: service.recommended_upload_destination,
+    created_at: service.created_at,
+  };
+  const response = c.json(itemOrLegacy(c, serviceData, { service: serviceData }));
   logV2Request(c, start, { route_family: 'admin', operation: 'get_service' });
   return response;
 });
@@ -120,17 +121,16 @@ admin.patch(
       throw new V2Error('not_found', 404, 'Service not found');
     }
 
-    const response = c.json({
-      service: {
-        id: service.id,
-        name: service.name,
-        max_storage_bytes: service.max_storage_bytes,
-        current_used_bytes: service.current_used_bytes,
-        max_file_size_bytes: service.max_file_size_bytes,
-        recommended_upload_destination: service.recommended_upload_destination,
-        created_at: service.created_at,
-      },
-    });
+    const serviceData = {
+      id: service.id,
+      name: service.name,
+      max_storage_bytes: service.max_storage_bytes,
+      current_used_bytes: service.current_used_bytes,
+      max_file_size_bytes: service.max_file_size_bytes,
+      recommended_upload_destination: service.recommended_upload_destination,
+      created_at: service.created_at,
+    };
+    const response = c.json(itemOrLegacy(c, serviceData, { service: serviceData }));
     logV2Request(c, start, { route_family: 'admin', operation: 'update_service' });
     return response;
   }
@@ -157,17 +157,16 @@ admin.patch(
       throw new V2Error('not_found', 404, 'Service not found');
     }
 
-    const response = c.json({
-      service: {
-        id: service.id,
-        name: service.name,
-        max_storage_bytes: service.max_storage_bytes,
-        current_used_bytes: service.current_used_bytes,
-        max_file_size_bytes: service.max_file_size_bytes,
-        recommended_upload_destination: service.recommended_upload_destination,
-        created_at: service.created_at,
-      },
-    });
+    const serviceData = {
+      id: service.id,
+      name: service.name,
+      max_storage_bytes: service.max_storage_bytes,
+      current_used_bytes: service.current_used_bytes,
+      max_file_size_bytes: service.max_file_size_bytes,
+      recommended_upload_destination: service.recommended_upload_destination,
+      created_at: service.created_at,
+    };
+    const response = c.json(itemOrLegacy(c, serviceData, { service: serviceData }));
     logV2Request(c, start, { route_family: 'admin', operation: 'update_settings' });
     return response;
   }
@@ -186,12 +185,13 @@ admin.get('/service/usage', async (c) => {
       ? Math.round((service.current_used_bytes / service.max_storage_bytes) * 10000) / 100
       : 0;
 
-  const response = c.json({
+  const data = {
     service_id: serviceId,
     max_storage_bytes: service.max_storage_bytes,
     current_used_bytes: service.current_used_bytes,
     used_percent,
-  });
+  };
+  const response = c.json(itemOrLegacy(c, data, data));
   logV2Request(c, start, { route_family: 'admin', operation: 'get_usage' });
   return response;
 });
@@ -227,11 +227,10 @@ admin.get(
         limit: query.limit,
       });
 
-      const response = c.json({
-        items: result.items,
-        next_cursor: result.next_cursor,
+      const response = c.json(listOrLegacy(c, result.items, {
         limit: query.limit,
-      });
+        next_cursor: result.next_cursor,
+      }));
       logV2Request(c, start, { route_family: 'admin', operation: 'list_audit_log' });
       return response;
     } catch (err) {
@@ -279,14 +278,13 @@ admin.get('/users', zValidator('query', userListQuerySchema, v2ValidationHook), 
 
   const metadataByUserId = new Map(serviceUsers.map((item) => [item.user_id, item]));
 
-  const response = c.json({
-    items: appwriteUsers.users.map((user) =>
-      mapAdminUser(user, service, usageMap, metadataByUserId.get(user.$id) ?? null)
-    ),
-    total: appwriteUsers.total,
-    offset: query.offset,
-    limit: query.limit,
-  });
+  const users = appwriteUsers.users.map((user) =>
+    mapAdminUser(user, service, usageMap, metadataByUserId.get(user.$id) ?? null)
+  );
+  const response = c.json(wantsV2(c)
+    ? { items: users, page: { limit: query.limit, next_cursor: null }, total: appwriteUsers.total, offset: query.offset }
+    : { items: users, total: appwriteUsers.total, offset: query.offset, limit: query.limit }
+  );
   logV2Request(c, start, { route_family: 'admin', operation: 'list_users' });
   return response;
 });
@@ -356,9 +354,8 @@ admin.patch(
       getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
-    const response = c.json({
-      user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
-    });
+    const mapped = mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata);
+    const response = c.json(itemOrLegacy(c, mapped, { user: mapped }));
     logV2Request(c, start, { route_family: 'admin', operation: 'update_user' });
     return response;
   }
@@ -379,10 +376,10 @@ admin.post(
 
     await updateAppwriteUserPassword(c.env, userId, password);
 
-    const response = c.json({
-      success: true,
-      user_id: userId,
-    });
+    const response = c.json(actionOrLegacy(c,
+      { user_id: userId, password_reset: true },
+      { success: true, user_id: userId }
+    ));
     logV2Request(c, start, { route_family: 'admin', operation: 'reset_password' });
     return response;
   }
@@ -423,9 +420,8 @@ admin.patch(
       getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
-    const response = c.json({
-      user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
-    });
+    const mapped = mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata);
+    const response = c.json(itemOrLegacy(c, mapped, { user: mapped }));
     logV2Request(c, start, { route_family: 'admin', operation: 'update_role' });
     return response;
   }
@@ -461,9 +457,8 @@ admin.patch(
       getUserStorageUsage(c.env.APP_DB, serviceId, userId),
     ]);
 
-    const response = c.json({
-      user: mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata),
-    });
+    const mapped = mapAdminUser(user, service, { [userId]: currentUsedBytes }, metadata);
+    const response = c.json(itemOrLegacy(c, mapped, { user: mapped }));
     logV2Request(c, start, { route_family: 'admin', operation: 'update_storage_limit' });
     return response;
   }
@@ -490,7 +485,10 @@ admin.post('/quota/reconcile', async (c) => {
     );
   }
 
-  const response = c.json(result);
+  const response = c.json(actionOrLegacy(c,
+    result as unknown as Record<string, unknown>,
+    result as unknown as Record<string, unknown>
+  ));
   logV2Request(c, start, { route_family: 'admin', operation: 'reconcile_quota' });
   return response;
 });

@@ -14,6 +14,7 @@ import { generateSlug, isValidSlug } from '../utils/slug';
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { itemOrLegacy, actionOrLegacy, unpaginatedListOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -111,7 +112,8 @@ shareLinkRouter.post(
       max_downloads: body.max_downloads ?? null,
     });
 
-    const response = c.json({ link: mapShareLink(link) }, 201);
+    const mapped = mapShareLink(link);
+    const response = c.json(itemOrLegacy(c, mapped, { link: mapped }), 201);
     logV2Request(c, start, { route_family: 'shareLinks', operation: 'create' });
     return response;
   }
@@ -130,8 +132,8 @@ shareLinkRouter.get(
     const file = await getFileRecordForUser(c.env.APP_DB, fileId, userId, serviceId);
     if (!file) throw new V2Error('not_found', 404, 'File not found');
 
-    const links = await listShareLinksForFile(c.env.APP_DB, fileId, userId, serviceId);
-    const response = c.json({ items: links.map(mapShareLink) });
+    const items = (await listShareLinksForFile(c.env.APP_DB, fileId, userId, serviceId)).map(mapShareLink);
+    const response = c.json(unpaginatedListOrLegacy(c, items, { items }));
     logV2Request(c, start, { route_family: 'shareLinks', operation: 'list' });
     return response;
   }
@@ -161,7 +163,8 @@ shareLinkRouter.patch(
     const link = await updateShareLink(c.env.APP_DB, linkId, userId, serviceId, updates);
     if (!link) throw new V2Error('not_found', 404, 'Share link not found');
 
-    const response = c.json({ link: mapShareLink(link) });
+    const mapped = mapShareLink(link);
+    const response = c.json(itemOrLegacy(c, mapped, { link: mapped }));
     logV2Request(c, start, { route_family: 'shareLinks', operation: 'update' });
     return response;
   }
@@ -180,7 +183,10 @@ shareLinkRouter.delete(
     const deleted = await deleteShareLink(c.env.APP_DB, linkId, userId, serviceId);
     if (!deleted) throw new V2Error('not_found', 404, 'Share link not found');
 
-    const response = c.json({ success: true as const, id: linkId });
+    const response = c.json(actionOrLegacy(c,
+      { id: linkId, deleted: true },
+      { success: true as const, id: linkId }
+    ));
     logV2Request(c, start, { route_family: 'shareLinks', operation: 'delete' });
     return response;
   }

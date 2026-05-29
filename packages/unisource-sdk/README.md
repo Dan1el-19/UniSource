@@ -120,6 +120,12 @@ interface V2ListResponse<T> {
 }
 ```
 
+### V2 opt-in headers
+
+`UnisourceV2Client` sends `X-Unisource-API-Version: 2` and `Accept: application/vnd.unisource.v2+json` automatically. Direct HTTP consumers must send one of these headers for shared in-place routes if they expect V2 envelopes.
+
+For API-key access to user-scoped V2 storage endpoints, pass `X-Target-User-ID` through the SDK method option when the method supports acting on a target user. API keys require `files:read` for list/read operations and `files:delete` for destructive bulk operations.
+
 ## Błędy
 
 ```ts

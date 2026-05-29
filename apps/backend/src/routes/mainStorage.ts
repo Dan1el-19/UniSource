@@ -21,6 +21,7 @@ import { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from '@unisource/sdk';
 import { V2Error } from '../lib/v2/errors';
 import { logV2Request } from '../lib/v2/log';
 import { v2ValidationHook } from '../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -52,10 +53,10 @@ mainStorage.get('/', zValidator('query', listQuerySchema, v2ValidationHook), asy
   const start = Date.now();
   try {
     const result = await listMainStorageFileRecords(c.env.APP_DB, serviceId, { limit, cursor });
-    const response = c.json({
-      items: result.items.map(toMainStorageFileResponse),
+    const response = c.json(listOrLegacy(c, result.items.map(toMainStorageFileResponse), {
+      limit: limit,
       next_cursor: result.next_cursor,
-    });
+    }));
     logV2Request(c, start, { route_family: 'mainStorage', operation: 'list' });
     return response;
   } catch (error) {
@@ -75,7 +76,8 @@ mainStorage.get('/:id', async (c) => {
   if (!file || file.service_id !== serviceId || file.is_main_storage !== 1) {
     throw new V2Error('not_found', 404, 'File not found or not part of main storage');
   }
-  const response = c.json(toMainStorageFileResponse(file));
+  const mapped = toMainStorageFileResponse(file);
+  const response = c.json(itemOrLegacy(c, mapped, mapped));
   logV2Request(c, start, { route_family: 'mainStorage', operation: 'get' });
   return response;
 });
@@ -100,7 +102,8 @@ mainStorage.patch(
     if (!updated) {
       throw new V2Error('not_found', 404, 'File not found or not part of main storage');
     }
-    const response = c.json({ file: toMainStorageFileResponse(updated) });
+    const mapped = toMainStorageFileResponse(updated);
+    const response = c.json(itemOrLegacy(c, mapped, { file: mapped }));
     logV2Request(c, start, { route_family: 'mainStorage', operation: 'update' });
     return response;
   }
@@ -136,7 +139,10 @@ mainStorage.delete('/:id', async (c) => {
   } else {
     await trashFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId);
   }
-  const response = c.json({ success: true, file_id: file.id });
+  const response = c.json(actionOrLegacy(c,
+    { file_id: file.id, deleted: true },
+    { success: true, file_id: file.id }
+  ));
   logV2Request(c, start, { route_family: 'mainStorage', operation: 'delete' });
   return response;
 });
@@ -150,7 +156,10 @@ mainStorage.post('/:id/restore', async (c) => {
     throw new V2Error('not_found', 404, 'File not found or not part of main storage');
   }
   await restoreFileRecord(c.env.APP_DB, file.id, file.user_id, serviceId);
-  const response = c.json({ success: true, file_id: file.id });
+  const response = c.json(actionOrLegacy(c,
+    { file_id: file.id, restored: true },
+    { success: true, file_id: file.id }
+  ));
   logV2Request(c, start, { route_family: 'mainStorage', operation: 'restore' });
   return response;
 });

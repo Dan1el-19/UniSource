@@ -21,7 +21,7 @@ export function createMyFilesResource(request: V2Request) {
   return {
     /**
      * List the calling user's files.
-     * GET /my-files → { items, next_cursor, limit }
+     * GET /my-files → { items, page }
      */
     list: (
       query?: V2MyFilesListQuery,
@@ -37,7 +37,7 @@ export function createMyFilesResource(request: V2Request) {
 
     /**
      * List the calling user's trashed files.
-     * GET /my-files/trash → { items, next_cursor, limit }
+     * GET /my-files/trash → { items, page }
      */
     listTrash: (
       query?: V2MyFilesTrashListQuery,
@@ -53,7 +53,7 @@ export function createMyFilesResource(request: V2Request) {
 
     /**
      * Move a file to a target folder (or root, by passing `folder_id: null`).
-     * PATCH /my-files/:id/move → { success, id, folder_id }
+     * PATCH /my-files/:id/move → { item }
      */
     move: (
       id: string,
