@@ -225,12 +225,18 @@ export async function listReleases(
 
   if (input.cursor) {
     const sep = input.cursor.indexOf(':');
-    if (sep > 0) {
-      const ts = Number(input.cursor.slice(0, sep));
-      const cid = input.cursor.slice(sep + 1);
-      cursorClause = 'AND (created_at < ? OR (created_at = ? AND id < ?))';
-      binds.push(ts, ts, cid);
+    if (sep <= 0 || sep === input.cursor.length - 1) {
+      throw new Error('Invalid cursor');
     }
+
+    const ts = Number(input.cursor.slice(0, sep));
+    const cid = input.cursor.slice(sep + 1);
+    if (!Number.isFinite(ts) || !cid.trim()) {
+      throw new Error('Invalid cursor');
+    }
+
+    cursorClause = 'AND (created_at < ? OR (created_at = ? AND id < ?))';
+    binds.push(ts, ts, cid);
   }
 
   const rows = await db
