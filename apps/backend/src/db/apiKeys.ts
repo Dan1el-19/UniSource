@@ -1,4 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { encodeCursor, decodeCursor } from '../lib/v2/cursor';
+import { V2Error } from '../lib/v2/errors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,17 @@ export interface ApiKeyRecord {
 export interface ApiKeyCreateResult extends ApiKeyRecord {
   /** Plaintext key — returned ONCE, never stored. */
   plaintext_key: string;
+}
+
+export interface CursorPage<T> {
+  items: T[];
+  page: { limit: number; next_cursor: string | null };
+}
+
+export interface ApiKeyPageInput {
+  limit: number;
+  cursor?: string;
+  cursorSecret: string;
 }
 
 interface ApiKeyRow {
@@ -152,6 +165,45 @@ export async function listServiceApiKeys(db: D1Database, serviceId: string): Pro
     .bind(serviceId)
     .all<ApiKeyRow>();
   return results.map(mapRow);
+}
+
+async function decodeApiKeyCursor(secret: string, cursor: string | undefined, fingerprint: string) {
+  if (!cursor) return null;
+  try {
+    return await decodeCursor(secret, cursor, { sb: 'created_at', sd: 'desc', fp: fingerprint });
+  } catch {
+    throw new V2Error('cursor_invalid', 400, 'cursor is invalid');
+  }
+}
+
+export async function listServiceApiKeysPage(
+  db: D1Database,
+  serviceId: string,
+  input: ApiKeyPageInput
+): Promise<CursorPage<ApiKeyRecord>> {
+  const fingerprint = `service:${serviceId}`;
+  const cursor = await decodeApiKeyCursor(input.cursorSecret, input.cursor, fingerprint);
+  const where = ['service_id = ?', 'is_account_level = 0'];
+  const binds: unknown[] = [serviceId];
+
+  if (cursor) {
+    where.push('(created_at < ? OR (created_at = ? AND id < ?))');
+    binds.push(cursor.lv, cursor.lv, cursor.li);
+  }
+
+  const { results } = await db
+    .prepare(`SELECT * FROM api_keys WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`)
+    .bind(...binds, input.limit + 1)
+    .all<ApiKeyRow>();
+
+  const rows = results ?? [];
+  const pageRows = rows.slice(0, input.limit);
+  const last = pageRows[pageRows.length - 1];
+  const next_cursor = rows.length > input.limit && last
+    ? await encodeCursor(input.cursorSecret, { v: 1, sb: 'created_at', sd: 'desc', lv: last.created_at, li: last.id, fp: fingerprint })
+    : null;
+
+  return { items: pageRows.map(mapRow), page: { limit: input.limit, next_cursor } };
 }
 
 export async function updateApiKey(
@@ -302,6 +354,55 @@ export async function listAccountApiKeys(db: D1Database): Promise<(ApiKeyRecord 
   }
 
   return results.map((r) => ({ ...mapRow(r), service_ids: svcMap.get(r.id) ?? [] }));
+}
+
+export async function listAccountApiKeysPage(
+  db: D1Database,
+  input: ApiKeyPageInput
+): Promise<CursorPage<ApiKeyRecord & { service_ids: string[] }>> {
+  const fingerprint = 'account-keys';
+  const cursor = await decodeApiKeyCursor(input.cursorSecret, input.cursor, fingerprint);
+  const where = ['is_account_level = 1'];
+  const binds: unknown[] = [];
+
+  if (cursor) {
+    where.push('(created_at < ? OR (created_at = ? AND id < ?))');
+    binds.push(cursor.lv, cursor.lv, cursor.li);
+  }
+
+  const { results } = await db
+    .prepare(`SELECT * FROM api_keys WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`)
+    .bind(...binds, input.limit + 1)
+    .all<ApiKeyRow>();
+
+  const rows = results ?? [];
+  const pageRows = rows.slice(0, input.limit);
+  const ids = pageRows.map((row) => row.id);
+  const svcMap = new Map<string, string[]>();
+
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    const { results: svcRows } = await db
+      .prepare(`SELECT key_id, service_id FROM account_key_services WHERE key_id IN (${placeholders})`)
+      .bind(...ids)
+      .all<{ key_id: string; service_id: string }>();
+
+    for (const row of svcRows ?? []) {
+      const arr = svcMap.get(row.key_id) ?? [];
+      arr.push(row.service_id);
+      svcMap.set(row.key_id, arr);
+    }
+  }
+
+  const last = pageRows[pageRows.length - 1];
+  const next_cursor = rows.length > input.limit && last
+    ? await encodeCursor(input.cursorSecret, { v: 1, sb: 'created_at', sd: 'desc', lv: last.created_at, li: last.id, fp: fingerprint })
+    : null;
+
+  return {
+    items: pageRows.map((row) => ({ ...mapRow(row), service_ids: svcMap.get(row.id) ?? [] })),
+    page: { limit: input.limit, next_cursor },
+  };
 }
 
 export async function updateAccountApiKey(
