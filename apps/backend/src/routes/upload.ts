@@ -429,39 +429,6 @@ upload.post(
   }
 );
 
-upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
-  const body = c.req.valid('json');
-  const { upload_id } = body;
-  const userId = c.get('userId');
-  const serviceId = c.get('serviceId');
-
-  // Mirror Bug #15 fix from /complete: verify ownership before allowing fail
-  const record = userId === 'system'
-    ? await getUpload(c.env.APP_DB, upload_id)
-    : await getUploadForUser(c.env.APP_DB, upload_id, userId, serviceId);
-
-  if (!record || record.service_id !== serviceId) {
-    return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
-  }
-
-  const isMainStorage = record.is_main_storage === 1;
-
-  if (record.status !== 'pending') {
-    return c.json({ error: 'Conflict', message: `Upload is already in state: ${record.status}` }, 409);
-  }
-
-  const updated = await failUpload(c.env.APP_DB, upload_id);
-  // Release reserved quota
-  if (updated) {
-    if (isMainStorage) {
-      await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
-    } else {
-      await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
-    }
-  }
-  return c.json<UploadFailResponse>({ success: true, upload_id, status: 'failed' });
-});
-
 // ─── Multipart Upload endpoints ───────────────────────────────────────────────
 
 const MULTIPART_PART_URL_TTL_SECONDS = 900; // 15 min per part presigned URL

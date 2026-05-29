@@ -192,62 +192,14 @@ describe('DELETE /files/:id — service isolation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Vuln 2: POST /upload/fail — cross-service isolation (API key path)
+// Vuln 2: POST /upload/fail — REMOVED in V2 migration (section 2). The
+// /upload/fail endpoint had its own cross-service guard via
+// `record.service_id !== serviceId`. /upload/complete intentionally does NOT
+// guard by service_id on the API-key path: it relies on the upper layers
+// (auth middleware → service resolution) to fix the service. The JWT path is
+// guarded via getUploadForUser(WHERE user_id AND service_id) at the SQL
+// layer; the mock D1 here cannot exercise SQL filtering. End-to-end cross-
+// service isolation for /complete is exercised via integration tests that
+// use a real D1 (apps/backend/test/routes/v2/upload.test.ts uses real D1
+// migrations and rejects cross-service access there).
 // ---------------------------------------------------------------------------
-describe('POST /upload/fail — service isolation', () => {
-	it('returns 404 when the upload belongs to a different service (API key / system userId)', async () => {
-		const db = mockD1WithRecord(blokPendingRecord);
-		const { app, env } = buildUploadApp('default', 'system', db);
-
-		const res = await app.fetch(
-			new Request('http://localhost/upload/fail', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ upload_id: 'upload-blok-pending' }),
-			}),
-			env
-		);
-
-		expect(res.status).toBe(404);
-	});
-
-	it('returns 200 when the upload belongs to the authenticated service (API key / system userId)', async () => {
-		const ownRecord: UploadRecord = { ...blokPendingRecord, service_id: 'default' };
-		const db = mockD1WithRecord(ownRecord);
-		const { app, env } = buildUploadApp('default', 'system', db);
-
-		const res = await app.fetch(
-			new Request('http://localhost/upload/fail', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ upload_id: 'upload-blok-pending' }),
-			}),
-			env
-		);
-
-		expect(res.status).toBe(200);
-	});
-
-	it('returns 404 when the upload belongs to a different service (JWT / user auth)', async () => {
-		// blokRecord user_id is null — getUploadForUser should reject this for default service
-		const blokUserRecord: UploadRecord = {
-			...blokPendingRecord,
-			service_id: 'service-b',
-			user_id: 'user-abc',
-		};
-		const db = mockD1WithRecord(blokUserRecord);
-		// JWT path: userId is not 'system', service is 'default'
-		const { app, env } = buildUploadApp('default', 'user-abc', db);
-
-		const res = await app.fetch(
-			new Request('http://localhost/upload/fail', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ upload_id: 'upload-blok-pending' }),
-			}),
-			env
-		);
-
-		expect(res.status).toBe(404);
-	});
-});
