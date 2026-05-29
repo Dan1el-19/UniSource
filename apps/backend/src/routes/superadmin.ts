@@ -263,10 +263,27 @@ superadmin.delete('/services/:id', async (c) => {
 
 // ─── Service API keys ─────────────────────────────────────────────────────────
 
-superadmin.get('/services/:id/api-keys', async (c) => {
-  const keys = await listServiceApiKeys(c.env.APP_DB, c.req.param('id'));
-  return c.json({ keys });
-});
+const apiKeyListQuery = listQuerySchema;
+
+superadmin.get(
+  '/services/:id/api-keys',
+  zValidator('query', apiKeyListQuery, v2ValidationHook),
+  async (c) => {
+    const start = Date.now();
+    const id = c.req.param('id');
+    const query = c.req.valid('query');
+
+    const page = await listServiceApiKeysPage(c.env.APP_DB, id, {
+      limit: query.limit,
+      cursor: query.cursor,
+      cursorSecret: cursorSecret(c),
+    });
+
+    const response = c.json(page);
+    logV2Request(c, start, { route_family: 'superadmin', operation: 'list_service_api_keys' });
+    return response;
+  }
+);
 
 const createKeySchema = z.object({
   name: z.string().min(1).max(128),
@@ -275,12 +292,13 @@ const createKeySchema = z.object({
   expires_at: z.number().int().positive().optional(),
 });
 
-superadmin.post('/services/:id/api-keys', zValidator('json', createKeySchema), async (c) => {
+superadmin.post('/services/:id/api-keys', zValidator('json', createKeySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const id = c.req.param('id');
   const body = c.req.valid('json');
 
   const service = await getServiceDetails(c.env.APP_DB, id);
-  if (!service) return c.json({ error: 'Service not found' }, 404);
+  if (!service) throw new V2Error('not_found', 404, 'Service not found');
 
   const result = await createServiceApiKey(
     c.env.APP_DB,
@@ -291,7 +309,9 @@ superadmin.post('/services/:id/api-keys', zValidator('json', createKeySchema), a
     body.expires_at
   );
 
-  return c.json({ key: result }, 201);
+  const response = c.json(itemResponse(result), 201);
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'create_service_api_key' });
+  return response;
 });
 
 const patchKeySchema = z.object({
@@ -299,7 +319,8 @@ const patchKeySchema = z.object({
   permissions: permissionsSchema.optional(),
 });
 
-superadmin.patch('/services/:id/api-keys/:keyId', zValidator('json', patchKeySchema), async (c) => {
+superadmin.patch('/services/:id/api-keys/:keyId', zValidator('json', patchKeySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const { id, keyId } = c.req.param();
   const body = c.req.valid('json');
 
@@ -307,30 +328,52 @@ superadmin.patch('/services/:id/api-keys/:keyId', zValidator('json', patchKeySch
     name: body.name,
     permissions: body.permissions as Permission[] | undefined,
   });
-  if (!key) return c.json({ error: 'Key not found or already revoked' }, 404);
-  return c.json({ key });
+  if (!key) throw new V2Error('not_found', 404, 'Key not found or already revoked');
+  const response = c.json(itemResponse(key));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'update_service_api_key' });
+  return response;
 });
 
 superadmin.delete('/services/:id/api-keys/:keyId', async (c) => {
+  const start = Date.now();
   const { id, keyId } = c.req.param();
   const revoked = await revokeApiKey(c.env.APP_DB, keyId, id);
-  if (!revoked) return c.json({ error: 'Key not found or already revoked' }, 404);
-  return c.json({ revoked: true });
+  if (!revoked) throw new V2Error('not_found', 404, 'Key not found or already revoked');
+  const response = c.json(itemResponse({ id: keyId, revoked: true }));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'revoke_service_api_key' });
+  return response;
 });
 
 superadmin.post('/services/:id/api-keys/:keyId/rotate', async (c) => {
+  const start = Date.now();
   const { id, keyId } = c.req.param();
   const result = await rotateApiKey(c.env.APP_DB, keyId, id);
-  if (!result) return c.json({ error: 'Key not found or already revoked' }, 404);
-  return c.json({ key: result });
+  if (!result) throw new V2Error('not_found', 404, 'Key not found or already revoked');
+  const response = c.json(itemResponse(result));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'rotate_service_api_key' });
+  return response;
 });
 
 // ─── Account-level keys ───────────────────────────────────────────────────────
 
-superadmin.get('/account-keys', async (c) => {
-  const keys = await listAccountApiKeys(c.env.APP_DB);
-  return c.json({ keys });
-});
+superadmin.get(
+  '/account-keys',
+  zValidator('query', apiKeyListQuery, v2ValidationHook),
+  async (c) => {
+    const start = Date.now();
+    const query = c.req.valid('query');
+
+    const page = await listAccountApiKeysPage(c.env.APP_DB, {
+      limit: query.limit,
+      cursor: query.cursor,
+      cursorSecret: cursorSecret(c),
+    });
+
+    const response = c.json(page);
+    logV2Request(c, start, { route_family: 'superadmin', operation: 'list_account_api_keys' });
+    return response;
+  }
+);
 
 const createAccountKeySchema = z.object({
   name: z.string().min(1).max(128),
@@ -339,7 +382,8 @@ const createAccountKeySchema = z.object({
   expires_at: z.number().int().positive().optional(),
 });
 
-superadmin.post('/account-keys', zValidator('json', createAccountKeySchema), async (c) => {
+superadmin.post('/account-keys', zValidator('json', createAccountKeySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const body = c.req.valid('json');
   const result = await createAccountApiKey(
     c.env.APP_DB,
@@ -348,7 +392,9 @@ superadmin.post('/account-keys', zValidator('json', createAccountKeySchema), asy
     body.service_ids,
     body.expires_at
   );
-  return c.json({ key: result }, 201);
+  const response = c.json(itemResponse(result), 201);
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'create_account_api_key' });
+  return response;
 });
 
 const patchAccountKeySchema = z.object({
@@ -357,7 +403,8 @@ const patchAccountKeySchema = z.object({
   service_ids: z.array(z.string().min(1)).min(1).optional(),
 });
 
-superadmin.patch('/account-keys/:keyId', zValidator('json', patchAccountKeySchema), async (c) => {
+superadmin.patch('/account-keys/:keyId', zValidator('json', patchAccountKeySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const { keyId } = c.req.param();
   const body = c.req.valid('json');
   const key = await updateAccountApiKey(c.env.APP_DB, keyId, {
@@ -365,14 +412,20 @@ superadmin.patch('/account-keys/:keyId', zValidator('json', patchAccountKeySchem
     permissions: body.permissions as Permission[] | undefined,
     service_ids: body.service_ids,
   });
-  if (!key) return c.json({ error: 'Key not found or already revoked' }, 404);
-  return c.json({ key });
+  if (!key) throw new V2Error('not_found', 404, 'Key not found or already revoked');
+  const response = c.json(itemResponse(key));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'update_account_api_key' });
+  return response;
 });
 
 superadmin.delete('/account-keys/:keyId', async (c) => {
-  const revoked = await revokeAccountApiKey(c.env.APP_DB, c.req.param('keyId'));
-  if (!revoked) return c.json({ error: 'Key not found or already revoked' }, 404);
-  return c.json({ revoked: true });
+  const start = Date.now();
+  const keyId = c.req.param('keyId');
+  const revoked = await revokeAccountApiKey(c.env.APP_DB, keyId);
+  if (!revoked) throw new V2Error('not_found', 404, 'Key not found or already revoked');
+  const response = c.json(itemResponse({ id: keyId, revoked: true }));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'revoke_account_api_key' });
+  return response;
 });
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────

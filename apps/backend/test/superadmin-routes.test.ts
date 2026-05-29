@@ -4,6 +4,7 @@ import { applyD1Migrations, env } from 'cloudflare:test';
 import type { D1Migration } from '@cloudflare/vitest-pool-workers';
 import superadmin from '../src/routes/superadmin';
 import { V2Error, errorResponse } from '../src/lib/v2/errors';
+import { createServiceApiKey, createAccountApiKey } from '../src/db/apiKeys';
 
 declare global {
   namespace Cloudflare {
@@ -254,5 +255,195 @@ describe('superadmin services CRUD', () => {
     const body = await res.json<{ item: { id: string; deleted: boolean } }>();
     expect(body.item.id).toBe('sa-del-test');
     expect(body.item.deleted).toBe(true);
+  }, TEST_TIMEOUT);
+});
+
+describe('superadmin API keys', () => {
+  beforeAll(async () => {
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS);
+  }, TEST_TIMEOUT);
+
+  beforeEach(async () => {
+    await clearSuperadminTables();
+    await seedService('sa-key-svc', 'Key Service');
+  }, TEST_TIMEOUT);
+
+  const devEnv = testEnv({ BYPASS_CF_ACCESS: 'true' });
+
+  it('GET /services/:id/api-keys returns V2 list envelope with pagination', async () => {
+    await createServiceApiKey(env.APP_DB, 'sa-key-svc', 'key-one', ['admin']);
+    await createServiceApiKey(env.APP_DB, 'sa-key-svc', 'key-two', ['admin']);
+    await createServiceApiKey(env.APP_DB, 'sa-key-svc', 'key-three', ['admin']);
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-key-svc/api-keys?limit=2'),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ items: unknown[]; page: { limit: number; next_cursor: string | null } }>();
+    expect(body.items).toHaveLength(2);
+    expect(body.page.limit).toBe(2);
+    expect(body.page.next_cursor).toBeTruthy();
+  }, TEST_TIMEOUT);
+
+  it('POST /services/:id/api-keys returns 201 with V2 item envelope', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-key-svc/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'New Key',
+          permissions: ['admin'],
+        }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(201);
+    const body = await res.json<{ item: { name: string; plaintext_key: string } }>();
+    expect(body.item.name).toBe('New Key');
+    expect(body.item.plaintext_key).toBeTruthy();
+  }, TEST_TIMEOUT);
+
+  it('POST /services/:id/api-keys returns 404 for missing service', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-missing/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Key',
+          permissions: ['admin'],
+        }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(404);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('not_found');
+  }, TEST_TIMEOUT);
+
+  it('PATCH /services/:id/api-keys/:keyId returns V2 item envelope', async () => {
+    const created = await createServiceApiKey(env.APP_DB, 'sa-key-svc', 'patch-key', ['admin']);
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request(`http://localhost/superadmin/services/sa-key-svc/api-keys/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'renamed-key' }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { name: string } }>();
+    expect(body.item.name).toBe('renamed-key');
+  }, TEST_TIMEOUT);
+
+  it('DELETE /services/:id/api-keys/:keyId returns V2 item envelope', async () => {
+    const created = await createServiceApiKey(env.APP_DB, 'sa-key-svc', 'del-key', ['admin']);
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request(`http://localhost/superadmin/services/sa-key-svc/api-keys/${created.id}`, {
+        method: 'DELETE',
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { id: string; revoked: boolean } }>();
+    expect(body.item.id).toBe(created.id);
+    expect(body.item.revoked).toBe(true);
+  }, TEST_TIMEOUT);
+
+  it('POST /services/:id/api-keys/:keyId/rotate returns V2 item envelope', async () => {
+    const created = await createServiceApiKey(env.APP_DB, 'sa-key-svc', 'rotate-key', ['admin']);
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request(`http://localhost/superadmin/services/sa-key-svc/api-keys/${created.id}/rotate`, {
+        method: 'POST',
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { name: string; plaintext_key: string } }>();
+    expect(body.item.name).toBe('rotate-key');
+    expect(body.item.plaintext_key).toBeTruthy();
+  }, TEST_TIMEOUT);
+
+  it('GET /account-keys returns V2 list envelope with service_ids', async () => {
+    await createAccountApiKey(env.APP_DB, 'acct-key', ['admin'], ['sa-key-svc']);
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/account-keys?limit=10'),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ items: Array<{ service_ids: string[] }>; page: { limit: number } }>();
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].service_ids).toContain('sa-key-svc');
+  }, TEST_TIMEOUT);
+
+  it('POST /account-keys returns 201 with V2 item envelope', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/account-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Acct Key',
+          permissions: ['admin'],
+          service_ids: ['sa-key-svc'],
+        }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(201);
+    const body = await res.json<{ item: { name: string; plaintext_key: string } }>();
+    expect(body.item.name).toBe('Acct Key');
+    expect(body.item.plaintext_key).toBeTruthy();
+  }, TEST_TIMEOUT);
+
+  it('PATCH /account-keys/:keyId returns V2 item envelope', async () => {
+    const created = await createAccountApiKey(env.APP_DB, 'acct-patch', ['admin'], ['sa-key-svc']);
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request(`http://localhost/superadmin/account-keys/${created.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'renamed-acct' }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { name: string } }>();
+    expect(body.item.name).toBe('renamed-acct');
+  }, TEST_TIMEOUT);
+
+  it('DELETE /account-keys/:keyId returns 404 for non-existent key', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/account-keys/nonexistent', {
+        method: 'DELETE',
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(404);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('not_found');
   }, TEST_TIMEOUT);
 });
