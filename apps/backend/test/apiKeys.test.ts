@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validatePermissions, VALID_PERMISSIONS } from '../src/db/apiKeys';
+import { validatePermissions, VALID_PERMISSIONS } from '../src/db/v1/apiKeys';
 
 describe('validatePermissions', () => {
   it('should return true for an empty array', () => {

@@ -2,13 +2,13 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { V2Error, errorResponse } from '../src/lib/v2/errors';
 
-vi.mock('../src/db/services', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/services')>();
+vi.mock('../src/db/v1/services', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/services')>();
   return { ...actual, getServiceUser: vi.fn() };
 });
 
 import { requireRoleMiddleware } from '../src/middleware/requireRole';
-import { getServiceUser } from '../src/db/services';
+import { getServiceUser } from '../src/db/v1/services';
 
 function buildRoleApp(allowedRoles: string[], userId: string, authType: 'appwrite' | 'apikey', isAdmin = false) {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

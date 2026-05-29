@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 
-vi.mock('../src/db/fileRecords', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/fileRecords')>();
+vi.mock('../src/db/v1/fileRecords', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/fileRecords')>();
   return {
     ...actual,
     listMainStorageFileRecords: vi.fn().mockResolvedValue({ items: [], next_cursor: null }),
@@ -15,11 +15,11 @@ vi.mock('../src/db/fileRecords', async (importOriginal) => {
   };
 });
 
-vi.mock('../src/db/services', () => ({
+vi.mock('../src/db/v1/services', () => ({
   releaseMainStorageQuota: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../src/db/shareLinks', () => ({
+vi.mock('../src/db/v1/shareLinks', () => ({
   deactivateShareLinksForFile: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -39,10 +39,10 @@ vi.mock('../src/middleware/requireRole', () => ({
   requireRoleMiddleware: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
-import { listMainStorageFileRecords, getFileRecord, trashFileRecord, deleteFileRecordPermanently, updateFileRecord, restoreFileRecord } from '../src/db/fileRecords';
-import { releaseMainStorageQuota } from '../src/db/services';
+import { listMainStorageFileRecords, getFileRecord, trashFileRecord, deleteFileRecordPermanently, updateFileRecord, restoreFileRecord } from '../src/db/v1/fileRecords';
+import { releaseMainStorageQuota } from '../src/db/v1/services';
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
-import mainStorageRouter from '../src/routes/mainStorage';
+import mainStorageRouter from '../src/routes/v1/mainStorage';
 
 function buildMainApp(userId = 'u1', serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

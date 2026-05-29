@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory';
-import { getServiceUser } from '../db/services';
+import { getServiceUser } from '../db/v1/services';
 import { V2Error } from '../lib/v2/errors';
 
 export function requireRoleMiddleware(allowedRoles: string[]) {

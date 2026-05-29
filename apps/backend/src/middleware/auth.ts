@@ -1,8 +1,8 @@
 import { createMiddleware } from 'hono/factory';
 import { Client, Account } from 'node-appwrite';
-import { checkUserServiceAccess, getServiceDetails, type ServiceRecord } from '../db/services';
+import { checkUserServiceAccess, getServiceDetails, type ServiceRecord } from '../db/v1/services';
 import { DEFAULT_SERVICE_ID } from '../config/services';
-import { validateApiKeyByHash } from '../db/apiKeys';
+import { validateApiKeyByHash } from '../db/v1/apiKeys';
 import { consumeRateLimit } from './ratelimit';
 import { V2Error } from '../lib/v2/errors';
 

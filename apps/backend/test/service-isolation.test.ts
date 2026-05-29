@@ -6,11 +6,11 @@
  */
 import { Hono } from 'hono';
 import { describe, it, expect } from 'vitest';
-import type { UploadRecord } from '../src/db/files';
-import type { ServiceRecord } from '../src/db/services';
+import type { UploadRecord } from '../src/db/v1/files';
+import type { ServiceRecord } from '../src/db/v1/services';
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
-import files from '../src/routes/files';
-import upload from '../src/routes/upload';
+import files from '../src/routes/v1/files';
+import upload from '../src/routes/v1/upload';
 
 // ---------------------------------------------------------------------------
 // Minimal D1 mock factory — returns a fixed record for any SELECT

@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { applyD1Migrations, env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import type { D1Migration } from '@cloudflare/vitest-pool-workers'
 import { V2Error, errorResponse } from '../../src/lib/v2/errors'
-import type { ServiceRecord } from '../../src/db/services'
+import type { ServiceRecord } from '../../src/db/v1/services'
 import { UnisourceV2Client } from '@unisource/sdk/v2'
 
 declare global {
@@ -66,7 +66,7 @@ const TEST_SERVICE: ServiceRecord = {
 }
 
 async function loadUploadRouter() {
-  const mod = await import('../../src/routes/upload')
+  const mod = await import('../../src/routes/v1/upload')
   return mod.default
 }
 

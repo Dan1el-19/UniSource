@@ -17,9 +17,9 @@ import {
   getFolderForUser,
   getDescendantFolderIds,
   type FolderRecord,
-} from '../../db/folders'
-import { trashFilesInFolders } from '../../db/fileRecords'
-import type { BulkResult } from '../../db/fileRecords'
+} from '../../db/v1/folders'
+import { trashFilesInFolders } from '../../db/v1/fileRecords'
+import type { BulkResult } from '../../db/v1/fileRecords'
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables }
 

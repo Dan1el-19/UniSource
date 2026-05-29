@@ -9,7 +9,7 @@ import {
   deleteRelease,
   getLatestRelease,
   upsertReleaseSync,
-} from '../src/db/releases';
+} from '../src/db/v1/releases';
 
 function mockDbReturning(record: unknown, changes = 1): D1Database {
   return {

@@ -1,16 +1,16 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../src/db/shareLinks', () => ({
+vi.mock('../src/db/v1/shareLinks', () => ({
 	getShareLinkBySlug: vi.fn(),
 	incrementDownloadCount: vi.fn()
 }));
 
-vi.mock('../src/db/fileRecords', () => ({
+vi.mock('../src/db/v1/fileRecords', () => ({
 	getFileRecord: vi.fn()
 }));
 
-vi.mock('../src/db/services', () => ({
+vi.mock('../src/db/v1/services', () => ({
 	logServiceEvent: vi.fn()
 }));
 
@@ -27,10 +27,10 @@ vi.mock('../src/services/appwrite', async (importOriginal) => {
 	};
 });
 
-import { getFileRecord } from '../src/db/fileRecords';
-import { getShareLinkBySlug, incrementDownloadCount } from '../src/db/shareLinks';
+import { getFileRecord } from '../src/db/v1/fileRecords';
+import { getShareLinkBySlug, incrementDownloadCount } from '../src/db/v1/shareLinks';
 import { generatePresignedGetUrl } from '../src/services/r2';
-import publicRouter from '../src/routes/public';
+import publicRouter from '../src/routes/v1/public';
 
 function buildPublicApp() {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

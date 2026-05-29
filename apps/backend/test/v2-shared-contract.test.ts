@@ -34,8 +34,8 @@ const { testFile, testFolder } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../src/db/fileRecords', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/fileRecords')>();
+vi.mock('../src/db/v1/fileRecords', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/fileRecords')>();
   return {
     ...actual,
     listFileRecords: vi.fn().mockImplementation(() => Promise.resolve({ items: [testFile], next_cursor: null })),
@@ -48,8 +48,8 @@ vi.mock('../src/db/fileRecords', async (importOriginal) => {
   };
 });
 
-vi.mock('../src/db/folders', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/folders')>();
+vi.mock('../src/db/v1/folders', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/folders')>();
   return {
     ...actual,
     listFolders: vi.fn().mockImplementation(() => Promise.resolve({ items: [testFolder], next_cursor: null })),
@@ -63,8 +63,8 @@ vi.mock('../src/db/folders', async (importOriginal) => {
   };
 });
 
-vi.mock('../src/db/services', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/services')>();
+vi.mock('../src/db/v1/services', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/services')>();
   return {
     ...actual,
     logServiceEvent: vi.fn().mockImplementation(() => Promise.resolve(undefined)),
@@ -72,8 +72,8 @@ vi.mock('../src/db/services', async (importOriginal) => {
   };
 });
 
-vi.mock('../src/db/shareLinks', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/shareLinks')>();
+vi.mock('../src/db/v1/shareLinks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/shareLinks')>();
   return {
     ...actual,
     deactivateShareLinksForFile: vi.fn().mockImplementation(() => Promise.resolve(undefined)),
@@ -95,8 +95,8 @@ vi.mock('../src/services/appwrite', async (importOriginal) => {
 });
 
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
-import myFilesRoute from '../src/routes/fileRecords';
-import foldersRoute from '../src/routes/folders';
+import myFilesRoute from '../src/routes/v1/fileRecords';
+import foldersRoute from '../src/routes/v1/folders';
 
 function mockD1(): D1Database {
   return {

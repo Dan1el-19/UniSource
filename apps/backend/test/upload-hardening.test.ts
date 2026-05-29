@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { UploadRecord } from '../src/db/files';
-import type { ServiceRecord } from '../src/db/services';
+import type { UploadRecord } from '../src/db/v1/files';
+import type { ServiceRecord } from '../src/db/v1/services';
 
 // Module mocks — must be declared before imports of the mocked modules
 vi.mock('../src/services/r2', async (importOriginal) => {
@@ -27,8 +27,8 @@ vi.mock('../src/services/appwrite', async (importOriginal) => {
   };
 });
 
-vi.mock('../src/db/files', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/files')>();
+vi.mock('../src/db/v1/files', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/files')>();
   return {
     ...actual,
     getUpload: vi.fn(),
@@ -40,13 +40,13 @@ vi.mock('../src/db/files', async (importOriginal) => {
   };
 });
 
-vi.mock('../src/db/fileRecords', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/fileRecords')>();
+vi.mock('../src/db/v1/fileRecords', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/fileRecords')>();
   return { ...actual, createFileRecord: vi.fn(), createMainStorageFileRecord: vi.fn() };
 });
 
-vi.mock('../src/db/services', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/services')>();
+vi.mock('../src/db/v1/services', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/services')>();
   return {
     ...actual,
     releaseQuota: vi.fn(),
@@ -58,12 +58,12 @@ vi.mock('../src/db/services', async (importOriginal) => {
 
 import { generatePresignedPutUrl, headObject } from '../src/services/r2';
 import { getAppwriteFileMeta } from '../src/services/appwrite';
-import { createUpload, getUpload, failUpload, completeUpload, completeUploadAndCreateFile } from '../src/db/files';
-import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/services';
+import { createUpload, getUpload, failUpload, completeUpload, completeUploadAndCreateFile } from '../src/db/v1/files';
+import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/v1/services';
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
-import { createMainStorageFileRecord } from '../src/db/fileRecords';
-import upload from '../src/routes/upload';
-import publicRouter from '../src/routes/public';
+import { createMainStorageFileRecord } from '../src/db/v1/fileRecords';
+import upload from '../src/routes/v1/upload';
+import publicRouter from '../src/routes/v1/public';
 
 // ---------------------------------------------------------------------------
 // Helpers

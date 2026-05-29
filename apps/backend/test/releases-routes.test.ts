@@ -2,8 +2,8 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { V2Error, errorResponse } from '../src/lib/v2/errors';
 
-vi.mock('../src/db/releases', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/releases')>();
+vi.mock('../src/db/v1/releases', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/releases')>();
   return {
     ...actual,
     createRelease: vi.fn(),
@@ -51,9 +51,9 @@ import {
   upsertReleaseSync,
   createMultipartRelease,
   getReleaseMultipartContext,
-} from '../src/db/releases';
+} from '../src/db/v1/releases';
 import { deleteObject, generatePresignedPutUrl, headObject, createMultipartUpload, signUploadPart, listUploadedParts, completeMultipartUpload, abortMultipartUpload } from '../src/services/r2';
-import releasesRouter from '../src/routes/releases';
+import releasesRouter from '../src/routes/v1/releases';
 
 function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

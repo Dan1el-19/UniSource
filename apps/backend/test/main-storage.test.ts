@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createMainStorageFileRecord, listMainStorageFileRecords } from '../src/db/fileRecords';
-import { reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/services';
+import { createMainStorageFileRecord, listMainStorageFileRecords } from '../src/db/v1/fileRecords';
+import { reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/v1/services';
 
 function mockDbWithRecords(records: unknown[]): D1Database {
   return {

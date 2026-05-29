@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reconcileQuota } from '../src/db/services';
+import { reconcileQuota } from '../src/db/v1/services';
 
 // Minimal D1 mock that simulates real quota drift
 function buildMockD1(serviceUsage: number, userUsages: Record<string, number>, storedServiceBytes: number, storedUserBytes: Record<string, number>): D1Database {

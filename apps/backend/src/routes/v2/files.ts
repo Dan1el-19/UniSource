@@ -10,8 +10,8 @@ import {
   deleteFileRecordPermanently,
   getFileRecordForUser,
   type BulkResult,
-} from '../../db/fileRecords'
-import { getFolderForUser } from '../../db/folders'
+} from '../../db/v1/fileRecords'
+import { getFolderForUser } from '../../db/v1/folders'
 import { V2Error } from '../../lib/v2/errors'
 import { getV2StorageUserId } from '../../lib/v2/principal'
 import { logV2Request } from '../../lib/v2/log'

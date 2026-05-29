@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Permission } from '../../db/apiKeys';
+import type { Permission } from '../../db/v1/apiKeys';
 import { requireApiKeyPermission } from '../../middleware/apiKeyPermissions';
 import { V2Error } from './errors';
 

@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { Permission } from '../db/apiKeys';
+import type { Permission } from '../db/v1/apiKeys';
 import { V2Error } from '../lib/v2/errors';
 
 type PermissionContext = Context

@@ -2,7 +2,7 @@ import { exports } from 'cloudflare:workers'
 import { describe, expect, it, beforeAll } from 'vitest'
 import { applyD1Migrations, env } from 'cloudflare:test'
 import type { D1Migration } from '@cloudflare/vitest-pool-workers'
-import { hashApiKey } from '../src/db/apiKeys'
+import { hashApiKey } from '../src/db/v1/apiKeys'
 
 const TEST_TIMEOUT_MS = 15000
 

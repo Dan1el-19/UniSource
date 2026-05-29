@@ -1,5 +1,5 @@
-import type { ServiceRecord } from '../db/services';
-import type { Permission } from '../db/apiKeys';
+import type { ServiceRecord } from '../db/v1/services';
+import type { Permission } from '../db/v1/apiKeys';
 
 declare global {
   interface WorkerVariables {

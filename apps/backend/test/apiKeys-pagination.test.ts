@@ -6,7 +6,7 @@ import {
   createServiceApiKey,
   listAccountApiKeysPage,
   listServiceApiKeysPage,
-} from '../src/db/apiKeys';
+} from '../src/db/v1/apiKeys';
 
 declare global {
   namespace Cloudflare {

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 
-vi.mock('../src/db/services', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/services')>();
+vi.mock('../src/db/v1/services', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/services')>();
   return {
     ...actual,
     reconcileQuota: vi.fn(),
@@ -10,8 +10,8 @@ vi.mock('../src/db/services', async (importOriginal) => {
   };
 });
 
-import { reconcileQuota } from '../src/db/services';
-import admin from '../src/routes/admin';
+import { reconcileQuota } from '../src/db/v1/services';
+import admin from '../src/routes/v1/admin';
 
 function buildAdminApp(db: D1Database) {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

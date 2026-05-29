@@ -3,7 +3,7 @@ import { buildKeysetWhere } from '../../lib/v2/pagination'
 import type { SortDir } from '../../lib/v2/pagination'
 import { decodeCursor, encodeCursor, fingerprint } from '../../lib/v2/cursor'
 import { RESOURCE_CONFIG_FILES, type FilesSortBy, type FilesFilterSet } from '../../lib/v2/resource'
-import type { UploadDestination } from '../files'
+import type { UploadDestination } from '../v1/files'
 
 export interface FileRowV2 {
   id: string
