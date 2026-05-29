@@ -149,16 +149,16 @@ describe('POST /releases/upload/init', () => {
       relEnv
     );
     expect(res.status).toBe(201);
-    const body = await res.json() as { presigned_url: string; release_id: string; r2_key: string };
-    expect(body.presigned_url).toBe('https://r2.example.com/put');
-    expect(body.r2_key).toBe('releases/default/app.zip');
+    const body = await res.json() as { item: { presigned_url: string; release_id: string; r2_key: string; expires_at: number } };
+    expect(body.item.presigned_url).toBe('https://r2.example.com/put');
+    expect(body.item.r2_key).toBe('releases/default/app.zip');
     expect(createRelease).toHaveBeenCalledWith(
       relEnv.APP_DB,
       expect.objectContaining({
-        id: body.release_id,
+        id: body.item.release_id,
         service_id: 'default',
         name: 'v1.0.0',
-        r2_key: body.r2_key,
+        r2_key: body.item.r2_key,
         tags: [],
         force_update: false,
       })
@@ -166,7 +166,7 @@ describe('POST /releases/upload/init', () => {
     expect(generatePresignedPutUrl).toHaveBeenCalledWith(
       relEnv,
       'primary',
-      body.r2_key,
+      body.item.r2_key,
       'application/octet-stream',
       3600
     );
@@ -184,8 +184,8 @@ describe('POST /releases/upload/init', () => {
     );
 
     expect(res.status).toBe(201);
-    const body = await res.json() as { r2_key: string };
-    expect(body.r2_key).toBe('releases/app.zip');
+    const body = await res.json() as { item: { r2_key: string } };
+    expect(body.item.r2_key).toBe('releases/app.zip');
     expect(generatePresignedPutUrl).toHaveBeenCalledWith(
       relEnv,
       'service-b',
@@ -225,6 +225,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('returns success when release is already completed', async () => {
@@ -239,6 +241,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item).toEqual({ id: 'rel-1', status: 'completed' });
     expect(headObject).not.toHaveBeenCalled();
   });
 
@@ -257,6 +261,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(409);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('conflict');
     expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
   });
 
@@ -275,6 +281,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(409);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('conflict');
     expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
     expect(completeRelease).not.toHaveBeenCalled();
     expect(updateRelease).not.toHaveBeenCalled();
@@ -296,8 +304,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { success: boolean };
-    expect(body.success).toBe(true);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item).toEqual({ id: 'rel-1', status: 'completed' });
     expect(updateRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default', { size: 4096 });
   });
 });
@@ -315,6 +323,8 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('marks a release failed', async () => {
@@ -330,6 +340,8 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item).toEqual({ id: 'rel-1', status: 'failed' });
     expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
   });
 
@@ -345,8 +357,8 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { status: string };
-    expect(body.status).toBe('failed');
+    const body = await res.json() as { item: { status: string } };
+    expect(body.item.status).toBe('failed');
     expect(failRelease).not.toHaveBeenCalled();
   });
 
@@ -362,8 +374,9 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(409);
-    const body = await res.json() as { message: string };
-    expect(body.message).toBe('Release is already in state: completed');
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toBe('Release is already in state: completed');
     expect(failRelease).not.toHaveBeenCalled();
   });
 });

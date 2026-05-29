@@ -128,6 +128,7 @@ const multipartAbortBodySchema = z.object({
 });
 
 releases.post('/upload/init', zValidator('json', uploadInitBodySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const service = c.get('service')!;
   const userId = c.get('userId');
 
@@ -156,80 +157,96 @@ releases.post('/upload/init', zValidator('json', uploadInitBodySchema, v2Validat
     presigned_expires_at: expires_at,
   });
 
-  return c.json(
+  const response = c.json(
     {
-      release_id: release.id,
-      presigned_url,
-      r2_key: r2Key,
-      expires_at,
+      item: {
+        release_id: release.id,
+        presigned_url,
+        r2_key: r2Key,
+        expires_at,
+      },
     },
     201
   );
+  logV2Request(c, start, { route_family: 'releases', operation: 'upload_init' });
+  return response;
 });
 
 releases.post('/upload/complete', zValidator('json', uploadCompleteBodySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const service = c.get('service')!;
   const { release_id, size } = c.req.valid('json');
   const release = await getRelease(c.env.APP_DB, release_id, service.id);
 
   if (!release) {
-    return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
+    throw new V2Error('not_found', 404, 'Release not found');
   }
 
   if (release.upload_status === 'completed') {
-    return c.json({ success: true, release_id, status: 'completed' });
+    const response = c.json({ item: { id: release_id, status: 'completed' as const } });
+    logV2Request(c, start, { route_family: 'releases', operation: 'upload_complete' });
+    return response;
   }
 
   const meta = await headObject(c.env, service.default_bucket, release.r2_key);
   if (!meta) {
     await failRelease(c.env.APP_DB, release_id);
-    return c.json({ error: 'Conflict', message: 'Release object not found in storage' }, 409);
+    throw new V2Error('conflict', 409, 'Release object not found in storage');
   }
 
   if (meta.size !== size) {
     await failRelease(c.env.APP_DB, release_id);
-    return c.json({ error: 'Conflict', message: 'Release object size mismatch' }, 409);
+    throw new V2Error('conflict', 409, 'Release object size mismatch');
   }
 
   const completed = await completeRelease(c.env.APP_DB, release_id);
   if (!completed) {
-    return c.json({ error: 'Conflict', message: 'Release could not be completed — it may have been cancelled' }, 409);
+    throw new V2Error('conflict', 409, 'Release could not be completed — it may have been cancelled');
   }
 
   await updateRelease(c.env.APP_DB, release_id, service.id, { size });
-  return c.json({ success: true, release_id, status: 'completed' });
+  const response = c.json({ item: { id: release_id, status: 'completed' as const } });
+  logV2Request(c, start, { route_family: 'releases', operation: 'upload_complete' });
+  return response;
 });
 
 releases.post('/upload/fail', zValidator('json', uploadFailBodySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const service = c.get('service')!;
   const { release_id } = c.req.valid('json');
   const release = await getRelease(c.env.APP_DB, release_id, service.id);
 
   if (!release) {
-    return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
+    throw new V2Error('not_found', 404, 'Release not found');
   }
 
   if (release.upload_status === 'failed') {
-    return c.json({ success: true, release_id, status: 'failed' });
+    const response = c.json({ item: { id: release_id, status: 'failed' as const } });
+    logV2Request(c, start, { route_family: 'releases', operation: 'upload_fail' });
+    return response;
   }
 
   if (release.upload_status !== 'pending') {
-    return c.json({ error: 'Conflict', message: `Release is already in state: ${release.upload_status}` }, 409);
+    throw new V2Error('conflict', 409, `Release is already in state: ${release.upload_status}`);
   }
 
   const failed = await failRelease(c.env.APP_DB, release_id);
   if (!failed) {
     const current = await getRelease(c.env.APP_DB, release_id, service.id);
     if (!current) {
-      return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
+      throw new V2Error('not_found', 404, 'Release not found');
     }
     if (current.upload_status === 'failed') {
-      return c.json({ success: true, release_id, status: 'failed' });
+      const response = c.json({ item: { id: release_id, status: 'failed' as const } });
+      logV2Request(c, start, { route_family: 'releases', operation: 'upload_fail' });
+      return response;
     }
-    return c.json({ error: 'Conflict', message: `Release is already in state: ${current.upload_status}` }, 409);
+    throw new V2Error('conflict', 409, `Release is already in state: ${current.upload_status}`);
   }
 
-  return c.json({ success: true, release_id, status: 'failed' });
+  const response = c.json({ item: { id: release_id, status: 'failed' as const } });
+  logV2Request(c, start, { route_family: 'releases', operation: 'upload_fail' });
+  return response;
 });
 
 // ─── Multipart Upload ─────────────────────────────────────────────────────────
