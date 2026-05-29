@@ -587,25 +587,23 @@ upload.post(
  */
 upload.get(
   '/r2/multipart/sign-part',
-  zValidator('query', multipartSignPartQuerySchema, validationErrorHook),
+  zValidator('query', multipartSignPartQuerySchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const { upload_id, part_number } = c.req.valid('query');
 
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {
       if (result.error === 'not_found') {
-        return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
+        throw new V2Error('not_found', 404, 'Upload record not found');
       }
-      return c.json(
-        { error: 'Conflict', message: 'Upload is not a multipart R2 upload' },
-        409
-      );
+      throw new V2Error('conflict', 409, 'Upload is not a multipart R2 upload');
     }
 
     const { record } = result;
 
     if (record.status !== 'pending') {
-      return c.json({ error: 'Conflict', message: `Upload is in state: ${record.status}` }, 409);
+      throw new V2Error('conflict', 409, `Upload is in state: ${record.status}`);
     }
 
     const signed = await signUploadPart(
@@ -617,10 +615,14 @@ upload.get(
       MULTIPART_PART_URL_TTL_SECONDS
     );
 
-    return c.json<MultipartSignPartResponse>({
-      url: signed.url,
-      expires_at: signed.expires_at,
+    const response = c.json({
+      item: {
+        url: signed.url,
+        expires_at: signed.expires_at,
+      },
     });
+    logV2Request(c, start, { route_family: 'upload', operation: 'multipart_sign_part' });
+    return response;
   }
 );
 

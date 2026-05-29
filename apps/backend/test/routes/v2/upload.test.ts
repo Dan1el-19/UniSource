@@ -345,3 +345,33 @@ describe('POST /upload/r2/multipart/create — V2 envelope', () => {
     expect(body.error.code).toBe('file_too_large')
   })
 })
+
+describe('GET /upload/r2/multipart/sign-part — V2 envelope', () => {
+  it('returns 404 not_found when upload record missing', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request(
+        'http://localhost/upload/r2/multipart/sign-part?upload_id=nonexistent&part_number=1',
+        { method: 'GET' }
+      ),
+      testEnv()
+    )
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('not_found')
+  })
+
+  it('returns 400 validation_error when part_number out of range', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request(
+        'http://localhost/upload/r2/multipart/sign-part?upload_id=abc&part_number=99999',
+        { method: 'GET' }
+      ),
+      testEnv()
+    )
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('validation_error')
+  })
+})
