@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { V2_ERROR_CODES, isV2ErrorCode, type V2ErrorCode } from '../../src/v2/error-codes'
 
 describe('V2_ERROR_CODES', () => {
-  it('contains the closed set of 11 known codes', () => {
+  it('contains the closed set of 13 known codes', () => {
     expect(V2_ERROR_CODES).toEqual([
       'validation_error',
       'cursor_invalid',
@@ -15,6 +15,8 @@ describe('V2_ERROR_CODES', () => {
       'conflict',
       'bad_gateway',
       'gone',
+      'file_too_large',
+      'quota_exceeded',
     ])
   })
 
