@@ -15,6 +15,8 @@ vi.mock('../src/db/releases', async (importOriginal) => {
     deleteRelease: vi.fn(),
     getLatestRelease: vi.fn(),
     upsertReleaseSync: vi.fn(),
+    createMultipartRelease: vi.fn(),
+    getReleaseMultipartContext: vi.fn(),
   };
 });
 
@@ -29,6 +31,11 @@ vi.mock('../src/services/r2', async (importOriginal) => {
     }),
     headObject: vi.fn().mockResolvedValue({ size: 4096 }),
     deleteObject: vi.fn(),
+    createMultipartUpload: vi.fn().mockResolvedValue({ upload_id: 'r2-upload-id' }),
+    signUploadPart: vi.fn().mockResolvedValue({ url: 'https://r2.example.com/part-1', expires_at: 9999999999 }),
+    listUploadedParts: vi.fn().mockResolvedValue([{ PartNumber: 1, ETag: 'etag-1', Size: 1024 }]),
+    completeMultipartUpload: vi.fn().mockResolvedValue({ etag: 'complete-etag' }),
+    abortMultipartUpload: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -42,8 +49,10 @@ import {
   updateRelease,
   deleteRelease,
   upsertReleaseSync,
+  createMultipartRelease,
+  getReleaseMultipartContext,
 } from '../src/db/releases';
-import { deleteObject, generatePresignedPutUrl, headObject } from '../src/services/r2';
+import { deleteObject, generatePresignedPutUrl, headObject, createMultipartUpload, signUploadPart, listUploadedParts, completeMultipartUpload, abortMultipartUpload } from '../src/services/r2';
 import releasesRouter from '../src/routes/releases';
 
 function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'default') {
@@ -378,6 +387,119 @@ describe('POST /releases/upload/fail', () => {
     expect(body.error.code).toBe('conflict');
     expect(body.error.message).toBe('Release is already in state: completed');
     expect(failRelease).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /releases/upload/multipart/create', () => {
+  it('returns 201 with upload_id and r2_upload_id', async () => {
+    vi.mocked(createMultipartUpload).mockResolvedValue({ upload_id: 'r2-upload-id' });
+    vi.mocked(createMultipartRelease).mockResolvedValue({ ...completedRelease, upload_status: 'pending' });
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'v1.0.0', filename: 'app.zip' }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json() as { item: { upload_id: string; r2_upload_id: string } };
+    expect(body.item.r2_upload_id).toBe('r2-upload-id');
+  });
+});
+
+describe('GET /releases/upload/multipart/sign-part', () => {
+  it('returns 200 with presigned part URL', async () => {
+    vi.mocked(signUploadPart).mockResolvedValue({ url: 'https://r2.example.com/part-1', expires_at: 9999999999 });
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/sign-part?upload_id=rel-1&part_number=1'),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { item: { url: string } };
+    expect(body.item.url).toBe('https://r2.example.com/part-1');
+  });
+});
+
+describe('GET /releases/upload/multipart/list-parts', () => {
+  it('returns 200 with V2 page envelope', async () => {
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/list-parts?upload_id=rel-1'),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { items: unknown[]; page: { limit: number; next_cursor: string | null } };
+    expect(body.page).toEqual({ limit: 1000, next_cursor: null });
+  });
+});
+
+describe('POST /releases/upload/multipart/complete', () => {
+  it('returns 200 with completed status', async () => {
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    vi.mocked(completeMultipartUpload).mockResolvedValue({ etag: 'complete-etag' });
+    vi.mocked(completeRelease).mockResolvedValue(true);
+    vi.mocked(updateRelease).mockResolvedValue(completedRelease);
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'rel-1', parts: [{ PartNumber: 1, ETag: 'etag-1' }] }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item.status).toBe('completed');
+  });
+});
+
+describe('DELETE /releases/upload/multipart/abort', () => {
+  it('returns 200 with failed status', async () => {
+    vi.mocked(abortMultipartUpload).mockResolvedValue(undefined);
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    vi.mocked(failRelease).mockResolvedValue(true);
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/abort', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'rel-1' }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item.status).toBe('failed');
   });
 });
 

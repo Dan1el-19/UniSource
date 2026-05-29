@@ -275,6 +275,7 @@ releases.post(
   '/upload/multipart/create',
   zValidator('json', multipartCreateBodySchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const service = c.get('service')!;
     const userId = c.get('userId');
 
@@ -288,13 +289,7 @@ releases.post(
       r2UploadId = result.upload_id;
     } catch (err) {
       console.error('[releases.multipart/create] R2 CreateMultipartUpload failed', err);
-      return c.json(
-        {
-          error: 'Bad Gateway',
-          message: 'Failed to start multipart upload',
-        },
-        502
-      );
+      throw new V2Error('bad_gateway', 502, 'Failed to start multipart upload');
     }
 
     try {
@@ -310,24 +305,26 @@ releases.post(
         r2_upload_id: r2UploadId,
       });
     } catch (err) {
-      // Release the orphaned R2 multipart upload if D1 insert fails.
       await abortMultipartUpload(c.env, service.default_bucket, r2Key, r2UploadId).catch(() => undefined);
       throw err;
     }
 
-    // R2 auto-aborts multipart uploads after 7 days; mirror the limit.
     const expires_at = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
 
-    return c.json(
+    const response = c.json(
       {
-        upload_id: releaseId,
-        r2_upload_id: r2UploadId,
-        key: r2Key,
-        bucket: service.default_bucket,
-        expires_at,
+        item: {
+          upload_id: releaseId,
+          r2_upload_id: r2UploadId,
+          key: r2Key,
+          bucket: service.default_bucket,
+          expires_at,
+        },
       },
       201
     );
+    logV2Request(c, start, { route_family: 'releases', operation: 'multipart_create' });
+    return response;
   }
 );
 
@@ -345,12 +342,12 @@ releases.get(
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
-      return c.json({ error: 'Not Found', message: 'Release upload not found' }, 404);
+      throw new V2Error('not_found', 404, 'Release upload not found');
     }
     const { ctx } = result;
 
     if (ctx.upload_status !== 'pending') {
-      return c.json({ error: 'Conflict', message: `Release is in state: ${ctx.upload_status}` }, 409);
+      throw new V2Error('conflict', 409, `Release is in state: ${ctx.upload_status}`);
     }
 
     const signed = await signUploadPart(
@@ -362,7 +359,7 @@ releases.get(
       RELEASE_MULTIPART_PART_URL_TTL_SECONDS
     );
 
-    return c.json({ url: signed.url, expires_at: signed.expires_at });
+    return c.json({ item: { url: signed.url, expires_at: signed.expires_at } });
   }
 );
 
@@ -380,7 +377,7 @@ releases.get(
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
-      return c.json({ error: 'Not Found', message: 'Release upload not found' }, 404);
+      throw new V2Error('not_found', 404, 'Release upload not found');
     }
     const { ctx } = result;
 
@@ -391,7 +388,10 @@ releases.get(
       ctx.r2_upload_id
     );
 
-    return c.json({ parts });
+    return c.json({
+      items: parts,
+      page: { limit: 1000, next_cursor: null as string | null },
+    });
   }
 );
 
@@ -410,15 +410,15 @@ releases.post(
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
-      return c.json({ error: 'Not Found', message: 'Release upload not found' }, 404);
+      throw new V2Error('not_found', 404, 'Release upload not found');
     }
     const { ctx } = result;
 
     if (ctx.upload_status === 'completed') {
-      return c.json({ success: true, release_id: upload_id, status: 'completed' });
+      return c.json({ item: { id: upload_id, status: 'completed' as const } });
     }
     if (ctx.upload_status !== 'pending') {
-      return c.json({ error: 'Conflict', message: `Release is in state: ${ctx.upload_status}` }, 409);
+      throw new V2Error('conflict', 409, `Release is in state: ${ctx.upload_status}`);
     }
 
     try {
@@ -431,32 +431,26 @@ releases.post(
       );
     } catch (err) {
       console.error('[releases.multipart/complete] CompleteMultipartUpload failed', err);
-      return c.json(
-        { error: 'Conflict', message: 'Failed to complete multipart upload' },
-        409
-      );
+      throw new V2Error('conflict', 409, 'Failed to complete multipart upload');
     }
 
     const meta = await headObject(c.env, service.default_bucket, ctx.r2_key);
     if (!meta) {
       await failRelease(c.env.APP_DB, upload_id);
-      return c.json({ error: 'Conflict', message: 'Release object not found in storage' }, 409);
+      throw new V2Error('conflict', 409, 'Release object not found in storage');
     }
 
     const completed = await completeRelease(c.env.APP_DB, upload_id);
     if (!completed) {
       const refreshed = await getRelease(c.env.APP_DB, upload_id, service.id);
       if (refreshed?.upload_status === 'completed') {
-        return c.json({ success: true, release_id: upload_id, status: 'completed' });
+        return c.json({ item: { id: upload_id, status: 'completed' as const } });
       }
-      return c.json(
-        { error: 'Conflict', message: 'Release could not be completed — it may have been cancelled' },
-        409
-      );
+      throw new V2Error('conflict', 409, 'Release could not be completed — it may have been cancelled');
     }
 
     await updateRelease(c.env.APP_DB, upload_id, service.id, { size: meta.size });
-    return c.json({ success: true, release_id: upload_id, status: 'completed' });
+    return c.json({ item: { id: upload_id, status: 'completed' as const } });
   }
 );
 
@@ -473,15 +467,15 @@ releases.delete(
 
     const result = await getOwnedMultipartRelease(c, upload_id);
     if ('error' in result) {
-      return c.json({ error: 'Not Found', message: 'Release upload not found' }, 404);
+      throw new V2Error('not_found', 404, 'Release upload not found');
     }
     const { ctx } = result;
 
     if (ctx.upload_status === 'failed') {
-      return c.json({ success: true, release_id: upload_id, status: 'failed' });
+      return c.json({ item: { id: upload_id, status: 'failed' as const } });
     }
     if (ctx.upload_status !== 'pending') {
-      return c.json({ error: 'Conflict', message: `Release is already in state: ${ctx.upload_status}` }, 409);
+      throw new V2Error('conflict', 409, `Release is already in state: ${ctx.upload_status}`);
     }
 
     await abortMultipartUpload(
@@ -493,7 +487,7 @@ releases.delete(
 
     await failRelease(c.env.APP_DB, upload_id);
 
-    return c.json({ success: true, release_id: upload_id, status: 'failed' });
+    return c.json({ item: { id: upload_id, status: 'failed' as const } });
   }
 );
 
