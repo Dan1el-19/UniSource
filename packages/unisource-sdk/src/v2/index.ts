@@ -68,3 +68,40 @@ export type {
   AdminQuotaReconcileRequest,
   AdminQuotaReconcileResponse,
 } from './admin-schemas'
+
+// Upload (V2 namespace)
+export {
+  v2UploadR2InitRequestSchema,
+  v2UploadR2InitResponseSchema,
+  v2UploadAppwriteInitRequestSchema,
+  v2UploadAppwriteInitResponseSchema,
+  v2UploadCompleteRequestSchema,
+  v2UploadLifecycleResponseSchema,
+  v2MultipartCreateRequestSchema,
+  v2MultipartCreateResponseSchema,
+  v2MultipartSignPartQuerySchema,
+  v2MultipartSignPartResponseSchema,
+  v2MultipartListPartsResponseSchema,
+  v2MultipartCompleteRequestSchema,
+  v2MultipartCompleteResponseSchema,
+  v2MultipartAbortRequestSchema,
+  v2MultipartAbortResponseSchema,
+} from './upload-schemas'
+export type {
+  V2UploadR2InitRequest,
+  V2UploadR2InitResponse,
+  V2UploadAppwriteInitRequest,
+  V2UploadAppwriteInitResponse,
+  V2UploadCompleteRequest,
+  V2UploadLifecycleResponse,
+  V2MultipartCreateRequest,
+  V2MultipartCreateResponse,
+  V2MultipartSignPartQuery,
+  V2MultipartSignPartResponse,
+  V2MultipartPart,
+  V2MultipartListPartsResponse,
+  V2MultipartCompleteRequest,
+  V2MultipartCompleteResponse,
+  V2MultipartAbortRequest,
+  V2MultipartAbortResponse,
+} from './upload-schemas'
