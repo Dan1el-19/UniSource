@@ -827,27 +827,25 @@ upload.post(
  */
 upload.delete(
   '/r2/multipart/abort',
-  zValidator('json', multipartAbortRequestSchema, validationErrorHook),
+  zValidator('json', multipartAbortRequestSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const body = c.req.valid('json');
     const { upload_id } = body;
 
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {
       if (result.error === 'not_found') {
-        return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
+        throw new V2Error('not_found', 404, 'Upload record not found');
       }
-      return c.json(
-        { error: 'Conflict', message: 'Upload is not a multipart R2 upload' },
-        409
-      );
+      throw new V2Error('conflict', 409, 'Upload is not a multipart R2 upload');
     }
 
     const { record } = result;
     const isMainStorage = record.is_main_storage === 1;
 
     if (record.status !== 'pending') {
-      return c.json({ error: 'Conflict', message: `Upload is already in state: ${record.status}` }, 409);
+      throw new V2Error('conflict', 409, `Upload is already in state: ${record.status}`);
     }
 
     // Tell R2 to drop all uploaded parts.
@@ -864,7 +862,16 @@ upload.delete(
       }
     }
 
-    return c.json<MultipartAbortResponse>({ success: true, upload_id, status: 'failed' });
+    const response = c.json({
+      item: {
+        id: upload_id,
+        status: 'failed' as const,
+        upload_type: 'multipart' as const,
+        file_id: null,
+      },
+    });
+    logV2Request(c, start, { route_family: 'upload', operation: 'multipart_abort' });
+    return response;
   }
 );
 

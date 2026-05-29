@@ -425,3 +425,20 @@ describe('POST /upload/r2/multipart/complete — V2 envelope', () => {
     expect(body.error.code).toBe('validation_error')
   })
 })
+
+describe('DELETE /upload/r2/multipart/abort — V2 envelope', () => {
+  it('returns 404 not_found when upload record missing', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/multipart/abort', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'nonexistent' }),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('not_found')
+  })
+})
