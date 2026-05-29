@@ -10,6 +10,7 @@ import { createShareLinksResource } from './resources/share-links'
 import { createSharesResource } from './resources/shares'
 import { createUploadResource } from './resources/upload'
 import { createUserFilesResource } from './resources/user-files'
+import { createReleasesResource } from './resources/releases'
 
 let warned = false
 
@@ -42,6 +43,7 @@ export class UnisourceV2Client {
   readonly admin: ReturnType<typeof createAdminResource>
   readonly public: ReturnType<typeof createPublicResource>
   readonly upload: ReturnType<typeof createUploadResource>
+  readonly releases: ReturnType<typeof createReleasesResource>
 
   constructor(config: UnisourceV2ClientConfig) {
     if (config.apiKey && config.getToken) {
@@ -70,5 +72,6 @@ export class UnisourceV2Client {
     this.admin = createAdminResource(request)
     this.public = createPublicResource(request, config.baseUrl)
     this.upload = createUploadResource(request)
+    this.releases = createReleasesResource(request)
   }
 }
