@@ -672,8 +672,9 @@ upload.get(
  */
 upload.post(
   '/r2/multipart/complete',
-  zValidator('json', multipartCompleteRequestSchema, validationErrorHook),
+  zValidator('json', multipartCompleteRequestSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const body = c.req.valid('json');
     const { upload_id, parts } = body;
     const serviceId = c.get('serviceId');
@@ -682,18 +683,28 @@ upload.post(
     const result = await getOwnedMultipartUpload(c, upload_id);
     if ('error' in result) {
       if (result.error === 'not_found') {
-        return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
+        throw new V2Error('not_found', 404, 'Upload record not found');
       }
-      return c.json(
-        { error: 'Conflict', message: 'Upload is not a multipart R2 upload' },
-        409
-      );
+      throw new V2Error('conflict', 409, 'Upload is not a multipart R2 upload');
     }
 
     const { record } = result;
 
     if (record.status === 'completed') {
-      return c.json<MultipartCompleteResponse>({ success: true, upload_id, status: 'completed' });
+      const existingFile = await c.env.APP_DB
+        .prepare('SELECT id FROM files WHERE upload_id = ? LIMIT 1')
+        .bind(upload_id)
+        .first<{ id: string }>();
+      const response = c.json({
+        item: {
+          id: upload_id,
+          status: 'completed' as const,
+          upload_type: 'multipart' as const,
+          file_id: existingFile?.id ?? null,
+        },
+      });
+      logV2Request(c, start, { route_family: 'upload', operation: 'multipart_complete' });
+      return response;
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -711,10 +722,9 @@ upload.post(
           console.error('[multipart/complete] abortMultipartUpload after expiry failed', err);
         });
       }
-      return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
+      throw new V2Error('gone', 410, 'Upload session has expired');
     }
 
-    // Tell R2 to stitch the parts together.
     try {
       await completeMultipartUpload(
         c.env,
@@ -724,15 +734,10 @@ upload.post(
         parts
       );
     } catch (err) {
-      // S5: keep upstream error in server logs; do not echo to clients.
       console.error('[multipart/complete] R2 CompleteMultipartUpload failed', err);
-      return c.json(
-        { error: 'Conflict', message: 'Failed to complete multipart upload' },
-        409
-      );
+      throw new V2Error('conflict', 409, 'Failed to complete multipart upload');
     }
 
-    // Verify physical size matches the reserved size.
     const meta = await headObject(c.env, record.bucket, record.storage_key);
     if (!meta || meta.size !== record.size) {
       const failed = await failUpload(c.env.APP_DB, upload_id);
@@ -743,16 +748,15 @@ upload.post(
           await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
         }
       }
-      return c.json(
-        {
-          error: 'Conflict',
-          message: !meta ? 'File not found in storage' : 'File size mismatch',
-        },
-        409
+      throw new V2Error(
+        'conflict',
+        409,
+        !meta ? 'File not found in storage' : 'File size mismatch'
       );
     }
 
     const newFileId = crypto.randomUUID();
+    let createdFileId: string | null = null;
 
     if (userId !== 'system' || isMainStorage) {
       const promotion = await completeUploadAndCreateFile(c.env.APP_DB, {
@@ -774,8 +778,9 @@ upload.post(
       });
 
       if (!promotion.completed && !promotion.alreadyCompleted) {
-        return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
+        throw new V2Error('conflict', 409, 'Upload could not be completed');
       }
+      createdFileId = promotion.completed ? newFileId : null;
 
       if (userId !== 'system' && promotion.completed) {
         c.executionCtx.waitUntil(
@@ -799,11 +804,21 @@ upload.post(
     } else {
       const updated = await completeUpload(c.env.APP_DB, upload_id);
       if (!updated) {
-        return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
+        throw new V2Error('conflict', 409, 'Upload could not be completed');
       }
+      createdFileId = null;
     }
 
-    return c.json<MultipartCompleteResponse>({ success: true, upload_id, status: 'completed' });
+    const response = c.json({
+      item: {
+        id: upload_id,
+        status: 'completed' as const,
+        upload_type: 'multipart' as const,
+        file_id: createdFileId,
+      },
+    });
+    logV2Request(c, start, { route_family: 'upload', operation: 'multipart_complete' });
+    return response;
   }
 );
 

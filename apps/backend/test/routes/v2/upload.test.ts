@@ -390,3 +390,38 @@ describe('GET /upload/r2/multipart/list-parts — V2 envelope', () => {
     expect(body.error.code).toBe('not_found')
   })
 })
+
+describe('POST /upload/r2/multipart/complete — V2 envelope', () => {
+  it('returns 404 not_found when upload record missing', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/multipart/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          upload_id: 'nonexistent',
+          parts: [{ PartNumber: 1, ETag: 'etag1' }],
+        }),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('not_found')
+  })
+
+  it('returns 400 validation_error for empty parts array', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/multipart/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'abc', parts: [] }),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('validation_error')
+  })
+})
