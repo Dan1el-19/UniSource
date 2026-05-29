@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { encodeCursor, decodeCursor } from '../lib/v2/cursor';
-import { V2Error } from '../lib/v2/errors';
+import { encodeCursor, decodeCursor } from '../../lib/v2/cursor';
+import { V2Error } from '../../lib/v2/errors';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
