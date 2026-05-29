@@ -79,6 +79,11 @@ wrangler.generated.jsonc
 npm-debug.log*
 
 .claude/
+.commandcode/
+
+# Plans and notes
+plans/
+docs/superpowers/plans/
 
 # Git worktrees
 .worktrees/
