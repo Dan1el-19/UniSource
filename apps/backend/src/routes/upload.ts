@@ -16,6 +16,9 @@ import {
 import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
 import { buildStorageKey, buildAppwriteStorageKey } from '../services/storageKeys';
 import { canWriteMainStorage, mainStorageForbiddenResponse } from '../middleware/mainStorageGuard';
+import { V2Error } from '../lib/v2/errors';
+import { v2ValidationHook } from '../lib/v2/zodHook';
+import { logV2Request } from '../lib/v2/log';
 import {
   type UploadAppwriteInitResponse,
   type UploadCompleteResponse,
@@ -80,94 +83,105 @@ function getDatePath(): string {
 /**
  * R2 Upload — Presigned PUT URL
  */
-upload.post('/r2/init', rateLimit('upload-init'), zValidator('json', uploadR2InitRequestSchema, validationErrorHook), async (c) => {
-  const body = c.req.valid('json');
-  const serviceId = c.get('serviceId');
-  const userId = c.get('userId');
-  const service = c.get('service')!;
+upload.post(
+  '/r2/init',
+  rateLimit('upload-init'),
+  zValidator('json', uploadR2InitRequestSchema, v2ValidationHook),
+  async (c) => {
+    const start = Date.now();
+    const body = c.req.valid('json');
+    const serviceId = c.get('serviceId');
+    const userId = c.get('userId');
+    const service = c.get('service')!;
 
-  // S1: only admin/plus/system can target main storage.
-  if (body.is_main_storage === true && !canWriteMainStorage(c)) {
-    return mainStorageForbiddenResponse(c);
-  }
+    if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+      throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
+    }
 
-  const { filename, size, mime_type, folder_id } = body;
+    const { filename, size, mime_type, folder_id } = body;
 
-  // Quota check and reserve before creating presigned URL (atomic)
-  const quotaResult = body.is_main_storage
-    ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
-    : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
-  if (!quotaResult.ok) {
-    if (userId !== 'system') {
-      c.executionCtx.waitUntil(
-        logServiceEvent(c.env.APP_DB, {
-          serviceId,
-          userId,
-          action: 'quota_exceeded',
-          resourceType: 'service',
-          resourceId: serviceId,
-          metadata: { requested_bytes: size },
-          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
-        })
+    if (size > service.max_file_size_bytes) {
+      throw new V2Error(
+        'file_too_large',
+        413,
+        `File exceeds maximum size of ${service.max_file_size_bytes} bytes`,
+        { max_bytes: service.max_file_size_bytes }
       );
     }
-    const scope = 'scope' in quotaResult ? quotaResult.scope : 'service';
-    return c.json(
+
+    const quotaResult = body.is_main_storage
+      ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
+      : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
+    if (!quotaResult.ok) {
+      if (userId !== 'system') {
+        c.executionCtx.waitUntil(
+          logServiceEvent(c.env.APP_DB, {
+            serviceId,
+            userId,
+            action: 'quota_exceeded',
+            resourceType: 'service',
+            resourceId: serviceId,
+            metadata: { requested_bytes: size },
+            ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+          })
+        );
+      }
+      const scope = 'scope' in quotaResult ? quotaResult.scope : 'service';
+      throw new V2Error(
+        'quota_exceeded',
+        409,
+        scope === 'user'
+          ? 'Storage quota exceeded for this user'
+          : 'Storage quota exceeded for this service',
+        { scope, requested_bytes: size }
+      );
+    }
+
+    const uploadId = crypto.randomUUID();
+    const ext = filename.includes('.') ? filename.split('.').pop() : '';
+    const storageKey = buildStorageKey(service.object_key_prefix, getDatePath(), uploadId, ext ?? '');
+
+    const { presigned_url, expires_at } = await generatePresignedPutUrl(
+      c.env,
+      service.default_bucket,
+      storageKey,
+      mime_type,
+      UPLOAD_TTL_SECONDS
+    );
+
+    await createUpload(c.env.APP_DB, {
+      id: uploadId,
+      service_id: serviceId,
+      user_id: userId === 'system' ? null : userId,
+      folder_id: folder_id ?? null,
+      filename,
+      size,
+      mime_type,
+      destination: 'r2',
+      storage_key: storageKey,
+      bucket: service.default_bucket,
+      presigned_url,
+      expires_at,
+      is_main_storage: body.is_main_storage === true,
+    });
+
+    const response = c.json(
       {
-        error: 'Conflict',
-        message:
-          scope === 'user'
-            ? 'Storage quota exceeded for this user'
-            : 'Storage quota exceeded for this service',
+        item: {
+          upload_id: uploadId,
+          destination: 'r2' as const,
+          presigned_url,
+          storage_key: storageKey,
+          bucket: service.default_bucket,
+          expires_at,
+        },
       },
-      409
+      201
     );
+    logV2Request(c, start, { route_family: 'upload', operation: 'r2_init' });
+    return response;
   }
-
-  if (size > service.max_file_size_bytes) {
-    return c.json(
-      { error: 'Payload Too Large', message: `File exceeds maximum size of ${service.max_file_size_bytes} bytes` },
-      413
-    );
-  }
-
-  const uploadId = crypto.randomUUID();
-  const ext = filename.includes('.') ? filename.split('.').pop() : '';
-  const storageKey = buildStorageKey(service.object_key_prefix, getDatePath(), uploadId, ext ?? '');
-
-  const { presigned_url, expires_at } = await generatePresignedPutUrl(
-    c.env,
-    service.default_bucket,    // from config — clients cannot override bucket
-    storageKey,
-    mime_type,
-    UPLOAD_TTL_SECONDS
-  );
-
-  await createUpload(c.env.APP_DB, {
-    id: uploadId,
-    service_id: serviceId,
-    user_id: userId === 'system' ? null : userId,
-    folder_id: folder_id ?? null,
-    filename,
-    size,
-    mime_type,
-    destination: 'r2',
-    storage_key: storageKey,
-    bucket: service.default_bucket,
-    presigned_url,
-    expires_at,
-    is_main_storage: body.is_main_storage === true,
-  });
-
-  return c.json<UploadR2InitResponse>({
-    upload_id: uploadId,
-    destination: 'r2',
-    presigned_url,
-    storage_key: storageKey,
-    bucket: service.default_bucket,
-    expires_at,
-  }, 201);
-});
+);
 
 /**
  * Appwrite Upload — Returns credentials for direct Appwrite SDK upload
