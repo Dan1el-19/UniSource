@@ -431,44 +431,54 @@ superadmin.delete('/account-keys/:keyId', async (c) => {
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
 superadmin.get('/services/:id/cors', async (c) => {
+  const start = Date.now();
   const origins = await getServiceCors(c.env.APP_DB, c.req.param('id'));
-  return c.json({ origins });
+  const response = c.json(listResponse(origins, { limit: 100, next_cursor: null }));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'get_service_cors' });
+  return response;
 });
 
 const corsSchema = z.object({
   origins: z.array(z.string().min(1)).max(100),
 });
 
-superadmin.put('/services/:id/cors', zValidator('json', corsSchema), async (c) => {
+superadmin.put('/services/:id/cors', zValidator('json', corsSchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const id = c.req.param('id');
   const { origins } = c.req.valid('json');
 
   const service = await getServiceDetails(c.env.APP_DB, id);
-  if (!service) return c.json({ error: 'Service not found' }, 404);
+  if (!service) throw new V2Error('not_found', 404, 'Service not found');
 
   await replaceServiceCors(c.env.APP_DB, id, origins);
-  return c.json({ origins });
+  const response = c.json(listResponse(origins, { limit: 100, next_cursor: null }));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'replace_service_cors' });
+  return response;
 });
 
 // ─── Cloudflare config ────────────────────────────────────────────────────────
 
 superadmin.get('/services/:id/cloudflare', async (c) => {
+  const start = Date.now();
   const row = await c.env.APP_DB
     .prepare(`SELECT cloudflare_config FROM services WHERE id = ?`)
     .bind(c.req.param('id'))
     .first<{ cloudflare_config: string | null }>();
 
-  if (!row) return c.json({ error: 'Not found' }, 404);
-  return c.json({ cloudflare_config: row.cloudflare_config ? JSON.parse(row.cloudflare_config) : null });
+  if (!row) throw new V2Error('not_found', 404, 'Service not found');
+  const response = c.json(itemResponse({ cloudflare_config: row.cloudflare_config ? JSON.parse(row.cloudflare_config) : null }));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'get_cloudflare_config' });
+  return response;
 });
 
 superadmin.patch('/services/:id/cloudflare', async (c) => {
+  const start = Date.now();
   const id = c.req.param('id');
   let body: unknown;
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: 'Invalid JSON' }, 400);
+    throw new V2Error('validation_error', 400, 'Invalid JSON');
   }
 
   const result = await c.env.APP_DB
@@ -476,8 +486,10 @@ superadmin.patch('/services/:id/cloudflare', async (c) => {
     .bind(JSON.stringify(body), id)
     .run();
 
-  if ((result.meta.changes ?? 0) === 0) return c.json({ error: 'Not found' }, 404);
-  return c.json({ cloudflare_config: body });
+  if ((result.meta.changes ?? 0) === 0) throw new V2Error('not_found', 404, 'Service not found');
+  const response = c.json(itemResponse({ cloudflare_config: body }));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'update_cloudflare_config' });
+  return response;
 });
 
 export default superadmin;

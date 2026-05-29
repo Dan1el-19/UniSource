@@ -447,3 +447,122 @@ describe('superadmin API keys', () => {
     expect(body.error.code).toBe('not_found');
   }, TEST_TIMEOUT);
 });
+
+describe('superadmin CORS and Cloudflare config', () => {
+  beforeAll(async () => {
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS);
+  }, TEST_TIMEOUT);
+
+  beforeEach(async () => {
+    await clearSuperadminTables();
+    await seedService('sa-config', 'Config Service');
+  }, TEST_TIMEOUT);
+
+  const devEnv = testEnv({ BYPASS_CF_ACCESS: 'true' });
+
+  it('GET /services/:id/cors returns V2 list envelope', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-config/cors'),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ items: string[]; page: { limit: number; next_cursor: string | null } }>();
+    expect(Array.isArray(body.items)).toBe(true);
+    expect(body.page.limit).toBe(100);
+    expect(body.page.next_cursor).toBeNull();
+  }, TEST_TIMEOUT);
+
+  it('PUT /services/:id/cors returns V2 list envelope', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-config/cors', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origins: ['https://example.com'] }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ items: string[] }>();
+    expect(body.items).toContain('https://example.com');
+  }, TEST_TIMEOUT);
+
+  it('PUT /services/:id/cors returns 404 for missing service', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-missing/cors', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origins: ['https://example.com'] }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(404);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('not_found');
+  }, TEST_TIMEOUT);
+
+  it('GET /services/:id/cloudflare returns V2 item envelope with null config', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-config/cloudflare'),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { cloudflare_config: unknown } }>();
+    expect(body.item.cloudflare_config).toBeNull();
+  }, TEST_TIMEOUT);
+
+  it('PATCH /services/:id/cloudflare returns V2 item envelope', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-config/cloudflare', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foo: 'bar' }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { cloudflare_config: Record<string, string> } }>();
+    expect(body.item.cloudflare_config).toEqual({ foo: 'bar' });
+  }, TEST_TIMEOUT);
+
+  it('PATCH /services/:id/cloudflare with invalid JSON returns 400 validation_error', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-config/cloudflare', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid json',
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('validation_error');
+  }, TEST_TIMEOUT);
+
+  it('PATCH /services/:id/cloudflare returns 404 for missing service', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-missing/cloudflare', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foo: 'bar' }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(404);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('not_found');
+  }, TEST_TIMEOUT);
+});
