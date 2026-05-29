@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { timingSafeEqual } from "hono/utils/buffer";
+import { V2Error } from "../lib/v2/errors";
 
 export interface CfAccessUser {
   email: string;
@@ -137,10 +138,11 @@ export const cfAccessMiddleware = createMiddleware<{
 
   // Dev bypass — only when explicitly set
   if (env.BYPASS_CF_ACCESS === "true") {
-    c.set(
-      "cfAccessUser" as never,
-      { email: "dev@localhost", sub: "dev" } as never,
-    );
+    const devUser = { email: "dev@localhost", sub: "dev" };
+    c.set("cfAccessUser" as never, devUser as never);
+    c.set("userId" as never, devUser.sub as never);
+    c.set("serviceId" as never, "superadmin" as never);
+    c.set("authType" as never, "cf_access_dev" as never);
     return next();
   }
 
@@ -156,26 +158,21 @@ export const cfAccessMiddleware = createMiddleware<{
       expectedSecret,
     );
     if (isClientIdMatch && isClientSecretMatch) {
-      c.set(
-        "cfAccessUser" as never,
-        { email: "service@internal", sub: "service" } as never,
-      );
+      const serviceUser = { email: "service@internal", sub: "service" };
+      c.set("cfAccessUser" as never, serviceUser as never);
+      c.set("userId" as never, serviceUser.sub as never);
+      c.set("serviceId" as never, "superadmin" as never);
+      c.set("authType" as never, "cf_access_service" as never);
       return next();
     }
-    return c.json(
-      { error: "Unauthorized", message: "Invalid service token" },
-      401,
-    );
+    throw new V2Error("unauthorized", 401, "Invalid service token");
   }
 
   const aud = env.CF_ACCESS_AUD;
   const team = env.CF_ACCESS_TEAM;
 
   if (!aud || !team) {
-    return c.json(
-      { error: "Misconfigured", message: "CF Access not configured" },
-      500,
-    );
+    throw new V2Error("internal_error", 500, "CF Access is not configured");
   }
 
   // Read JWT from header or cookie
@@ -191,24 +188,18 @@ export const cfAccessMiddleware = createMiddleware<{
   const token = jwtFromHeader ?? jwtFromCookie;
 
   if (!token) {
-    return c.json(
-      { error: "Unauthorized", message: "Missing Cloudflare Access token" },
-      401,
-    );
+    throw new V2Error("unauthorized", 401, "Missing Cloudflare Access token");
   }
 
   const user = await verifyJwt(token, team, aud);
 
   if (!user) {
-    return c.json(
-      {
-        error: "Unauthorized",
-        message: "Invalid or expired Cloudflare Access token",
-      },
-      401,
-    );
+    throw new V2Error("unauthorized", 401, "Invalid or expired Cloudflare Access token");
   }
 
   c.set("cfAccessUser" as never, user as never);
+  c.set("userId" as never, user.sub as never);
+  c.set("serviceId" as never, "superadmin" as never);
+  c.set("authType" as never, "cf_access" as never);
   return next();
 });

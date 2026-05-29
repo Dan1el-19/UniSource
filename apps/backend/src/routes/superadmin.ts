@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
+import { v2RequestIdGuard } from '../middleware/v2RequestIdGuard';
 import { cfAccessMiddleware } from '../middleware/cfAccess';
 import { getServiceDetails } from '../db/services';
 import {
@@ -21,7 +22,8 @@ import {
 
 const superadmin = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
-// Protect all /superadmin/* routes with CF Access
+// Protect all /superadmin/* routes — request ID guard before CF Access
+superadmin.use('*', v2RequestIdGuard);
 superadmin.use('*', cfAccessMiddleware as never);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
