@@ -1,6 +1,6 @@
 # V2 Migration Status
 
-> Stan na **2026-05-29**. Wszystko na branchu `beta`. Sekcja 1 ukończona.
+> Stan na **2026-05-29**. Wszystko na branchu `beta`. Sekcja 2 (upload) ukończona.
 
 Refaktor UniSource do "standardu V2" obejmuje **dwie warstwy w zakresie**: backend (routes → V2 standard) i SDK (`UnisourceV2Client`). Frontend i integratorzy są **poza zakresem** — `UnisourceClient` (legacy) zostaje stable, bez zmian. Ten dokument trzyma jedno spójne źródło prawdy o tym, co jest zrobione, a co nie.
 
@@ -8,9 +8,9 @@ Refaktor UniSource do "standardu V2" obejmuje **dwie warstwy w zakresie**: backe
 
 | Warstwa | Postęp | Co dalej |
 |---|---|---|
-| **Backend (Hono routes → V2 standard)** | ~59% (60/101 handlerów) | Zmigrować `upload.ts`, `releases.ts`, `superadmin.ts` |
+| **Backend (Hono routes → V2 standard)** | ~67% (68/100 handlerów) | Zmigrować `releases.ts`, `superadmin.ts` |
 | **SDK — `UnisourceClient` (legacy)** | ~100% pokrycia API legacy, **stable, bez zmian** | Tylko maintenance — żadnych breakingów, żadnego deprecation |
-| **SDK — `UnisourceV2Client` (nowy)** | ~71% pokrycia (49 metod / 11 zasobów) | Sekcje 2 (upload), 3 (releases) — pozostałe legacy backend route'y |
+| **SDK — `UnisourceV2Client` (nowy)** | ~78% pokrycia (57 metod / 12 zasobów) | Sekcja 3 (releases) — pozostałe legacy backend route'y |
 
 Frontend (`apps/frontend` — admin panel UniSource) oraz integratorzy zewnętrzni są **poza zakresem** tej refaktoryzacji. V2 powstaje jako równoległy, gotowy kontrakt; integracja po stronie konsumentów to osobna decyzja na przyszłość.
 
@@ -21,7 +21,7 @@ Frontend (`apps/frontend` — admin panel UniSource) oraz integratorzy zewnętrz
 V2 to ujednolicony kontrakt na całe API:
 
 1. **Error envelope**: `{ error: { code, message, request_id, details? } }` z helperem `V2Error` w `apps/backend/src/lib/v2/errors.ts`. Wszystkie kody są w zamkniętym zestawie:
-   - `validation_error` · `cursor_invalid` · `search_too_long` · `unauthorized` · `forbidden` · `not_found` · `rate_limited` · `internal_error` · `conflict` · `bad_gateway` · `gone`
+   - `validation_error` · `cursor_invalid` · `search_too_long` · `unauthorized` · `forbidden` · `not_found` · `rate_limited` · `internal_error` · `conflict` · `bad_gateway` · `gone` · `file_too_large` · `quota_exceeded`
 2. **Success envelope**: `{ data, meta }` (lub `{ items, page: { limit, next_cursor } }` dla list).
 3. **Cursor-based pagination** zamiast offset/limit (z wyjątkiem `admin.listUsers` — known limitation Appwrite SDK).
 4. **Helpers**: `v2ValidationHook` (Zod), `logV2Request`, `v2RequestIdGuard`, `v2ErrorHandler` (middleware).
@@ -33,7 +33,7 @@ V2 to ujednolicony kontrakt na całe API:
 
 ## 1. Backend — `apps/backend/src/routes/`
 
-### Zmigrowane do V2 (60 handlerów, 12 plików)
+### Zmigrowane do V2 (68 handlerów, 13 plików)
 
 | Plik | Handlery | Uwaga |
 |---|---:|---|
@@ -46,16 +46,16 @@ V2 to ujednolicony kontrakt na całe API:
 | `public.ts` | 3 | 302 redirect, signed tokens, `gone` error code |
 | `shareLinks.ts` | 4 | |
 | `shares.ts` | 4 | Plan 2 contract |
+| `upload.ts` | 8 | Single + multipart R2 + Appwrite; `file_too_large`, `quota_exceeded`; **BREAKING:** `/upload/fail` usunięte |
 | `userFiles.ts` | 5 | `/files/:id` (Plan 2) |
 | `v2/files.ts` | 2 | Nowy V2 namespace; `POST /v2/files/bulk` z action union |
 | `v2/folders.ts` | 3 | `POST /v2/folders/bulk` z action union + cycle prevention |
 
-### Pozostałe legacy (41 handlerów, 3 pliki)
+### Pozostałe legacy (32 handlerów, 2 pliki)
 
 | Plik | Handlery | Linii | Główna złożoność |
 |---|---:|---:|---|
 | `superadmin.ts` | 18 | 313 | Dynamic SQL, brak V2 helperów; chroniony przez CF Access — **internal**, nie powinien trafić do SDK |
-| `upload.ts` | 9 | 827 | Złożony flow uploadu (init → upload → complete), własny `validationErrorHook` |
 | `releases.ts` | 14 | 596 | Złożony flow releasów, własny `validationErrorHook` |
 
 ### Znane drobiazgi (niekrytyczne)
