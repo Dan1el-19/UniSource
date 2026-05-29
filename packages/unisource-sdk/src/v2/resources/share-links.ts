@@ -2,8 +2,8 @@ import { z } from 'zod'
 import type {
   ShareLinkCreateRequest,
   ShareLinkUpdateRequest,
-} from '../../shareLinks'
-import { shareLinkSchema } from '../../shareLinks'
+} from '../../v1/shareLinks'
+import { shareLinkSchema } from '../../v1/shareLinks'
 import { v2ListResponseSchema, v2ResourceResponseSchema } from '../schemas'
 import type { V2Request } from '../transport'
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import type { FileUpdateRequest } from '../../fileRecords'
-import { fileDownloadUrlResponseSchema, fileRecordSchema } from '../../fileRecords'
+import type { FileUpdateRequest } from '../../v1/fileRecords'
+import { fileDownloadUrlResponseSchema, fileRecordSchema } from '../../v1/fileRecords'
 import { v2ResourceResponseSchema } from '../schemas'
 import type { V2Request } from '../transport'
 

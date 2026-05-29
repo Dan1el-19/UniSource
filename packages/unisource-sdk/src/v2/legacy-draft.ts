@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { nonEmptyString, FILES_MAX_LIMIT } from '../primitives';
-import { folderSchema } from '../folders';
+import { nonEmptyString, FILES_MAX_LIMIT } from '../v1/primitives';
+import { folderSchema } from '../v1/folders';
 
 // ─── File Records V2 ─────────────────────────────────────────────────────────
 

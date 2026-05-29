@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { nonEmptyString, positiveInt, unixTimestamp } from '../primitives'
+import { nonEmptyString, positiveInt, unixTimestamp } from '../v1/primitives'
 import { v2ResourceResponseSchema } from './schemas'
 
 /**

@@ -6,14 +6,14 @@ import type {
   MainStorageRenameRequest,
   MainStorageRenameResponse,
   MainStorageRestoreResponse,
-} from '../../mainStorage'
+} from '../../v1/mainStorage'
 import {
   mainStorageDeleteResponseSchema,
   mainStorageDetailResponseSchema,
   mainStorageListResponseSchema,
   mainStorageRenameResponseSchema,
   mainStorageRestoreResponseSchema,
-} from '../../mainStorage'
+} from '../../v1/mainStorage'
 import type { V2Request } from '../transport'
 
 export function createMainStorageResource(request: V2Request) {

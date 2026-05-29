@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { recommendedUploadDestinationSchema } from '../primitives'
+import { recommendedUploadDestinationSchema } from '../v1/primitives'
 import {
   adminUserSchema,
   auditEventSchema,
   serviceSchema,
-} from '../services'
+} from '../v1/services'
 
 // ─── Service ────────────────────────────────────────────────────────────────
 

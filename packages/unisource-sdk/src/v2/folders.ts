@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { LIST_MAX_LIMIT } from '../primitives'
+import { LIST_MAX_LIMIT } from '../v1/primitives'
 import { v2ListResponseSchema, v2ResourceResponseSchema } from './schemas'
 
 // ─── V2 Folder ──────────────────────────────────────────────────────────────

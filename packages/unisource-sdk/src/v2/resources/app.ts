@@ -1,5 +1,5 @@
-import type { AppReleaseLatestResponse } from '../../releases'
-import { appReleaseLatestResponseSchema } from '../../releases'
+import type { AppReleaseLatestResponse } from '../../v1/releases'
+import { appReleaseLatestResponseSchema } from '../../v1/releases'
 import type { V2Request } from '../transport'
 
 export function createAppResource(request: V2Request) {
