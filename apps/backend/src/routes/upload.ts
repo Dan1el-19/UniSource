@@ -186,86 +186,101 @@ upload.post(
 /**
  * Appwrite Upload — Returns credentials for direct Appwrite SDK upload
  */
-upload.post('/appwrite/init', rateLimit('upload-init'), zValidator('json', uploadAppwriteInitRequestSchema, validationErrorHook), async (c) => {
-  const body = c.req.valid('json');
-  const serviceId = c.get('serviceId');
-  const userId = c.get('userId');
-  const service = c.get('service')!;
+upload.post(
+  '/appwrite/init',
+  rateLimit('upload-init'),
+  zValidator('json', uploadAppwriteInitRequestSchema, v2ValidationHook),
+  async (c) => {
+    const start = Date.now();
+    const body = c.req.valid('json');
+    const serviceId = c.get('serviceId');
+    const userId = c.get('userId');
+    const service = c.get('service')!;
 
-  // S1: only admin/plus/system can target main storage.
-  if (body.is_main_storage === true && !canWriteMainStorage(c)) {
-    return mainStorageForbiddenResponse(c);
-  }
+    if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+      throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
+    }
 
-  const { filename, size, mime_type, folder_id } = body;
+    const { filename, size, mime_type, folder_id } = body;
 
-  // Quota check and reserve (atomic)
-  const quotaResult = body.is_main_storage
-    ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
-    : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
-  if (!quotaResult.ok) {
-    if (userId !== 'system') {
-      c.executionCtx.waitUntil(
-        logServiceEvent(c.env.APP_DB, {
-          serviceId,
-          userId,
-          action: 'quota_exceeded',
-          resourceType: 'service',
-          resourceId: serviceId,
-          metadata: { requested_bytes: size },
-          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
-        })
+    if (size > service.max_file_size_bytes) {
+      throw new V2Error(
+        'file_too_large',
+        413,
+        `File exceeds maximum size of ${service.max_file_size_bytes} bytes`,
+        { max_bytes: service.max_file_size_bytes }
       );
     }
-    const scope = 'scope' in quotaResult ? quotaResult.scope : 'service';
-    return c.json(
-      {
-        error: 'Conflict',
-        message:
-          scope === 'user'
-            ? 'Storage quota exceeded for this user'
-            : 'Storage quota exceeded for this service',
-      },
-      409
-    );
+
+    const quotaResult = body.is_main_storage
+      ? await reserveMainStorageQuota(c.env.APP_DB, serviceId, size)
+      : await reserveQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
+    if (!quotaResult.ok) {
+      if (userId !== 'system') {
+        c.executionCtx.waitUntil(
+          logServiceEvent(c.env.APP_DB, {
+            serviceId,
+            userId,
+            action: 'quota_exceeded',
+            resourceType: 'service',
+            resourceId: serviceId,
+            metadata: { requested_bytes: size },
+            ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+          })
+        );
+      }
+      const scope = 'scope' in quotaResult ? quotaResult.scope : 'service';
+      throw new V2Error(
+        'quota_exceeded',
+        409,
+        scope === 'user'
+          ? 'Storage quota exceeded for this user'
+          : 'Storage quota exceeded for this service',
+        { scope, requested_bytes: size }
+      );
+    }
+
+    const uploadId = crypto.randomUUID();
+    // Task 1: use full UUID v4 (122 bits) instead of 80-bit truncated id and
+    // share the same `<prefix>/uploads/<datePath>/<id>` shape as R2 so
+    // extractAppwriteFileIdFromStorageKey() keeps working.
+    const fileId = crypto.randomUUID();
+    const storageKey = buildAppwriteStorageKey(service.object_key_prefix, getDatePath(), fileId);
+
+    const config = getAppwriteUploadConfig(c.env, fileId, UPLOAD_TTL_SECONDS);
+
+    await createUpload(c.env.APP_DB, {
+      id: uploadId,
+      service_id: serviceId,
+      user_id: userId === 'system' ? null : userId,
+      folder_id: folder_id ?? null,
+      filename,
+      size,
+      mime_type,
+      destination: 'appwrite',
+      storage_key: storageKey,
+      bucket: config.bucket_id,
+      presigned_url: null,
+      expires_at: config.expires_at,
+      is_main_storage: body.is_main_storage === true,
+    });
+
+    const item = {
+      upload_id: uploadId,
+      destination: 'appwrite' as const,
+      appwrite_endpoint: config.endpoint,
+      appwrite_project_id: config.project_id,
+      appwrite_bucket_id: config.bucket_id,
+      file_id: fileId,
+      expires_at: config.expires_at,
+      ...(c.get('appwriteJwt') ? { jwt: c.get('appwriteJwt') } : {}),
+    };
+
+    const response = c.json({ item }, 201);
+    logV2Request(c, start, { route_family: 'upload', operation: 'appwrite_init' });
+    return response;
   }
-
-  const uploadId = crypto.randomUUID();
-  // Task 1: use full UUID v4 (122 bits) instead of 80-bit truncated id and
-  // share the same `<prefix>/uploads/<datePath>/<id>` shape as R2 so
-  // extractAppwriteFileIdFromStorageKey() keeps working.
-  const fileId = crypto.randomUUID();
-  const storageKey = buildAppwriteStorageKey(service.object_key_prefix, getDatePath(), fileId);
-
-  const config = getAppwriteUploadConfig(c.env, fileId, UPLOAD_TTL_SECONDS);
-
-  await createUpload(c.env.APP_DB, {
-    id: uploadId,
-    service_id: serviceId,
-    user_id: userId === 'system' ? null : userId,
-    folder_id: folder_id ?? null,
-    filename,
-    size,
-    mime_type,
-    destination: 'appwrite',
-    storage_key: storageKey,
-    bucket: config.bucket_id,
-    presigned_url: null,
-    expires_at: config.expires_at,
-    is_main_storage: body.is_main_storage === true,
-  });
-
-  return c.json<UploadAppwriteInitResponse>({
-    upload_id: uploadId,
-    destination: 'appwrite',
-    appwrite_endpoint: config.endpoint,
-    appwrite_project_id: config.project_id,
-    appwrite_bucket_id: config.bucket_id,
-    file_id: fileId,
-    expires_at: config.expires_at,
-    ...(c.get('appwriteJwt') ? { jwt: c.get('appwriteJwt') } : {}),
-  }, 201);
-});
+);
 
 /**
  * Mark upload complete — creates confirmed file record in `files` table

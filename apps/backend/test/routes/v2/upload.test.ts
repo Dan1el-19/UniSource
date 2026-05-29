@@ -174,3 +174,69 @@ describe('POST /upload/r2/init — V2 envelope', () => {
     expect(body.error.code).toBe('forbidden')
   })
 })
+
+describe('POST /upload/appwrite/init — V2 envelope', () => {
+  it(
+    'returns { item } envelope with appwrite_endpoint + file_id on success',
+    async () => {
+      const app = buildApp()
+      const res = await app.fetch(
+        new Request('http://localhost/upload/appwrite/init', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: 'a.bin',
+            size: 1024,
+            mime_type: 'application/octet-stream',
+          }),
+        }),
+        testEnv()
+      )
+      expect(res.status).toBe(201)
+      const body = (await res.json()) as {
+        item: { destination: string; appwrite_endpoint: string; file_id: string }
+      }
+      expect(body.item.destination).toBe('appwrite')
+      expect(body.item.appwrite_endpoint).toMatch(/^https:\/\//)
+      expect(body.item.file_id).toMatch(/^[0-9a-f-]{36}$/)
+    },
+    TEST_TIMEOUT
+  )
+
+  it('omits jwt field when caller has no appwriteJwt context (api key path)', async () => {
+    const app = buildApp({ userId: 'system' })
+    const res = await app.fetch(
+      new Request('http://localhost/upload/appwrite/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'a.bin',
+          size: 1024,
+          mime_type: 'application/octet-stream',
+        }),
+      }),
+      testEnv()
+    )
+    const body = (await res.json()) as { item: { jwt?: string } }
+    expect(body.item.jwt).toBeUndefined()
+  })
+
+  it('returns 413 file_too_large for size exceeding service max', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/appwrite/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'a.bin',
+          size: 999_999_999_999,
+          mime_type: 'application/octet-stream',
+        }),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(413)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('file_too_large')
+  })
+})
