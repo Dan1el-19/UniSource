@@ -1,6 +1,6 @@
 # V2 Migration Status
 
-> Stan na **2026-05-29**. Wszystko na branchu `beta`. Sekcja 2 (upload) i Sekcja 3 (releases) ukończone.
+> Stan na **2026-05-29**. Wszystko na branchu `beta`. Sekcje 2 (upload), 3 (releases) i 4 (superadmin) ukończone.
 
 Refaktor UniSource do "standardu V2" obejmuje **dwie warstwy w zakresie**: backend (routes → V2 standard) i SDK (`UnisourceV2Client`). Frontend i integratorzy są **poza zakresem** — `UnisourceClient` (legacy) zostaje stable, bez zmian. Ten dokument trzyma jedno spójne źródło prawdy o tym, co jest zrobione, a co nie.
 
@@ -8,9 +8,9 @@ Refaktor UniSource do "standardu V2" obejmuje **dwie warstwy w zakresie**: backe
 
 | Warstwa | Postęp | Co dalej |
 |---|---|---|
-| **Backend (Hono routes → V2 standard)** | ~82% (82/100 handlerów) | Zmigrować `superadmin.ts` |
+| **Backend (Hono routes → V2 standard)** | 100% (100/100 handlerów) | Merge `beta` → `main` dyskusja |
 | **SDK — `UnisourceClient` (legacy)** | ~100% pokrycia API legacy, **stable, bez zmian** | Tylko maintenance — żadnych breakingów, żadnego deprecation |
-| **SDK — `UnisourceV2Client` (nowy)** | ~91% pokrycia (71 metod / 13 zasobów) | Sekcja 4 (superadmin) — pozostałe legacy backend route'y |
+| **SDK — `UnisourceV2Client` (nowy)** | ~91% pokrycia (71 metod / 13 zasobów) | Complete — wszystkie publiczne zasoby pokryte |
 
 Frontend (`apps/frontend` — admin panel UniSource) oraz integratorzy zewnętrzni są **poza zakresem** tej refaktoryzacji. V2 powstaje jako równoległy, gotowy kontrakt; integracja po stronie konsumentów to osobna decyzja na przyszłość.
 
@@ -33,7 +33,7 @@ V2 to ujednolicony kontrakt na całe API:
 
 ## 1. Backend — `apps/backend/src/routes/`
 
-### Zmigrowane do V2 (82 handlerów, 14 plików)
+### Zmigrowane do V2 (100 handlerów, 15 plików)
 
 | Plik | Handlery | Uwaga |
 |---:|---|
@@ -47,16 +47,15 @@ V2 to ujednolicony kontrakt na całe API:
 | `releases.ts` | 14 | Single + multipart R2 release lifecycle, CRUD, list/latest, sync z per-item failure |
 | `shareLinks.ts` | 4 | |
 | `shares.ts` | 4 | Plan 2 contract |
+| `superadmin.ts` | 18 | Cursor pagination, V2 envelopes, V2Error, v2ValidationHook, logV2Request; internal, no SDK |
 | `upload.ts` | 8 | Single + multipart R2 + Appwrite; `file_too_large`, `quota_exceeded`; **BREAKING:** `/upload/fail` usunięte |
 | `userFiles.ts` | 5 | `/files/:id` (Plan 2) |
 | `v2/files.ts` | 2 | Nowy V2 namespace; `POST /v2/files/bulk` z action union |
 | `v2/folders.ts` | 3 | `POST /v2/folders/bulk` z action union + cycle prevention |
 
-### Pozostałe legacy (18 handlerów, 1 plik)
+### Pozostałe legacy
 
-| Plik | Handlery | Linii | Główna złożoność |
-|---:|---:|---|
-| `superadmin.ts` | 18 | 313 | Dynamic SQL, brak V2 helperów; chroniony przez CF Access — **internal**, nie powinien trafić do SDK |
+**Brak** — wszystkie route'y backendu zostały zmigrowane do standardu V2.
 
 ### Znane drobiazgi (niekrytyczne)
 - `logV2Request` przed 302 redirect w `public.ts` loguje status 200 zamiast 302 (`c.res.status` nie jest aktualizowane przez `new Response(null, { status: 302 })`).
@@ -166,9 +165,8 @@ V2 jest budowane jako równoległy, kompletny kontrakt — gotowy, ale bez wymus
 
 ## 5. Pozostała praca — kolejność wykonania
 
-1. **`superadmin.ts` backend → V2** (18 handlerów) — sekcja 4. Internal, nie wymaga SDK.
-2. **Cleanup**: spójność bulk delete vs storage cleanup (R2/Appwrite), folder bulk move performance (jeden globalny CTE).
-3. **Backend auth**: dodać `/v2/*` jako dual-auth w `getAuthRouteMode()` aby `apiKey` działał dla `/v2/files` i `/v2/folders` (known limitation §4.1).
+1. **Cleanup**: spójność bulk delete vs storage cleanup (R2/Appwrite), folder bulk move performance (jeden globalny CTE).
+2. **Backend auth**: dodać `/v2/*` jako dual-auth w `getAuthRouteMode()` aby `apiKey` działał dla `/v2/files` i `/v2/folders` (known limitation §4.1).
 
 **Poza zakresem**: migracja frontendu/integratorów na `UnisourceV2Client`, jakiekolwiek zmiany w `UnisourceClient` (legacy) wykraczające poza maintenance, merge `beta` → `main` przed osiągnięciem stabilności i kompletności V2.
 
@@ -178,9 +176,16 @@ V2 jest budowane jako równoległy, kompletny kontrakt — gotowy, ale bez wymus
 
 Zakres: backend + SDK na branchu `beta`. **Konsumenci (frontend, integratorzy) nie są w zakresie** — `UnisourceClient` (legacy) na `main` zostaje stable. Dopiero po spełnieniu wszystkich poniższych punktów V2 jest kandydatem do produkcyjnego wykorzystania:
 
-- [ ] Wszystkie route'y backendu używają V2Error / V2 helpers — **brak własnych `validationErrorHook`**. ← sekcja 4
+- [x] Wszystkie route'y backendu używają V2Error / V2 helpers — **brak własnych `validationErrorHook`**. ← sekcja 4
 - [x] `UnisourceV2Client` pokrywa wszystkie publiczne endpointy (poza `superadmin/*` i czysto wewnętrznymi). ← sekcje 2-3
 - [~] Spójny error envelope + spójny success envelope (rozwiązany problem bulk). ← bulk done; success list envelope (`{items, page}` vs `{items, next_cursor, limit}`) zostaje na potem
 - [x] API-key auth path obsługiwany w transport SDK. ← Task 3 sekcji 1
 - [x] Wszystkie kody błędów typowane przez enum `V2ErrorCode` w SDK. ← Task 1 sekcji 1
 - [x] `v2/files.legacy.ts` scalony z `v2/files.ts`. ← Task 10 sekcji 1
+
+---
+
+## Uwagi specyficzne dla `superadmin.ts`
+
+- `is_trashed: boolean` nie ma zastosowania dla `superadmin.ts`, ponieważ ten route nie operuje na zasobach plików/folderów i nie zwraca stanu kosza.
+- `superadmin.ts` jest wewnętrzny i nie jest wystawiony w SDK (`UnisourceV2Client` ani `UnisourceClient`).

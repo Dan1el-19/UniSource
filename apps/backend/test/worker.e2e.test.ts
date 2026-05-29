@@ -93,4 +93,10 @@ describe('default-backend worker', () => {
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
   }, TEST_TIMEOUT_MS)
+
+  it('superadmin routes respond with V2 X-Request-Id', async () => {
+    const response = await workerExports.default.fetch(new Request('http://localhost/superadmin/services'))
+    expect(response.ok).toBe(true)
+    expect(response.headers.get('X-Request-Id')).toBeTruthy()
+  }, TEST_TIMEOUT_MS)
 })
