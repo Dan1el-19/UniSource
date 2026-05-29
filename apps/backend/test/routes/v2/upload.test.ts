@@ -240,3 +240,60 @@ describe('POST /upload/appwrite/init — V2 envelope', () => {
     expect(body.error.code).toBe('file_too_large')
   })
 })
+
+describe('POST /upload/complete — V2 envelope (no-storage paths)', () => {
+  it('returns 404 not_found when upload record missing', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'nonexistent' }),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('not_found')
+  })
+
+  it('returns 410 gone when upload TTL expired', async () => {
+    const expiredId = 'upload-expired'
+    await env.APP_DB.prepare(
+      `INSERT INTO uploads (id, service_id, user_id, folder_id, filename, size, mime_type,
+         destination, storage_key, bucket, presigned_url, expires_at, status, is_main_storage,
+         created_at, updated_at, upload_type, r2_upload_id)
+       VALUES (?, ?, NULL, NULL, ?, ?, ?, 'r2', ?, 'primary', NULL, ?, 'pending', 0, 0, 0, 'single', NULL)`
+    )
+      .bind(expiredId, SERVICE_ID, 'a.bin', 1024, 'application/octet-stream', 'svc-test/key', 1)
+      .run()
+
+    const app = buildApp({ userId: 'system' })
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: expiredId }),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(410)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('gone')
+  })
+
+  it('returns 400 validation_error for missing upload_id', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(400)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('validation_error')
+  })
+})

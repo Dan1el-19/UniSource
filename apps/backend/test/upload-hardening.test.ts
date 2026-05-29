@@ -200,9 +200,9 @@ describe('POST /upload/complete — physical verification', () => {
     );
 
     expect(res.status).toBe(409);
-    const body = await res.json() as { error: string; message: string };
-    expect(body.error).toBe('Conflict');
-    expect(body.message).toContain('not found');
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toContain('not found');
     expect(vi.mocked(failUpload)).toHaveBeenCalled();
   });
 
@@ -221,8 +221,9 @@ describe('POST /upload/complete — physical verification', () => {
     );
 
     expect(res.status).toBe(409);
-    const body = await res.json() as { message: string };
-    expect(body.message).toContain('size mismatch');
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toContain('size mismatch');
   });
 
   it('completes successfully when R2 object exists with correct size', async () => {
@@ -240,8 +241,10 @@ describe('POST /upload/complete — physical verification', () => {
     );
 
     expect(res.status).toBe(200);
-    const body = await res.json() as { success: boolean };
-    expect(body.success).toBe(true);
+    const body = await res.json() as { item: { id: string; status: string; upload_type: string; file_id: string | null } };
+    expect(body.item.status).toBe('completed');
+    expect(body.item.id).toBe('upload-123');
+    expect(body.item.upload_type).toBe('single');
     expect(vi.mocked(completeUpload)).toHaveBeenCalled();
   });
 
@@ -377,9 +380,9 @@ describe('POST /upload/complete — physical verification (Appwrite)', () => {
     );
 
     expect(res.status).toBe(409);
-    const body = await res.json() as { error: string; message: string };
-    expect(body.error).toBe('Conflict');
-    expect(body.message).toContain('not found');
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toContain('not found');
     expect(vi.mocked(failUpload)).toHaveBeenCalled();
   });
 
@@ -398,8 +401,9 @@ describe('POST /upload/complete — physical verification (Appwrite)', () => {
     );
 
     expect(res.status).toBe(409);
-    const body = await res.json() as { message: string };
-    expect(body.message).toContain('size mismatch');
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toContain('size mismatch');
   });
 
   it('completes successfully when Appwrite file exists with correct size', async () => {
@@ -417,8 +421,9 @@ describe('POST /upload/complete — physical verification (Appwrite)', () => {
     );
 
     expect(res.status).toBe(200);
-    const body = await res.json() as { success: boolean };
-    expect(body.success).toBe(true);
+    const body = await res.json() as { item: { id: string; status: string; upload_type: string } };
+    expect(body.item.status).toBe('completed');
+    expect(body.item.id).toBe('upload-456');
     expect(vi.mocked(completeUpload)).toHaveBeenCalled();
   });
 });

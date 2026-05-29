@@ -286,130 +286,148 @@ upload.post(
  * Mark upload complete — creates confirmed file record in `files` table
  * Bug #15 fix: verifies the upload belongs to this user + service
  */
-upload.post('/complete', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
-  const body = c.req.valid('json');
-  const { upload_id } = body;
-  const userId = c.get('userId');
-  const serviceId = c.get('serviceId');
+upload.post(
+  '/complete',
+  zValidator('json', uploadLifecycleRequestSchema, v2ValidationHook),
+  async (c) => {
+    const start = Date.now();
+    const body = c.req.valid('json');
+    const { upload_id } = body;
+    const userId = c.get('userId');
+    const serviceId = c.get('serviceId');
 
-  // Bug #15: use getUploadForUser to prevent cross-user upload hijacking
-  // API key path (userId='system') uses getUpload without owner restriction
-  const record = userId === 'system'
-    ? await getUpload(c.env.APP_DB, upload_id)
-    : await getUploadForUser(c.env.APP_DB, upload_id, userId, serviceId);
+    // Bug #15: use getUploadForUser to prevent cross-user upload hijacking
+    // API key path (userId='system') uses getUpload without owner restriction
+    const record = userId === 'system'
+      ? await getUpload(c.env.APP_DB, upload_id)
+      : await getUploadForUser(c.env.APP_DB, upload_id, userId, serviceId);
 
-  if (!record) {
-    return c.json({ error: 'Not Found', message: 'Upload record not found' }, 404);
-  }
-
-  const isMainStorage = record.is_main_storage === 1;
-
-  if (record.status === 'completed') {
-    return c.json<UploadCompleteResponse>({ success: true, upload_id, status: 'completed' });
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (record.expires_at < now) {
-    const updated = await failUpload(c.env.APP_DB, upload_id);
-    if (updated) {
-      // Release quota since upload expired
-      if (isMainStorage) {
-        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
-      } else {
-        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
-      }
+    if (!record) {
+      throw new V2Error('not_found', 404, 'Upload record not found');
     }
-    return c.json({ error: 'Gone', message: 'Upload session has expired' }, 410);
-  }
 
-  // Verify the file physically exists in storage with the correct size.
-  // Use record.bucket (captured at init) not service.default_bucket — admin may
-  // have changed the service's default bucket after this upload was created.
-  let physicalSize: number | null = null;
-  if (record.destination === 'r2') {
-    const meta = await headObject(c.env, record.bucket, record.storage_key);
-    physicalSize = meta?.size ?? null;
-  } else {
-    const fileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
-    if (fileId) {
-      const meta = await getAppwriteFileMeta(c.env, record.bucket, fileId);
+    const isMainStorage = record.is_main_storage === 1;
+
+    if (record.status === 'completed') {
+      // Idempotent: return existing state. file_id may be null if completed by anonymous (system, non-main) path.
+      const existingFile = await c.env.APP_DB
+        .prepare('SELECT id FROM files WHERE upload_id = ? LIMIT 1')
+        .bind(upload_id)
+        .first<{ id: string }>();
+      const response = c.json({
+        item: {
+          id: upload_id,
+          status: 'completed' as const,
+          upload_type: (record.upload_type ?? 'single') as 'single' | 'multipart',
+          file_id: existingFile?.id ?? null,
+        },
+      });
+      logV2Request(c, start, { route_family: 'upload', operation: 'complete' });
+      return response;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    if (record.expires_at < now) {
+      const updated = await failUpload(c.env.APP_DB, upload_id);
+      if (updated) {
+        if (isMainStorage) {
+          await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
+        } else {
+          await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+        }
+      }
+      throw new V2Error('gone', 410, 'Upload session has expired');
+    }
+
+    let physicalSize: number | null = null;
+    if (record.destination === 'r2') {
+      const meta = await headObject(c.env, record.bucket, record.storage_key);
       physicalSize = meta?.size ?? null;
-    }
-  }
-
-  if (physicalSize === null || physicalSize !== record.size) {
-    const failed = await failUpload(c.env.APP_DB, upload_id);
-    if (failed) {
-      if (isMainStorage) {
-        await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
-      } else {
-        await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+    } else {
+      const fileId = extractAppwriteFileIdFromStorageKey(record.storage_key);
+      if (fileId) {
+        const meta = await getAppwriteFileMeta(c.env, record.bucket, fileId);
+        physicalSize = meta?.size ?? null;
       }
     }
-    return c.json(
-      {
-        error: 'Conflict',
-        message: physicalSize === null ? 'File not found in storage' : 'File size mismatch',
-      },
-      409
-    );
-  }
 
-  // B3: atomically transition status -> completed AND insert the file row.
-  // If the worker dies after this call, recovery is trivial — both rows are
-  // either present or absent.
-  const newFileId = crypto.randomUUID();
-
-  // Promote to confirmed file record. API-key uploads are promoted for main storage,
-  // while regular per-user file records still require an authenticated user owner.
-  if (userId !== 'system' || isMainStorage) {
-    const promotion = await completeUploadAndCreateFile(c.env.APP_DB, {
-      uploadId: upload_id,
-      file: {
-        id: newFileId,
-        service_id: serviceId,
-        user_id: isMainStorage ? userId : userId,
-        folder_id: isMainStorage ? null : record.folder_id ?? null,
-        upload_id,
-        filename: record.filename,
-        size: record.size,
-        mime_type: record.mime_type,
-        storage_destination: record.destination,
-        storage_key: record.storage_key,
-        bucket: record.bucket,
-        is_main_storage: isMainStorage,
-      },
-    });
-
-    if (!promotion.completed && !promotion.alreadyCompleted) {
-      return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
-    }
-
-    // Quota was already reserved atomically in /init, no need to increment here.
-
-    if (userId !== 'system' && promotion.completed) {
-      c.executionCtx.waitUntil(
-        logServiceEvent(c.env.APP_DB, {
-          serviceId,
-          userId,
-          action: 'upload_completed',
-          resourceType: 'file',
-          resourceId: newFileId,
-          metadata: { filename: record.filename, size: record.size, is_main_storage: isMainStorage },
-          ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
-        })
+    if (physicalSize === null || physicalSize !== record.size) {
+      const failed = await failUpload(c.env.APP_DB, upload_id);
+      if (failed) {
+        if (isMainStorage) {
+          await releaseMainStorageQuota(c.env.APP_DB, record.service_id, record.size);
+        } else {
+          await releaseQuota(c.env.APP_DB, record.service_id, record.size, record.user_id);
+        }
+      }
+      throw new V2Error(
+        'conflict',
+        409,
+        physicalSize === null ? 'File not found in storage' : 'File size mismatch'
       );
     }
-  } else {
-    // Anonymous (system) non-main upload: just flip the upload row.
-    const updated = await completeUpload(c.env.APP_DB, upload_id);
-    if (!updated) {
-      return c.json({ error: 'Conflict', message: 'Upload could not be completed' }, 409);
-    }
-  }
 
-  return c.json<UploadCompleteResponse>({ success: true, upload_id, status: 'completed' });
-});
+    const newFileId = crypto.randomUUID();
+    let createdFileId: string | null = null;
+
+    if (userId !== 'system' || isMainStorage) {
+      const promotion = await completeUploadAndCreateFile(c.env.APP_DB, {
+        uploadId: upload_id,
+        file: {
+          id: newFileId,
+          service_id: serviceId,
+          user_id: userId,
+          folder_id: isMainStorage ? null : record.folder_id ?? null,
+          upload_id,
+          filename: record.filename,
+          size: record.size,
+          mime_type: record.mime_type,
+          storage_destination: record.destination,
+          storage_key: record.storage_key,
+          bucket: record.bucket,
+          is_main_storage: isMainStorage,
+        },
+      });
+
+      if (!promotion.completed && !promotion.alreadyCompleted) {
+        throw new V2Error('conflict', 409, 'Upload could not be completed');
+      }
+      createdFileId = promotion.completed ? newFileId : null;
+
+      if (userId !== 'system' && promotion.completed) {
+        c.executionCtx.waitUntil(
+          logServiceEvent(c.env.APP_DB, {
+            serviceId,
+            userId,
+            action: 'upload_completed',
+            resourceType: 'file',
+            resourceId: newFileId,
+            metadata: { filename: record.filename, size: record.size, is_main_storage: isMainStorage },
+            ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+          })
+        );
+      }
+    } else {
+      // Anonymous (system, non-main) path: just flip the upload row.
+      const updated = await completeUpload(c.env.APP_DB, upload_id);
+      if (!updated) {
+        throw new V2Error('conflict', 409, 'Upload could not be completed');
+      }
+      createdFileId = null;
+    }
+
+    const response = c.json({
+      item: {
+        id: upload_id,
+        status: 'completed' as const,
+        upload_type: (record.upload_type ?? 'single') as 'single' | 'multipart',
+        file_id: createdFileId,
+      },
+    });
+    logV2Request(c, start, { route_family: 'upload', operation: 'complete' });
+    return response;
+  }
+);
 
 upload.post('/fail', zValidator('json', uploadLifecycleRequestSchema, validationErrorHook), async (c) => {
   const body = c.req.valid('json');
