@@ -297,3 +297,51 @@ describe('POST /upload/complete — V2 envelope (no-storage paths)', () => {
     expect(body.error.code).toBe('validation_error')
   })
 })
+
+describe('POST /upload/r2/multipart/create — V2 envelope', () => {
+  it(
+    'returns { item } envelope with r2_upload_id + key on success',
+    async () => {
+      const app = buildApp()
+      const res = await app.fetch(
+        new Request('http://localhost/upload/r2/multipart/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: 'big.bin',
+            size: 50_000_000,
+            mime_type: 'application/octet-stream',
+          }),
+        }),
+        testEnv()
+      )
+      expect(res.status).toBe(201)
+      const body = (await res.json()) as {
+        item: { upload_id: string; r2_upload_id: string; key: string; bucket: string }
+      }
+      expect(body.item.upload_id).toMatch(/^[0-9a-f-]{36}$/)
+      expect(body.item.r2_upload_id).toBeTruthy()
+      expect(body.item.key).toContain('svc-test/')
+    },
+    TEST_TIMEOUT
+  )
+
+  it('returns 413 file_too_large when size exceeds service max', async () => {
+    const app = buildApp()
+    const res = await app.fetch(
+      new Request('http://localhost/upload/r2/multipart/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'huge.bin',
+          size: 999_999_999_999,
+          mime_type: 'application/octet-stream',
+        }),
+      }),
+      testEnv()
+    )
+    expect(res.status).toBe(413)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('file_too_large')
+  })
+})

@@ -472,24 +472,26 @@ async function getOwnedMultipartUpload(
 upload.post(
   '/r2/multipart/create',
   rateLimit('upload-init'),
-  zValidator('json', multipartCreateRequestSchema, validationErrorHook),
+  zValidator('json', multipartCreateRequestSchema, v2ValidationHook),
   async (c) => {
+    const start = Date.now();
     const body = c.req.valid('json');
     const serviceId = c.get('serviceId');
     const userId = c.get('userId');
     const service = c.get('service')!;
 
-    // S1: only admin/plus/system can target main storage.
     if (body.is_main_storage === true && !canWriteMainStorage(c)) {
-      return mainStorageForbiddenResponse(c);
+      throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
     }
 
     const { filename, size, mime_type, folder_id } = body;
 
     if (size > service.max_file_size_bytes) {
-      return c.json(
-        { error: 'Payload Too Large', message: `File exceeds maximum size of ${service.max_file_size_bytes} bytes` },
-        413
+      throw new V2Error(
+        'file_too_large',
+        413,
+        `File exceeds maximum size of ${service.max_file_size_bytes} bytes`,
+        { max_bytes: service.max_file_size_bytes }
       );
     }
 
@@ -513,15 +515,13 @@ upload.post(
         );
       }
       const scope = 'scope' in quotaResult ? quotaResult.scope : 'service';
-      return c.json(
-        {
-          error: 'Conflict',
-          message:
-            scope === 'user'
-              ? 'Storage quota exceeded for this user'
-              : 'Storage quota exceeded for this service',
-        },
-        409
+      throw new V2Error(
+        'quota_exceeded',
+        409,
+        scope === 'user'
+          ? 'Storage quota exceeded for this user'
+          : 'Storage quota exceeded for this service',
+        { scope, requested_bytes: size }
       );
     }
 
@@ -540,7 +540,8 @@ upload.post(
       } else {
         await releaseQuota(c.env.APP_DB, serviceId, size, userId === 'system' ? null : userId);
       }
-      throw err;
+      console.error('[multipart/create] R2 createMultipartUpload failed', err);
+      throw new V2Error('bad_gateway', 502, 'Unable to create multipart upload on R2');
     }
 
     // Multipart lifetime: R2 auto-aborts after 7 days. We mirror the limit.
@@ -564,16 +565,20 @@ upload.post(
       r2_upload_id: r2UploadId,
     });
 
-    return c.json<MultipartCreateResponse>(
+    const response = c.json(
       {
-        upload_id: uploadRecordId,
-        r2_upload_id: r2UploadId,
-        key: storageKey,
-        bucket: service.default_bucket,
-        expires_at,
+        item: {
+          upload_id: uploadRecordId,
+          r2_upload_id: r2UploadId,
+          key: storageKey,
+          bucket: service.default_bucket,
+          expires_at,
+        },
       },
       201
     );
+    logV2Request(c, start, { route_family: 'upload', operation: 'multipart_create' });
+    return response;
   }
 );
 
