@@ -7,11 +7,13 @@ import { getServiceDetails } from '../db/services';
 import {
   createServiceApiKey,
   listServiceApiKeys,
+  listServiceApiKeysPage,
   updateApiKey,
   revokeApiKey,
   rotateApiKey,
   createAccountApiKey,
   listAccountApiKeys,
+  listAccountApiKeysPage,
   updateAccountApiKey,
   revokeAccountApiKey,
   getServiceCors,
@@ -19,6 +21,10 @@ import {
   VALID_PERMISSIONS,
   type Permission,
 } from '../db/apiKeys';
+import { V2Error } from '../lib/v2/errors';
+import { logV2Request } from '../lib/v2/log';
+import { v2ValidationHook } from '../lib/v2/zodHook';
+import { encodeCursor, decodeCursor } from '../lib/v2/cursor';
 
 const superadmin = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
@@ -30,32 +36,128 @@ superadmin.use('*', cfAccessMiddleware as never);
 
 const permissionsSchema = z.array(z.enum([...VALID_PERMISSIONS] as [Permission, ...Permission[]])).min(1);
 
+const SUPERADMIN_DEFAULT_LIMIT = 25;
+const SUPERADMIN_MAX_LIMIT = 100;
+
+type Page = { limit: number; next_cursor: string | null };
+
+function listResponse<T>(items: T[], page: Page) {
+  return { items, page };
+}
+
+function itemResponse<T>(item: T) {
+  return { item };
+}
+
+function cursorSecret(c: { env: CloudflareBindings }): string {
+  if (!c.env.CURSOR_HMAC_SECRET) {
+    throw new V2Error('internal_error', 500, 'Cursor secret is not configured');
+  }
+  return c.env.CURSOR_HMAC_SECRET;
+}
+
+const SERVICE_SORT_COLUMNS = {
+  created_at: 'created_at',
+  name: 'name',
+} as const;
+
+const listQuerySchema = z.object({
+  cursor: z.string().trim().min(1).optional(),
+  limit: z
+    .string()
+    .optional()
+    .transform((value) => (value !== undefined ? Number(value) : SUPERADMIN_DEFAULT_LIMIT))
+    .pipe(z.number().int().min(1).max(SUPERADMIN_MAX_LIMIT)),
+});
+
+const servicesListQuerySchema = listQuerySchema.extend({
+  sort_by: z.enum(['created_at', 'name']).optional().default('created_at'),
+  sort_dir: z.enum(['asc', 'desc']).optional().default('asc'),
+});
+
+async function readServiceCursor(
+  secret: string,
+  cursor: string | undefined,
+  sort_by: string,
+  sort_dir: string,
+  fingerprint: string,
+) {
+  if (!cursor) return null;
+  try {
+    return await decodeCursor(secret, cursor, {
+      sb: sort_by,
+      sd: sort_dir as 'asc' | 'desc',
+      fp: fingerprint,
+    });
+  } catch {
+    throw new V2Error('cursor_invalid', 400, 'cursor is invalid');
+  }
+}
+
 // ─── Services ─────────────────────────────────────────────────────────────────
 
-superadmin.get('/services', async (c) => {
-  const { results } = await c.env.APP_DB
-    .prepare(`SELECT * FROM services ORDER BY created_at ASC`)
-    .all<{
-      id: string;
-      name: string;
-      default_bucket: string;
-      max_storage_bytes: number;
-      current_used_bytes: number;
-      main_used_bytes: number;
-      max_file_size_bytes: number;
-      recommended_upload_destination: string;
-      object_key_prefix: string;
-      cloudflare_config: string | null;
-      created_at: number;
-    }>();
+superadmin.get(
+  '/services',
+  zValidator('query', servicesListQuerySchema, v2ValidationHook),
+  async (c) => {
+    const start = Date.now();
+    const query = c.req.valid('query');
+    const secret = cursorSecret(c);
+    const sortCol = SERVICE_SORT_COLUMNS[query.sort_by];
+    const fingerprint = query.sort_by;
+    const scursor = await readServiceCursor(secret, query.cursor, query.sort_by, query.sort_dir, fingerprint);
 
-  return c.json({
-    services: results.map((s) => ({
+    const where: string[] = [];
+    const binds: unknown[] = [];
+
+    if (scursor) {
+      if (query.sort_dir === 'desc') {
+        where.push(`(${sortCol} < ? OR (${sortCol} = ? AND id < ?))`);
+      } else {
+        where.push(`(${sortCol} > ? OR (${sortCol} = ? AND id > ?))`);
+      }
+      binds.push(scursor.lv, scursor.lv, scursor.li);
+    }
+
+    let sql = 'SELECT * FROM services';
+    if (where.length > 0) {
+      sql += ` WHERE ${where.join(' AND ')}`;
+    }
+    sql += ` ORDER BY ${sortCol} ${query.sort_dir}, id ${query.sort_dir} LIMIT ?`;
+    binds.push(query.limit + 1);
+
+    const { results } = await c.env.APP_DB
+      .prepare(sql)
+      .bind(...binds)
+      .all<{
+        id: string;
+        name: string;
+        default_bucket: string;
+        max_storage_bytes: number;
+        current_used_bytes: number;
+        main_used_bytes: number;
+        max_file_size_bytes: number;
+        recommended_upload_destination: string;
+        object_key_prefix: string;
+        cloudflare_config: string | null;
+        created_at: number;
+      }>();
+
+    const rows = results ?? [];
+    const pageRows = rows.slice(0, query.limit);
+    const items = pageRows.map((s) => ({
       ...s,
       cloudflare_config: s.cloudflare_config ? JSON.parse(s.cloudflare_config) : null,
-    })),
+    }));
+    const last = pageRows[pageRows.length - 1];
+    const next_cursor = rows.length > query.limit && last
+      ? await encodeCursor(secret, { v: 1, sb: query.sort_by, sd: query.sort_dir, lv: last[query.sort_by as 'created_at' | 'name'], li: last.id, fp: fingerprint })
+      : null;
+
+    const response = c.json(listResponse(items, { limit: query.limit, next_cursor: next_cursor }));
+    logV2Request(c, start, { route_family: 'superadmin', operation: 'list_services' });
+    return response;
   });
-});
 
 const createServiceSchema = z.object({
   id: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/),
@@ -67,7 +169,8 @@ const createServiceSchema = z.object({
   object_key_prefix: z.string().max(64).regex(/^[a-z0-9_/-]*$/).optional().default(''),
 });
 
-superadmin.post('/services', zValidator('json', createServiceSchema), async (c) => {
+superadmin.post('/services', zValidator('json', createServiceSchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const body = c.req.valid('json');
   const now = Math.floor(Date.now() / 1000);
 
@@ -81,19 +184,24 @@ superadmin.post('/services', zValidator('json', createServiceSchema), async (c) 
       .run();
   } catch (e: unknown) {
     if (e instanceof Error && e.message.includes('UNIQUE')) {
-      return c.json({ error: 'Service ID already exists' }, 409);
+      throw new V2Error('conflict', 409, 'Service ID already exists');
     }
     throw e;
   }
 
   const service = await getServiceDetails(c.env.APP_DB, body.id);
-  return c.json({ service }, 201);
+  const response = c.json(itemResponse(service), 201);
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'create_service' });
+  return response;
 });
 
 superadmin.get('/services/:id', async (c) => {
+  const start = Date.now();
   const service = await getServiceDetails(c.env.APP_DB, c.req.param('id'));
-  if (!service) return c.json({ error: 'Not found' }, 404);
-  return c.json({ service });
+  if (!service) throw new V2Error('not_found', 404, 'Service not found');
+  const response = c.json(itemResponse(service));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'get_service' });
+  return response;
 });
 
 const patchServiceSchema = z.object({
@@ -104,7 +212,8 @@ const patchServiceSchema = z.object({
   object_key_prefix: z.string().max(64).regex(/^[a-z0-9_/-]*$/).optional(),
 });
 
-superadmin.patch('/services/:id', zValidator('json', patchServiceSchema), async (c) => {
+superadmin.patch('/services/:id', zValidator('json', patchServiceSchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const id = c.req.param('id');
   const body = c.req.valid('json');
 
@@ -119,8 +228,10 @@ superadmin.patch('/services/:id', zValidator('json', patchServiceSchema), async 
 
   if (sets.length === 0) {
     const service = await getServiceDetails(c.env.APP_DB, id);
-    if (!service) return c.json({ error: 'Not found' }, 404);
-    return c.json({ service });
+    if (!service) throw new V2Error('not_found', 404, 'Service not found');
+    const response = c.json(itemResponse(service));
+    logV2Request(c, start, { route_family: 'superadmin', operation: 'update_service' });
+    return response;
   }
 
   vals.push(id);
@@ -129,20 +240,25 @@ superadmin.patch('/services/:id', zValidator('json', patchServiceSchema), async 
     .bind(...vals)
     .run();
 
-  if ((result.meta.changes ?? 0) === 0) return c.json({ error: 'Not found' }, 404);
+  if ((result.meta.changes ?? 0) === 0) throw new V2Error('not_found', 404, 'Service not found');
 
   const service = await getServiceDetails(c.env.APP_DB, id);
-  return c.json({ service });
+  const response = c.json(itemResponse(service));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'update_service' });
+  return response;
 });
 
 superadmin.delete('/services/:id', async (c) => {
+  const start = Date.now();
   const id = c.req.param('id');
   const result = await c.env.APP_DB
     .prepare(`DELETE FROM services WHERE id = ?`)
     .bind(id)
     .run();
-  if ((result.meta.changes ?? 0) === 0) return c.json({ error: 'Not found' }, 404);
-  return c.json({ deleted: true });
+  if ((result.meta.changes ?? 0) === 0) throw new V2Error('not_found', 404, 'Service not found');
+  const response = c.json(itemResponse({ id, deleted: true }));
+  logV2Request(c, start, { route_family: 'superadmin', operation: 'delete_service' });
+  return response;
 });
 
 // ─── Service API keys ─────────────────────────────────────────────────────────

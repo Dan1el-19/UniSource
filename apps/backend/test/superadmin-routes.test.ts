@@ -44,6 +44,16 @@ async function clearSuperadminTables() {
   await env.APP_DB.prepare(`DELETE FROM services WHERE id LIKE 'sa-%'`).run();
 }
 
+async function seedService(id: string, name: string, createdAt?: number) {
+  const now = createdAt ?? Math.floor(Date.now() / 1000);
+  await env.APP_DB.prepare(
+    `INSERT INTO services (id, name, default_bucket, max_storage_bytes, current_used_bytes, main_used_bytes, max_file_size_bytes, recommended_upload_destination, object_key_prefix, created_at)
+     VALUES (?, ?, 'primary', 1000000, 0, 0, 100000, 'r2', '', ?)`
+  )
+    .bind(id, name, now)
+    .run();
+}
+
 describe('superadmin V2 foundation', () => {
   beforeAll(async () => {
     await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS);
@@ -75,5 +85,174 @@ describe('superadmin V2 foundation', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get('X-Request-Id')).toBe('trace-superadmin-123');
+  }, TEST_TIMEOUT);
+});
+
+describe('superadmin services CRUD', () => {
+  beforeAll(async () => {
+    await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS);
+  }, TEST_TIMEOUT);
+
+  beforeEach(async () => {
+    await clearSuperadminTables();
+  }, TEST_TIMEOUT);
+
+  const devEnv = testEnv({ BYPASS_CF_ACCESS: 'true' });
+
+  it('GET /services returns V2 list envelope with cursor pagination', async () => {
+    await seedService('sa-svc-a', 'Service A', 1700000001);
+    await seedService('sa-svc-b', 'Service B', 1700000002);
+    await seedService('sa-svc-c', 'Service C', 1700000003);
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services?limit=2'),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ items: unknown[]; page: { limit: number; next_cursor: string | null } }>();
+    expect(body.items).toHaveLength(2);
+    expect(body.page.limit).toBe(2);
+    expect(body.page.next_cursor).toBeTruthy();
+  }, TEST_TIMEOUT);
+
+  it('GET /services with forged cursor returns 400 cursor_invalid', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services?cursor=forged.invalidsig'),
+      devEnv
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('cursor_invalid');
+  }, TEST_TIMEOUT);
+
+  it('POST /services returns 201 with V2 item envelope', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'sa-create-test',
+          name: 'Created Service',
+          default_bucket: 'primary',
+          max_storage_bytes: 1000000,
+          max_file_size_bytes: 100000,
+        }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(201);
+    const body = await res.json<{ item: { id: string; name: string } }>();
+    expect(body.item.id).toBe('sa-create-test');
+    expect(body.item.name).toBe('Created Service');
+  }, TEST_TIMEOUT);
+
+  it('POST /services duplicate returns 409 conflict', async () => {
+    await seedService('sa-dup-test', 'Dup Service');
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'sa-dup-test',
+          name: 'Dup Service',
+          default_bucket: 'primary',
+          max_storage_bytes: 1000000,
+          max_file_size_bytes: 100000,
+        }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('conflict');
+  }, TEST_TIMEOUT);
+
+  it('GET /services/:id returns V2 item envelope', async () => {
+    await seedService('sa-get-test', 'Get Service');
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-get-test'),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { id: string; name: string } }>();
+    expect(body.item.id).toBe('sa-get-test');
+    expect(body.item.name).toBe('Get Service');
+  }, TEST_TIMEOUT);
+
+  it('GET /services/:id returns 404 not_found for missing service', async () => {
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-missing'),
+      devEnv
+    );
+
+    expect(res.status).toBe(404);
+    const body = await res.json<{ error: { code: string } }>();
+    expect(body.error.code).toBe('not_found');
+  }, TEST_TIMEOUT);
+
+  it('PATCH /services/:id returns V2 item envelope', async () => {
+    await seedService('sa-patch-test', 'Patch Service');
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-patch-test', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Patched Name' }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { name: string } }>();
+    expect(body.item.name).toBe('Patched Name');
+  }, TEST_TIMEOUT);
+
+  it('PATCH /services/:id with invalid body returns 400 validation_error', async () => {
+    await seedService('sa-val-test', 'Validation Test');
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-val-test', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: '' }),
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(400);
+    const body = await res.json<{ error: { code: string; details: unknown } }>();
+    expect(body.error.code).toBe('validation_error');
+  }, TEST_TIMEOUT);
+
+  it('DELETE /services/:id returns V2 item envelope with deleted marker', async () => {
+    await seedService('sa-del-test', 'Delete Service');
+
+    const app = buildApp();
+    const res = await app.fetch(
+      new Request('http://localhost/superadmin/services/sa-del-test', {
+        method: 'DELETE',
+      }),
+      devEnv
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json<{ item: { id: string; deleted: boolean } }>();
+    expect(body.item.id).toBe('sa-del-test');
+    expect(body.item.deleted).toBe(true);
   }, TEST_TIMEOUT);
 });
