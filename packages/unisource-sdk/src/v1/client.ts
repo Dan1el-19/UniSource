@@ -49,7 +49,7 @@ import type {
   BulkFolderMoveRequest,
   BulkOperationResponse,
   FolderBreadcrumbsResponse,
-} from './v2/legacy-draft';
+} from '../v2/legacy-draft';
 import type {
   ServiceDetailResponse,
   ServiceUsageResponse,
