@@ -495,37 +495,47 @@ releases.get('/latest', async (c) => {
   const service = c.get('service')!;
   const release = await getLatestRelease(c.env.APP_DB, service.id);
   if (!release) {
-    return c.json({ error: 'Not Found', message: 'No completed release found' }, 404);
+    throw new V2Error('not_found', 404, 'No completed release found');
   }
-  return c.json(release);
+  return c.json({ item: release });
 });
 
 releases.get('/', zValidator('query', listQuerySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const query = c.req.valid('query');
-  const result = await listReleases(c.env.APP_DB, service.id, {
-    limit: query.limit,
-    cursor: query.cursor,
-  });
-  return c.json(result);
+  try {
+    const result = await listReleases(c.env.APP_DB, service.id, {
+      limit: query.limit,
+      cursor: query.cursor,
+    });
+    return c.json({
+      items: result.items,
+      page: { limit: query.limit, next_cursor: result.next_cursor },
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Invalid cursor') {
+      throw new V2Error('cursor_invalid', 400, 'cursor is invalid');
+    }
+    throw err;
+  }
 });
 
 releases.get('/:id', async (c) => {
   const service = c.get('service')!;
   const release = await getRelease(c.env.APP_DB, c.req.param('id'), service.id);
   if (!release) {
-    return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
+    throw new V2Error('not_found', 404, 'Release not found');
   }
-  return c.json(release);
+  return c.json({ item: release });
 });
 
 releases.patch('/:id', zValidator('json', updateBodySchema, v2ValidationHook), async (c) => {
   const service = c.get('service')!;
   const updated = await updateRelease(c.env.APP_DB, c.req.param('id'), service.id, c.req.valid('json'));
   if (!updated) {
-    return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
+    throw new V2Error('not_found', 404, 'Release not found');
   }
-  return c.json(updated);
+  return c.json({ item: updated });
 });
 
 releases.delete('/:id', async (c) => {
@@ -534,7 +544,7 @@ releases.delete('/:id', async (c) => {
   const release = await getRelease(c.env.APP_DB, releaseId, service.id);
 
   if (!release) {
-    return c.json({ error: 'Not Found', message: 'Release not found' }, 404);
+    throw new V2Error('not_found', 404, 'Release not found');
   }
 
   if (release.upload_status === 'completed') {
@@ -542,53 +552,64 @@ releases.delete('/:id', async (c) => {
   }
 
   await deleteRelease(c.env.APP_DB, releaseId, service.id);
-  return c.json({ success: true, release_id: releaseId });
+  return c.json({ item: { id: releaseId, deleted: true as const } });
 });
 
 releases.post('/sync', zValidator('json', syncBodySchema, v2ValidationHook), async (c) => {
+  const start = Date.now();
   const service = c.get('service')!;
   const userId = c.get('userId');
   const body = c.req.valid('json');
   const storagePrefix = getReleaseStoragePrefix(service.object_key_prefix);
-  const results = [];
 
-  // S7: enforce that the prefix is meaningfully scoped to the service. When
-  // a service has objectKeyPrefix='' (e.g. service-b), the resulting
-  // prefix is just `releases/` which is shared across services — restricting
-  // sync to the owning bucket is enough since each service has its own R2
-  // bucket. We still reject any key that doesn't start with the prefix to
-  // prevent foreign keys from being attached to the wrong service. Path
-  // traversal characters in the suffix are also rejected.
-  for (const manifest of body.releases) {
-    if (!manifest.r2_key.startsWith(storagePrefix)) {
-      return c.json({ error: 'Bad Request', message: `r2_key must start with ${storagePrefix}` }, 400);
-    }
-    const suffix = manifest.r2_key.slice(storagePrefix.length);
-    if (suffix.length === 0 || suffix.includes('..') || suffix.startsWith('/')) {
-      return c.json({ error: 'Bad Request', message: 'r2_key has invalid suffix' }, 400);
-    }
-  }
+  const processed: string[] = [];
+  const failed: Array<{ id: string; code: 'validation_error' | 'internal_error'; message: string }> = [];
 
   for (const manifest of body.releases) {
     const releaseId = manifest.id ?? crypto.randomUUID();
-    await upsertReleaseSync(c.env.APP_DB, {
-      id: releaseId,
-      service_id: service.id,
-      name: manifest.name,
-      size: manifest.size,
-      r2_key: manifest.r2_key,
-      tags: manifest.tags,
-      notes: manifest.notes ?? null,
-      force_update: manifest.force_update,
-      uploaded_by: userId,
-      presigned_url: '',
-      presigned_expires_at: Math.floor(Date.now() / 1000),
-    });
-    await completeRelease(c.env.APP_DB, releaseId);
-    results.push({ release_id: releaseId, success: true, status: 'completed' });
+
+    if (!manifest.r2_key.startsWith(storagePrefix)) {
+      failed.push({
+        id: releaseId,
+        code: 'validation_error',
+        message: `r2_key must start with ${storagePrefix}`,
+      });
+      continue;
+    }
+    const suffix = manifest.r2_key.slice(storagePrefix.length);
+    if (suffix.length === 0 || suffix.includes('..') || suffix.startsWith('/')) {
+      failed.push({
+        id: releaseId,
+        code: 'validation_error',
+        message: 'r2_key has invalid suffix',
+      });
+      continue;
+    }
+
+    try {
+      await upsertReleaseSync(c.env.APP_DB, {
+        id: releaseId,
+        service_id: service.id,
+        name: manifest.name,
+        size: manifest.size,
+        r2_key: manifest.r2_key,
+        tags: manifest.tags,
+        notes: manifest.notes ?? null,
+        force_update: manifest.force_update,
+        uploaded_by: userId,
+        presigned_url: '',
+        presigned_expires_at: Math.floor(Date.now() / 1000),
+      });
+      await completeRelease(c.env.APP_DB, releaseId);
+      processed.push(releaseId);
+    } catch {
+      failed.push({ id: releaseId, code: 'internal_error', message: 'Release sync failed' });
+    }
   }
 
-  return c.json({ synced: results.length, results });
+  const response = c.json({ processed, failed });
+  logV2Request(c, start, { route_family: 'releases', operation: 'sync' });
+  return response;
 });
 
 export default releases;

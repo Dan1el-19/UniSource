@@ -141,8 +141,9 @@ describe('GET /releases', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases'), relEnv);
     expect(res.status).toBe(200);
-    const body = await res.json() as { items: unknown[] };
+    const body = await res.json() as { items: unknown[]; page: { limit: number; next_cursor: string | null } };
     expect(body.items).toEqual([]);
+    expect(body.page).toEqual({ limit: 25, next_cursor: null });
   });
 });
 
@@ -509,6 +510,8 @@ describe('GET /releases/latest', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/latest'), relEnv);
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('returns 200 with the latest release', async () => {
@@ -516,8 +519,8 @@ describe('GET /releases/latest', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/latest'), relEnv);
     expect(res.status).toBe(200);
-    const body = await res.json() as { id: string };
-    expect(body.id).toBe('rel-1');
+    const body = await res.json() as { item: { id: string } };
+    expect(body.item.id).toBe('rel-1');
   });
 });
 
@@ -527,6 +530,8 @@ describe('GET /releases/:id', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/nonexistent'), relEnv);
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('returns 200 for existing release', async () => {
@@ -534,8 +539,8 @@ describe('GET /releases/:id', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/rel-1'), relEnv);
     expect(res.status).toBe(200);
-    const body = await res.json() as { id: string };
-    expect(body.id).toBe('rel-1');
+    const body = await res.json() as { item: { id: string } };
+    expect(body.item.id).toBe('rel-1');
   });
 });
 
@@ -548,6 +553,8 @@ describe('DELETE /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('deletes R2 object for completed releases before deleting DB record', async () => {
@@ -559,6 +566,8 @@ describe('DELETE /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; deleted: true } };
+    expect(body.item).toEqual({ id: 'rel-1', deleted: true });
     expect(deleteObject).toHaveBeenCalledWith(relEnv, 'primary', completedRelease.r2_key);
     expect(deleteRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default');
   });
@@ -577,6 +586,8 @@ describe('PATCH /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string } };
+    expect(body.item.id).toBe('rel-1');
     expect(updateRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default', {
       notes: 'patched',
       force_update: true,
@@ -595,6 +606,8 @@ describe('PATCH /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 });
 
@@ -623,8 +636,9 @@ describe('POST /releases/sync', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { synced: number };
-    expect(body.synced).toBe(1);
+    const body = await res.json() as { processed: string[]; failed: unknown[] };
+    expect(body.processed).toEqual(['rel-sync']);
+    expect(body.failed).toEqual([]);
     expect(upsertReleaseSync).toHaveBeenCalledWith(
       relEnv.APP_DB,
       expect.objectContaining({
@@ -638,7 +652,7 @@ describe('POST /releases/sync', () => {
     expect(completeRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-sync');
   });
 
-  it('returns 400 and does not create release when manifest r2_key is outside service releases prefix', async () => {
+  it('returns 200 with per-item failure when manifest r2_key is outside service releases prefix', async () => {
     const app = buildReleasesApp();
     const res = await app.fetch(
       new Request('http://localhost/releases/sync', {
@@ -657,9 +671,14 @@ describe('POST /releases/sync', () => {
       }),
       relEnv
     );
-    expect(res.status).toBe(400);
-    const body = await res.json() as { message: string };
-    expect(body.message).toBe('r2_key must start with releases/default/');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { processed: string[]; failed: Array<{ id: string; code: string; message: string }> };
+    expect(body.processed).toEqual([]);
+    expect(body.failed[0]).toEqual({
+      id: 'rel-sync',
+      code: 'validation_error',
+      message: 'r2_key must start with releases/default/',
+    });
     expect(upsertReleaseSync).not.toHaveBeenCalled();
     expect(completeRelease).not.toHaveBeenCalled();
   });
@@ -686,6 +705,8 @@ describe('POST /releases/sync', () => {
     );
 
     expect(res.status).toBe(200);
+    const body = await res.json() as { processed: string[]; failed: unknown[] };
+    expect(body.processed).toEqual(['rel-sync']);
     expect(upsertReleaseSync).toHaveBeenCalledWith(
       relEnv.APP_DB,
       expect.objectContaining({
