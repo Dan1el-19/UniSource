@@ -9,19 +9,19 @@ import {
   restoreFileRecord,
   deleteFileRecordPermanently,
   type FileRecord,
-} from '../db/fileRecords';
-import { releaseMainStorageQuota } from '../db/services';
-import { deactivateShareLinksForFile } from '../db/shareLinks';
+} from '../../db/v1/fileRecords';
+import { releaseMainStorageQuota } from '../../db/v1/services';
+import { deactivateShareLinksForFile } from '../../db/v1/shareLinks';
 import {
   deleteAppwriteFile,
   extractAppwriteFileIdFromStorageKey,
-} from '../services/appwrite';
-import { deleteObject } from '../services/r2';
+} from '../../services/appwrite';
+import { deleteObject } from '../../services/r2';
 import { FILES_DEFAULT_LIMIT, FILES_MAX_LIMIT } from '@unisource/sdk';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 

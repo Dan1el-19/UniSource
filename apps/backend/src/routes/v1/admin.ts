@@ -14,7 +14,7 @@ import {
   updateServiceDetails,
   updateServiceSettings,
   upsertServiceUserSettings,
-} from '../db/services';
+} from '../../db/v1/services';
 import {
   getAppwriteUser,
   listAppwriteUsers,
@@ -23,15 +23,15 @@ import {
   updateAppwriteUserName,
   updateAppwriteUserPassword,
   updateAppwriteUserStatus,
-} from '../services/appwrite';
+} from '../../services/appwrite';
 import type { AdminUser } from '@unisource/sdk';
 import { adminServiceSettingsRequestSchema } from '@unisource/sdk';
-import { DEFAULT_SERVICE_ID } from '../config/services';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
-import { wantsV2 } from '../lib/v2/negotiation';
+import { DEFAULT_SERVICE_ID } from '../../config/services';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../../lib/v2/responses';
+import { wantsV2 } from '../../lib/v2/negotiation';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 

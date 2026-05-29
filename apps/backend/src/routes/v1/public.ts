@@ -1,22 +1,22 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { getShareLinkBySlug, incrementDownloadCount } from '../db/shareLinks';
-import { getFileRecord } from '../db/fileRecords';
-import { logServiceEvent } from '../db/services';
-import { verifyPassword } from '../utils/password';
-import { generatePresignedGetUrl } from '../services/r2';
+import { getShareLinkBySlug, incrementDownloadCount } from '../../db/v1/shareLinks';
+import { getFileRecord } from '../../db/v1/fileRecords';
+import { logServiceEvent } from '../../db/v1/services';
+import { verifyPassword } from '../../utils/password';
+import { generatePresignedGetUrl } from '../../services/r2';
 import {
   buildAppwriteFileDownloadUrl,
   createAppwriteFileToken,
   extractAppwriteFileIdFromStorageKey,
-} from '../services/appwrite';
-import { createSignedToken, verifySignedToken } from '../utils/signedTokens';
-import { rateLimit } from '../middleware/ratelimit';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { itemOrLegacy } from '../lib/v2/responses';
+} from '../../services/appwrite';
+import { createSignedToken, verifySignedToken } from '../../utils/signedTokens';
+import { rateLimit } from '../../middleware/ratelimit';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { itemOrLegacy } from '../../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 

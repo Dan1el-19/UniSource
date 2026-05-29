@@ -14,14 +14,14 @@ import {
   getShareLinkById,
   listShareLinksForUser,
   type ShareLink,
-} from '../db/shareLinks';
-import { getFileRecordForUser } from '../db/fileRecords';
-import { hashPassword } from '../utils/password';
-import { generateSlug, isValidSlug } from '../utils/slug';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { itemOrLegacy, actionOrLegacy, unpaginatedListOrLegacy } from '../lib/v2/responses';
+} from '../../db/v1/shareLinks';
+import { getFileRecordForUser } from '../../db/v1/fileRecords';
+import { hashPassword } from '../../utils/password';
+import { generateSlug, isValidSlug } from '../../utils/slug';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { itemOrLegacy, actionOrLegacy, unpaginatedListOrLegacy } from '../../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 

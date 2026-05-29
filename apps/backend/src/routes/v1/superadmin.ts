@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { v2RequestIdGuard } from '../middleware/v2RequestIdGuard';
-import { cfAccessMiddleware } from '../middleware/cfAccess';
-import { getServiceDetails } from '../db/services';
+import { v2RequestIdGuard } from '../../middleware/v2RequestIdGuard';
+import { cfAccessMiddleware } from '../../middleware/cfAccess';
+import { getServiceDetails } from '../../db/v1/services';
 import {
   createServiceApiKey,
   listServiceApiKeys,
@@ -20,11 +20,11 @@ import {
   replaceServiceCors,
   VALID_PERMISSIONS,
   type Permission,
-} from '../db/apiKeys';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { encodeCursor, decodeCursor } from '../lib/v2/cursor';
+} from '../../db/v1/apiKeys';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { encodeCursor, decodeCursor } from '../../lib/v2/cursor';
 
 const superadmin = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 

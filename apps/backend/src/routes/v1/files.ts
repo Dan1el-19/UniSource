@@ -6,14 +6,14 @@ import {
 	getUpload,
 	listUploads,
 	type UploadRecord,
-} from '../db/files';
+} from '../../db/v1/files';
 import {
 	buildAppwriteFileDownloadUrl,
 	createAppwriteFileToken,
 	deleteAppwriteFile,
 	extractAppwriteFileIdFromStorageKey,
-} from '../services/appwrite';
-import { deleteObject, generatePresignedGetUrl } from '../services/r2';
+} from '../../services/appwrite';
+import { deleteObject, generatePresignedGetUrl } from '../../services/r2';
 import {
 	FILES_DEFAULT_LIMIT,
 	FILES_MAX_LIMIT,
@@ -21,10 +21,10 @@ import {
 	uploadDestinationSchema,
 	uploadStatusSchema,
 } from '@unisource/sdk';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../../lib/v2/responses';
 
 const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
 

@@ -10,9 +10,9 @@ import {
   trashFolder,
   updateFolder,
   type FolderRecord,
-} from '../db/folders';
-import { trashFilesInFolders } from '../db/fileRecords';
-import { logServiceEvent } from '../db/services';
+} from '../../db/v1/folders';
+import { trashFilesInFolders } from '../../db/v1/fileRecords';
+import { logServiceEvent } from '../../db/v1/services';
 import {
   FILES_DEFAULT_LIMIT,
   FILES_MAX_LIMIT,
@@ -20,10 +20,10 @@ import {
   folderUpdateRequestSchema,
   type Folder,
 } from '@unisource/sdk';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../lib/v2/responses';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { listOrLegacy, itemOrLegacy, actionOrLegacy } from '../../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 

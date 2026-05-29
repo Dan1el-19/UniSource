@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { getLatestReleaseByTag } from '../db/releases';
-import { generatePresignedGetUrl } from '../services/r2';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { itemOrLegacy } from '../lib/v2/responses';
+import { getLatestReleaseByTag } from '../../db/v1/releases';
+import { generatePresignedGetUrl } from '../../services/r2';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { itemOrLegacy } from '../../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 

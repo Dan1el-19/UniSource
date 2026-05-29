@@ -13,9 +13,9 @@ import {
   listReleases,
   updateRelease,
   upsertReleaseSync,
-} from '../db/releases';
-import type { ServiceRecord } from '../db/services';
-import { buildReleaseStorageKey, getReleaseStoragePrefix } from '../services/storageKeys';
+} from '../../db/v1/releases';
+import type { ServiceRecord } from '../../db/v1/services';
+import { buildReleaseStorageKey, getReleaseStoragePrefix } from '../../services/storageKeys';
 import {
   abortMultipartUpload,
   completeMultipartUpload,
@@ -25,10 +25,10 @@ import {
   headObject,
   listUploadedParts,
   signUploadPart,
-} from '../services/r2';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
+} from '../../services/r2';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 

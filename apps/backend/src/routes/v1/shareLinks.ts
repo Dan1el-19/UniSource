@@ -7,14 +7,14 @@ import {
   updateShareLink,
   deleteShareLink,
   type ShareLink,
-} from '../db/shareLinks';
-import { getFileRecordForUser } from '../db/fileRecords';
-import { hashPassword } from '../utils/password';
-import { generateSlug, isValidSlug } from '../utils/slug';
-import { V2Error } from '../lib/v2/errors';
-import { logV2Request } from '../lib/v2/log';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { itemOrLegacy, actionOrLegacy, unpaginatedListOrLegacy } from '../lib/v2/responses';
+} from '../../db/v1/shareLinks';
+import { getFileRecordForUser } from '../../db/v1/fileRecords';
+import { hashPassword } from '../../utils/password';
+import { generateSlug, isValidSlug } from '../../utils/slug';
+import { V2Error } from '../../lib/v2/errors';
+import { logV2Request } from '../../lib/v2/log';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { itemOrLegacy, actionOrLegacy, unpaginatedListOrLegacy } from '../../lib/v2/responses';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };
 
@@ -151,7 +151,7 @@ shareLinkRouter.patch(
     const { linkId } = c.req.valid('param');
     const body = c.req.valid('json');
 
-    const updates: import('../db/shareLinks').UpdateShareLinkInput = {};
+    const updates: import('../../db/v1/shareLinks').UpdateShareLinkInput = {};
     if (body.name !== undefined) updates.name = body.name;
     if (body.is_active !== undefined) updates.is_active = body.is_active ? 1 : 0;
     if (body.expires_at !== undefined) updates.expires_at = body.expires_at;

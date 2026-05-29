@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload, completeUploadAndCreateFile } from '../db/files';
-import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../db/services';
-import { rateLimit } from '../middleware/ratelimit';
+import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload, completeUploadAndCreateFile } from '../../db/v1/files';
+import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../../db/v1/services';
+import { rateLimit } from '../../middleware/ratelimit';
 import {
   generatePresignedPutUrl,
   headObject,
@@ -11,14 +11,14 @@ import {
   listUploadedParts,
   completeMultipartUpload,
   abortMultipartUpload,
-} from '../services/r2';
-import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
-import { buildStorageKey, buildAppwriteStorageKey } from '../services/storageKeys';
-import { canWriteMainStorage } from '../middleware/mainStorageGuard';
-import { requireApiKeyPermission } from '../middleware/apiKeyPermissions';
-import { V2Error } from '../lib/v2/errors';
-import { v2ValidationHook } from '../lib/v2/zodHook';
-import { logV2Request } from '../lib/v2/log';
+} from '../../services/r2';
+import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../../services/appwrite';
+import { buildStorageKey, buildAppwriteStorageKey } from '../../services/storageKeys';
+import { canWriteMainStorage } from '../../middleware/mainStorageGuard';
+import { requireApiKeyPermission } from '../../middleware/apiKeyPermissions';
+import { V2Error } from '../../lib/v2/errors';
+import { v2ValidationHook } from '../../lib/v2/zodHook';
+import { logV2Request } from '../../lib/v2/log';
 import {
   uploadAppwriteInitRequestSchema,
   uploadLifecycleRequestSchema,
