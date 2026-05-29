@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload, completeUploadAndCreateFile } from '../db/files';
-import { createFileRecord, createMainStorageFileRecord } from '../db/fileRecords';
 import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../db/services';
 import { rateLimit } from '../middleware/ratelimit';
 import {
@@ -15,20 +14,11 @@ import {
 } from '../services/r2';
 import { getAppwriteUploadConfig, getAppwriteFileMeta, extractAppwriteFileIdFromStorageKey } from '../services/appwrite';
 import { buildStorageKey, buildAppwriteStorageKey } from '../services/storageKeys';
-import { canWriteMainStorage, mainStorageForbiddenResponse } from '../middleware/mainStorageGuard';
+import { canWriteMainStorage } from '../middleware/mainStorageGuard';
 import { V2Error } from '../lib/v2/errors';
 import { v2ValidationHook } from '../lib/v2/zodHook';
 import { logV2Request } from '../lib/v2/log';
 import {
-  type UploadAppwriteInitResponse,
-  type UploadCompleteResponse,
-  type UploadFailResponse,
-  type UploadR2InitResponse,
-  type MultipartCreateResponse,
-  type MultipartSignPartResponse,
-  type MultipartListPartsResponse,
-  type MultipartCompleteResponse,
-  type MultipartAbortResponse,
   uploadAppwriteInitRequestSchema,
   uploadLifecycleRequestSchema,
   uploadR2InitRequestSchema,
@@ -42,35 +32,6 @@ import {
 const UPLOAD_TTL_SECONDS = 3600; // 1 hour
 
 const upload = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-
-function validationErrorHook(
-  result: {
-    success: boolean;
-    error?: {
-      issues: Array<{
-          path: Array<PropertyKey>;
-        message: string;
-      }>;
-    };
-  },
-  c: {
-    json: (value: unknown, status?: number) => Response;
-  }
-) {
-  if (result.success) {
-    return;
-  }
-
-  const firstIssue = result.error?.issues[0];
-  const issuePath = firstIssue?.path.length ? `${firstIssue.path.join('.')}: ` : '';
-  return c.json(
-    {
-      error: 'Bad Request',
-      message: `${issuePath}${firstIssue?.message ?? 'Request validation failed'}`,
-    },
-    400
-  );
-}
 
 function getDatePath(): string {
   const date = new Date();
