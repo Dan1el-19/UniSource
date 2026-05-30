@@ -42,7 +42,7 @@ export function createShareLinksResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareLinkResponse> =>
-      request('POST', `/my-files/${encodeURIComponent(fileId)}/share-links`, {
+      request('POST', `/v2/my-files/${encodeURIComponent(fileId)}/share-links`, {
         body,
         signal,
         asUser: options?.asUser,
@@ -53,7 +53,7 @@ export function createShareLinksResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareLinkListResponse> =>
-      request('GET', `/my-files/${encodeURIComponent(fileId)}/share-links`, {
+      request('GET', `/v2/my-files/${encodeURIComponent(fileId)}/share-links`, {
         signal,
         asUser: options?.asUser,
         parser: v2ShareLinkListResponseSchema,
@@ -64,7 +64,7 @@ export function createShareLinksResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareLinkResponse> =>
-      request('PATCH', `/share-links/${encodeURIComponent(linkId)}`, {
+      request('PATCH', `/v2/share-links/${encodeURIComponent(linkId)}`, {
         body,
         signal,
         asUser: options?.asUser,
@@ -75,7 +75,7 @@ export function createShareLinksResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareLinkDeleteResponse> =>
-      request('DELETE', `/share-links/${encodeURIComponent(linkId)}`, {
+      request('DELETE', `/v2/share-links/${encodeURIComponent(linkId)}`, {
         signal,
         asUser: options?.asUser,
         parser: v2ShareLinkDeleteResponseSchema,

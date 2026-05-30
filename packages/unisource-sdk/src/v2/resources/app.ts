@@ -9,7 +9,7 @@ export function createAppResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<AppReleaseLatestResponse> =>
-      request('GET', '/app/releases/latest', {
+      request('GET', '/v2/app/releases/latest', {
         query,
         signal,
         asUser: options?.asUser,

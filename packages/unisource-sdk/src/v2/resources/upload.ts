@@ -35,7 +35,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2UploadR2InitResponse> =>
-      request('POST', '/upload/r2/init', {
+      request('POST', '/v2/upload/r2/init', {
         body: v2UploadR2InitRequestSchema.parse(body),
         signal,
         asUser: options?.asUser,
@@ -47,7 +47,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2UploadAppwriteInitResponse> =>
-      request('POST', '/upload/appwrite/init', {
+      request('POST', '/v2/upload/appwrite/init', {
         body: v2UploadAppwriteInitRequestSchema.parse(body),
         signal,
         asUser: options?.asUser,
@@ -59,7 +59,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions & { isMainStorage?: boolean }
     ): Promise<V2UploadLifecycleResponse> =>
-      request('POST', '/upload/complete', {
+      request('POST', '/v2/upload/complete', {
         body: v2UploadCompleteRequestSchema.parse({
           upload_id: uploadId,
           ...(options?.isMainStorage ? { is_main_storage: true } : {}),
@@ -74,7 +74,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2MultipartCreateResponse> =>
-      request('POST', '/upload/r2/multipart/create', {
+      request('POST', '/v2/upload/r2/multipart/create', {
         body: v2MultipartCreateRequestSchema.parse(body),
         signal,
         asUser: options?.asUser,
@@ -87,7 +87,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2MultipartSignPartResponse> =>
-      request('GET', '/upload/r2/multipart/sign-part', {
+      request('GET', '/v2/upload/r2/multipart/sign-part', {
         query: v2MultipartSignPartQuerySchema.parse({
           upload_id: uploadId,
           part_number: partNumber,
@@ -102,7 +102,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2MultipartListPartsResponse> =>
-      request('GET', '/upload/r2/multipart/list-parts', {
+      request('GET', '/v2/upload/r2/multipart/list-parts', {
         query: { upload_id: uploadId },
         signal,
         asUser: options?.asUser,
@@ -115,7 +115,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2UploadLifecycleResponse> =>
-      request('POST', '/upload/r2/multipart/complete', {
+      request('POST', '/v2/upload/r2/multipart/complete', {
         body: v2MultipartCompleteRequestSchema.parse({ upload_id: uploadId, parts }),
         signal,
         asUser: options?.asUser,
@@ -127,7 +127,7 @@ export function createUploadResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2UploadLifecycleResponse> =>
-      request('DELETE', '/upload/r2/multipart/abort', {
+      request('DELETE', '/v2/upload/r2/multipart/abort', {
         body: v2MultipartAbortRequestSchema.parse({ upload_id: uploadId }),
         signal,
         asUser: options?.asUser,

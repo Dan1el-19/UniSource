@@ -103,7 +103,7 @@ export function createFoldersResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FolderDetailResponse> =>
-      request('POST', '/folders', {
+      request('POST', '/v2/folders', {
         body,
         signal,
         asUser: options?.asUser,
@@ -119,7 +119,7 @@ export function createFoldersResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FolderDetailResponse> =>
-      request('GET', `/folders/${encodeURIComponent(id)}`, {
+      request('GET', `/v2/folders/${encodeURIComponent(id)}`, {
         signal,
         asUser: options?.asUser,
         parser: v2FolderDetailResponseSchema,
@@ -135,7 +135,7 @@ export function createFoldersResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FolderDetailResponse> =>
-      request('PATCH', `/folders/${encodeURIComponent(id)}`, {
+      request('PATCH', `/v2/folders/${encodeURIComponent(id)}`, {
         body,
         signal,
         asUser: options?.asUser,
@@ -153,7 +153,7 @@ export function createFoldersResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string; permanent?: boolean }
     ): Promise<V2FolderDeleteResponse> =>
-      request('DELETE', `/folders/${encodeURIComponent(id)}`, {
+      request('DELETE', `/v2/folders/${encodeURIComponent(id)}`, {
         query: options?.permanent ? { permanent: true } : undefined,
         signal,
         asUser: options?.asUser,
@@ -169,7 +169,7 @@ export function createFoldersResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FolderRestoreResponse> =>
-      request('POST', `/folders/${encodeURIComponent(id)}/restore`, {
+      request('POST', `/v2/folders/${encodeURIComponent(id)}/restore`, {
         signal,
         asUser: options?.asUser,
         parser: v2FolderRestoreResponseSchema,

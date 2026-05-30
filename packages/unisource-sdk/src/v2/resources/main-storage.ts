@@ -23,7 +23,7 @@ export function createMainStorageResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<MainStorageListResponse> =>
-      request('GET', '/main', {
+      request('GET', '/v2/main', {
         query,
         signal,
         asUser: options?.asUser,
@@ -34,7 +34,7 @@ export function createMainStorageResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<MainStorageDetailResponse> =>
-      request('GET', `/main/${encodeURIComponent(id)}`, {
+      request('GET', `/v2/main/${encodeURIComponent(id)}`, {
         signal,
         asUser: options?.asUser,
         parser: mainStorageDetailResponseSchema,
@@ -45,7 +45,7 @@ export function createMainStorageResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<MainStorageRenameResponse> =>
-      request('PATCH', `/main/${encodeURIComponent(id)}`, {
+      request('PATCH', `/v2/main/${encodeURIComponent(id)}`, {
         body,
         signal,
         asUser: options?.asUser,
@@ -56,7 +56,7 @@ export function createMainStorageResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string; permanent?: boolean }
     ): Promise<MainStorageDeleteResponse> =>
-      request('DELETE', `/main/${encodeURIComponent(id)}`, {
+      request('DELETE', `/v2/main/${encodeURIComponent(id)}`, {
         query: options?.permanent ? { permanent: true } : undefined,
         signal,
         asUser: options?.asUser,
@@ -67,7 +67,7 @@ export function createMainStorageResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<MainStorageRestoreResponse> =>
-      request('POST', `/main/${encodeURIComponent(id)}/restore`, {
+      request('POST', `/v2/main/${encodeURIComponent(id)}/restore`, {
         signal,
         asUser: options?.asUser,
         parser: mainStorageRestoreResponseSchema,

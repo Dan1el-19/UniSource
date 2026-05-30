@@ -44,7 +44,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseUploadInitResponse> =>
-      request('POST', '/releases/upload/init', {
+      request('POST', '/v2/releases/upload/init', {
         body: v2ReleaseUploadInitRequestSchema.parse(body),
         signal,
         asUser: options?.asUser,
@@ -57,7 +57,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseLifecycleResponse> =>
-      request('POST', '/releases/upload/complete', {
+      request('POST', '/v2/releases/upload/complete', {
         body: v2ReleaseUploadCompleteRequestSchema.parse({ release_id: releaseId, size }),
         signal,
         asUser: options?.asUser,
@@ -69,7 +69,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseLifecycleResponse> =>
-      request('POST', '/releases/upload/fail', {
+      request('POST', '/v2/releases/upload/fail', {
         body: { release_id: releaseId },
         signal,
         asUser: options?.asUser,
@@ -81,7 +81,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseMultipartCreateResponse> =>
-      request('POST', '/releases/upload/multipart/create', {
+      request('POST', '/v2/releases/upload/multipart/create', {
         body: v2ReleaseMultipartCreateRequestSchema.parse(body),
         signal,
         asUser: options?.asUser,
@@ -94,7 +94,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseMultipartSignPartResponse> =>
-      request('GET', '/releases/upload/multipart/sign-part', {
+      request('GET', '/v2/releases/upload/multipart/sign-part', {
         query: v2ReleaseMultipartSignPartQuerySchema.parse({
           upload_id: uploadId,
           part_number: partNumber,
@@ -109,7 +109,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseMultipartListPartsResponse> =>
-      request('GET', '/releases/upload/multipart/list-parts', {
+      request('GET', '/v2/releases/upload/multipart/list-parts', {
         query: { upload_id: uploadId },
         signal,
         asUser: options?.asUser,
@@ -122,7 +122,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseLifecycleResponse> =>
-      request('POST', '/releases/upload/multipart/complete', {
+      request('POST', '/v2/releases/upload/multipart/complete', {
         body: v2ReleaseMultipartCompleteRequestSchema.parse({ upload_id: uploadId, parts }),
         signal,
         asUser: options?.asUser,
@@ -134,7 +134,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseLifecycleResponse> =>
-      request('DELETE', '/releases/upload/multipart/abort', {
+      request('DELETE', '/v2/releases/upload/multipart/abort', {
         body: v2ReleaseMultipartAbortRequestSchema.parse({ upload_id: uploadId }),
         signal,
         asUser: options?.asUser,
@@ -146,7 +146,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseListResponse> =>
-      request('GET', '/releases', {
+      request('GET', '/v2/releases', {
         query,
         signal,
         asUser: options?.asUser,
@@ -157,7 +157,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseResourceResponse> =>
-      request('GET', '/releases/latest', {
+      request('GET', '/v2/releases/latest', {
         signal,
         asUser: options?.asUser,
         parser: v2ReleaseResourceResponseSchema,
@@ -168,7 +168,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseResourceResponse> =>
-      request('GET', `/releases/${encodeURIComponent(id)}`, {
+      request('GET', `/v2/releases/${encodeURIComponent(id)}`, {
         signal,
         asUser: options?.asUser,
         parser: v2ReleaseResourceResponseSchema,
@@ -180,7 +180,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseResourceResponse> =>
-      request('PATCH', `/releases/${encodeURIComponent(id)}`, {
+      request('PATCH', `/v2/releases/${encodeURIComponent(id)}`, {
         body: v2ReleaseUpdateRequestSchema.parse(body),
         signal,
         asUser: options?.asUser,
@@ -192,7 +192,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseDeleteResponse> =>
-      request('DELETE', `/releases/${encodeURIComponent(id)}`, {
+      request('DELETE', `/v2/releases/${encodeURIComponent(id)}`, {
         signal,
         asUser: options?.asUser,
         parser: v2ReleaseDeleteResponseSchema,
@@ -203,7 +203,7 @@ export function createReleasesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: CallOptions
     ): Promise<V2ReleaseSyncResponse> =>
-      request('POST', '/releases/sync', {
+      request('POST', '/v2/releases/sync', {
         body: v2ReleaseSyncRequestSchema.parse(body),
         signal,
         asUser: options?.asUser,

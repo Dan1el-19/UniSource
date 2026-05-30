@@ -28,7 +28,7 @@ import type { V2Request } from '../transport'
 export function createAdminResource(request: V2Request) {
   return {
     getService: (signal?: AbortSignal): Promise<AdminServiceResponse> =>
-      request('GET', '/admin/service', {
+      request('GET', '/v2/admin/service', {
         signal,
         parser: adminServiceResponseSchema,
       }),
@@ -36,7 +36,7 @@ export function createAdminResource(request: V2Request) {
       body: AdminServiceUpdateRequest,
       signal?: AbortSignal
     ): Promise<AdminServiceResponse> =>
-      request('PATCH', '/admin/service', {
+      request('PATCH', '/v2/admin/service', {
         body,
         signal,
         parser: adminServiceResponseSchema,
@@ -45,13 +45,13 @@ export function createAdminResource(request: V2Request) {
       body: AdminServiceSettingsUpdateRequest,
       signal?: AbortSignal
     ): Promise<AdminServiceResponse> =>
-      request('PATCH', '/admin/service/settings', {
+      request('PATCH', '/v2/admin/service/settings', {
         body,
         signal,
         parser: adminServiceResponseSchema,
       }),
     getServiceUsage: (signal?: AbortSignal): Promise<AdminServiceUsageResponse> =>
-      request('GET', '/admin/service/usage', {
+      request('GET', '/v2/admin/service/usage', {
         signal,
         parser: adminServiceUsageResponseSchema,
       }),
@@ -59,7 +59,7 @@ export function createAdminResource(request: V2Request) {
       query?: AdminAuditLogQuery,
       signal?: AbortSignal
     ): Promise<AdminAuditLogListResponse> =>
-      request('GET', '/admin/audit-log', {
+      request('GET', '/v2/admin/audit-log', {
         query,
         signal,
         parser: adminAuditLogListResponseSchema,
@@ -68,7 +68,7 @@ export function createAdminResource(request: V2Request) {
       query?: AdminUsersListQuery,
       signal?: AbortSignal
     ): Promise<AdminUsersListResponse> =>
-      request('GET', '/admin/users', {
+      request('GET', '/v2/admin/users', {
         query,
         signal,
         parser: adminUsersListResponseSchema,
@@ -78,7 +78,7 @@ export function createAdminResource(request: V2Request) {
       body: AdminUserUpdateRequest,
       signal?: AbortSignal
     ): Promise<AdminUserResponse> =>
-      request('PATCH', `/admin/users/${encodeURIComponent(userId)}`, {
+      request('PATCH', `/v2/admin/users/${encodeURIComponent(userId)}`, {
         body,
         signal,
         parser: adminUserResponseSchema,
@@ -88,7 +88,7 @@ export function createAdminResource(request: V2Request) {
       body: AdminUserPasswordResetRequest,
       signal?: AbortSignal
     ): Promise<AdminPasswordResetResponse> =>
-      request('POST', `/admin/users/${encodeURIComponent(userId)}/password`, {
+      request('POST', `/v2/admin/users/${encodeURIComponent(userId)}/password`, {
         body,
         signal,
         parser: adminPasswordResetResponseSchema,
@@ -98,7 +98,7 @@ export function createAdminResource(request: V2Request) {
       body: AdminUserRoleUpdateRequest,
       signal?: AbortSignal
     ): Promise<AdminUserResponse> =>
-      request('PATCH', `/admin/users/${encodeURIComponent(userId)}/role`, {
+      request('PATCH', `/v2/admin/users/${encodeURIComponent(userId)}/role`, {
         body,
         signal,
         parser: adminUserResponseSchema,
@@ -108,7 +108,7 @@ export function createAdminResource(request: V2Request) {
       body: AdminUserStorageLimitUpdateRequest,
       signal?: AbortSignal
     ): Promise<AdminUserResponse> =>
-      request('PATCH', `/admin/users/${encodeURIComponent(userId)}/storage-limit`, {
+      request('PATCH', `/v2/admin/users/${encodeURIComponent(userId)}/storage-limit`, {
         body,
         signal,
         parser: adminUserResponseSchema,
@@ -117,7 +117,7 @@ export function createAdminResource(request: V2Request) {
       args: AdminQuotaReconcileRequest = {},
       signal?: AbortSignal
     ): Promise<AdminQuotaReconcileResponse> =>
-      request('POST', '/admin/quota/reconcile', {
+      request('POST', '/v2/admin/quota/reconcile', {
         query: args.dryRun !== undefined ? { dry_run: args.dryRun } : undefined,
         signal,
         parser: adminQuotaReconcileResponseSchema,

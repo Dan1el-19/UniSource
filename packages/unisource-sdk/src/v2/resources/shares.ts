@@ -39,7 +39,7 @@ export function createSharesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareListResponse> =>
-      request('GET', '/shares', {
+      request('GET', '/v2/shares', {
         signal,
         asUser: options?.asUser,
         parser: v2ShareListResponseSchema,
@@ -49,7 +49,7 @@ export function createSharesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareResponse> =>
-      request('POST', '/shares', {
+      request('POST', '/v2/shares', {
         body,
         signal,
         asUser: options?.asUser,
@@ -60,7 +60,7 @@ export function createSharesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareResponse> =>
-      request('GET', `/shares/${encodeURIComponent(id)}`, {
+      request('GET', `/v2/shares/${encodeURIComponent(id)}`, {
         signal,
         asUser: options?.asUser,
         parser: v2ShareResponseSchema,
@@ -70,7 +70,7 @@ export function createSharesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2ShareDeleteResponse> =>
-      request('DELETE', `/shares/${encodeURIComponent(id)}`, {
+      request('DELETE', `/v2/shares/${encodeURIComponent(id)}`, {
         signal,
         asUser: options?.asUser,
         parser: v2ShareDeleteResponseSchema,

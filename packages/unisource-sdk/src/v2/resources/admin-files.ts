@@ -48,12 +48,12 @@ export type V2AdminFileDeleteResponse = z.infer<typeof v2AdminFileDeleteResponse
 export function createAdminFilesResource(request: V2Request) {
   return {
     list: (query?: V2AdminFilesListQuery, signal?: AbortSignal): Promise<V2AdminFilesListResponse> =>
-      request('GET', '/admin/files', { query, signal, parser: v2AdminFilesListResponseSchema }),
+      request('GET', '/v2/admin/files', { query, signal, parser: v2AdminFilesListResponseSchema }),
     get: (id: string, signal?: AbortSignal): Promise<V2AdminFileResponse> =>
-      request('GET', `/admin/files/${encodeURIComponent(id)}`, { signal, parser: v2AdminFileResponseSchema }),
+      request('GET', `/v2/admin/files/${encodeURIComponent(id)}`, { signal, parser: v2AdminFileResponseSchema }),
     downloadUrl: (id: string, signal?: AbortSignal): Promise<V2AdminFileDownloadResponse> =>
-      request('GET', `/admin/files/${encodeURIComponent(id)}/download-url`, { signal, parser: v2AdminFileDownloadResponseSchema }),
+      request('GET', `/v2/admin/files/${encodeURIComponent(id)}/download-url`, { signal, parser: v2AdminFileDownloadResponseSchema }),
     delete: (id: string, signal?: AbortSignal): Promise<V2AdminFileDeleteResponse> =>
-      request('DELETE', `/admin/files/${encodeURIComponent(id)}`, { signal, parser: v2AdminFileDeleteResponseSchema }),
+      request('DELETE', `/v2/admin/files/${encodeURIComponent(id)}`, { signal, parser: v2AdminFileDeleteResponseSchema }),
   }
 }

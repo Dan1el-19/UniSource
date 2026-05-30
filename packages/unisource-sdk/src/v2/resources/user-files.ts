@@ -57,7 +57,7 @@ export function createUserFilesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FileRecordDetailResponse> =>
-      request('GET', `/files/${encodeURIComponent(id)}`, {
+      request('GET', `/v2/files/${encodeURIComponent(id)}`, {
         signal,
         asUser: options?.asUser,
         parser: v2FileRecordDetailResponseSchema,
@@ -68,7 +68,7 @@ export function createUserFilesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FileUpdateResponse> =>
-      request('PATCH', `/files/${encodeURIComponent(id)}`, {
+      request('PATCH', `/v2/files/${encodeURIComponent(id)}`, {
         body,
         signal,
         asUser: options?.asUser,
@@ -79,7 +79,7 @@ export function createUserFilesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string; permanent?: boolean }
     ): Promise<V2FileDeleteResponse> =>
-      request('DELETE', `/files/${encodeURIComponent(id)}`, {
+      request('DELETE', `/v2/files/${encodeURIComponent(id)}`, {
         query: options?.permanent ? { permanent: true } : undefined,
         signal,
         asUser: options?.asUser,
@@ -90,7 +90,7 @@ export function createUserFilesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FileRestoreResponse> =>
-      request('POST', `/files/${encodeURIComponent(id)}/restore`, {
+      request('POST', `/v2/files/${encodeURIComponent(id)}/restore`, {
         signal,
         asUser: options?.asUser,
         parser: v2FileRestoreResponseSchema,
@@ -100,7 +100,7 @@ export function createUserFilesResource(request: V2Request) {
       signal?: AbortSignal,
       options?: { asUser?: string }
     ): Promise<V2FileDownloadUrlResponse> =>
-      request('GET', `/files/${encodeURIComponent(id)}/download-url`, {
+      request('GET', `/v2/files/${encodeURIComponent(id)}/download-url`, {
         signal,
         asUser: options?.asUser,
         parser: v2FileDownloadUrlResponseSchema,
