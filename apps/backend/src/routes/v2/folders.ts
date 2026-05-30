@@ -5,6 +5,8 @@ import { LIST_MAX_LIMIT } from '@unisource/sdk'
 import { listFoldersV2 } from '../../db/v2/folders'
 import type { FolderRowV2 } from '../../db/v2/folders'
 import { V2Error } from '../../lib/v2/errors'
+import { logServiceEvent } from '../../db/v1/services'
+import { folderCreateRequestSchema, folderUpdateRequestSchema } from '@unisource/sdk'
 import { logV2Request } from '../../lib/v2/log'
 import { v2ValidationHook } from '../../lib/v2/zodHook'
 import { getV2StorageUserId } from '../../lib/v2/principal'
@@ -14,8 +16,12 @@ import {
   bulkTrashFolders,
   bulkRestoreFolders,
   bulkMoveFolders,
+  createFolder,
   getFolderForUser,
   getDescendantFolderIds,
+  restoreFolder,
+  trashFolder,
+  updateFolder,
   type FolderRecord,
 } from '../../db/v1/folders'
 import { trashFilesInFolders } from '../../db/v1/fileRecords'
@@ -53,6 +59,23 @@ const foldersBulkBodySchema = z.discriminatedUnion('action', [
 ])
 
 const foldersV2 = new Hono<HonoEnv>()
+
+const crudFolderIdParam = z.object({ id: z.string().trim().min(1) })
+
+function mapFolder(folder: FolderRecord): import('@unisource/sdk').Folder {
+  return {
+    id: folder.id,
+    service_id: folder.service_id,
+    user_id: folder.user_id,
+    parent_id: folder.parent_id,
+    name: folder.name,
+    color_tag: folder.color_tag,
+    is_trashed: folder.is_trashed === 1,
+    trashed_at: folder.trashed_at,
+    created_at: folder.created_at,
+    updated_at: folder.updated_at,
+  }
+}
 
 foldersV2.get('/', zValidator('query', querySchema, v2ValidationHook), async (c) => {
   const start = Date.now()
@@ -168,6 +191,161 @@ foldersV2.post('/bulk', zValidator('json', foldersBulkBodySchema, v2ValidationHo
 
   const response = c.json(result)
   logV2Request(c, start, { route_family: 'v2.folders', operation: `bulk_${body.action}` })
+  return response
+})
+
+// ─── Create folder ──────────────────────────────────────────────────────────
+
+foldersV2.post('/', zValidator('json', folderCreateRequestSchema, v2ValidationHook), async (c) => {
+  const userId = c.get('userId')
+  const serviceId = c.get('serviceId')
+  const body = c.req.valid('json')
+  const start = Date.now()
+
+  if (body.parent_id) {
+    const parent = await getFolderForUser(c.env.APP_DB, body.parent_id, userId, serviceId)
+    if (!parent) {
+      throw new V2Error('not_found', 404, 'Parent folder not found')
+    }
+    if (parent.is_trashed) {
+      throw new V2Error('conflict', 409, 'Cannot create folder inside a trashed folder')
+    }
+  }
+
+  const id = crypto.randomUUID()
+  const folder = await createFolder(c.env.APP_DB, {
+    id,
+    service_id: serviceId,
+    user_id: userId,
+    parent_id: body.parent_id ?? null,
+    name: body.name,
+    color_tag: body.color_tag ?? null,
+  })
+
+  const mapped = mapFolder(folder)
+  const response = c.json({ item: mapped }, 201)
+  logV2Request(c, start, { route_family: 'v2.folders', operation: 'create' })
+  return response
+})
+
+// ─── Get single folder ──────────────────────────────────────────────────────
+
+foldersV2.get('/:id', zValidator('param', crudFolderIdParam, v2ValidationHook), async (c) => {
+  const userId = c.get('userId')
+  const serviceId = c.get('serviceId')
+  const { id } = c.req.valid('param')
+  const start = Date.now()
+
+  const folder = await getFolderForUser(c.env.APP_DB, id, userId, serviceId)
+  if (!folder) {
+    throw new V2Error('not_found', 404, 'Folder not found')
+  }
+
+  const mapped = mapFolder(folder)
+  const response = c.json({ item: mapped })
+  logV2Request(c, start, { route_family: 'v2.folders', operation: 'get' })
+  return response
+})
+
+// ─── Update folder ──────────────────────────────────────────────────────────
+
+foldersV2.patch(
+  '/:id',
+  zValidator('param', crudFolderIdParam, v2ValidationHook),
+  zValidator('json', folderUpdateRequestSchema, v2ValidationHook),
+  async (c) => {
+    const userId = c.get('userId')
+    const serviceId = c.get('serviceId')
+    const { id } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const start = Date.now()
+
+    const updated = await updateFolder(c.env.APP_DB, id, userId, serviceId, {
+      name: body.name,
+      color_tag: body.color_tag,
+    })
+
+    if (!updated) {
+      throw new V2Error('not_found', 404, 'Folder not found or already trashed')
+    }
+
+    const mapped = mapFolder(updated)
+    const response = c.json({ item: mapped })
+    logV2Request(c, start, { route_family: 'v2.folders', operation: 'update' })
+    return response
+  }
+)
+
+// ─── Delete folder (soft / permanent) ───────────────────────────────────────
+
+foldersV2.delete('/:id', zValidator('param', crudFolderIdParam, v2ValidationHook), async (c) => {
+  const userId = c.get('userId')
+  const serviceId = c.get('serviceId')
+  const { id } = c.req.valid('param')
+  const permanent = c.req.query('permanent') === 'true'
+  const start = Date.now()
+
+  if (permanent) {
+    const descendantIds = await getDescendantFolderIds(c.env.APP_DB, id, userId, serviceId)
+    if (descendantIds.length === 0) {
+      throw new V2Error('not_found', 404, 'Folder not found')
+    }
+
+    await trashFilesInFolders(c.env.APP_DB, descendantIds, userId, serviceId)
+
+    const deleteStmts = descendantIds.map((folderId) =>
+      c.env.APP_DB
+        .prepare('DELETE FROM folders WHERE id = ? AND user_id = ? AND service_id = ?')
+        .bind(folderId, userId, serviceId)
+    )
+    if (deleteStmts.length > 0) {
+      await c.env.APP_DB.batch(deleteStmts)
+    }
+
+    c.executionCtx.waitUntil(
+      logServiceEvent(c.env.APP_DB, {
+        serviceId,
+        userId,
+        action: 'folder_deleted',
+        resourceType: 'folder',
+        resourceId: id,
+        metadata: { descendants_deleted: descendantIds.length },
+        ipAddress: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for'),
+        actorId: c.get('actorId') ?? null,
+        targetUserId: c.get('actorId') ? c.get('userId') : null,
+      })
+    )
+
+    const response = c.json({ item: { id, deleted: true, permanent: true, folders_deleted: descendantIds.length } })
+    logV2Request(c, start, { route_family: 'v2.folders', operation: 'delete' })
+    return response
+  }
+
+  const trashed = await trashFolder(c.env.APP_DB, id, userId, serviceId)
+  if (!trashed) {
+    throw new V2Error('not_found', 404, 'Folder not found or already trashed')
+  }
+
+  const response = c.json({ item: { id, deleted: false, permanent: false } })
+  logV2Request(c, start, { route_family: 'v2.folders', operation: 'delete' })
+  return response
+})
+
+// ─── Restore folder ─────────────────────────────────────────────────────────
+
+foldersV2.post('/:id/restore', zValidator('param', crudFolderIdParam, v2ValidationHook), async (c) => {
+  const userId = c.get('userId')
+  const serviceId = c.get('serviceId')
+  const { id } = c.req.valid('param')
+  const start = Date.now()
+
+  const restored = await restoreFolder(c.env.APP_DB, id, userId, serviceId)
+  if (!restored) {
+    throw new V2Error('not_found', 404, 'Folder not found or not in trash')
+  }
+
+  const response = c.json({ item: { id, restored: true } })
+  logV2Request(c, start, { route_family: 'v2.folders', operation: 'restore' })
   return response
 })
 
