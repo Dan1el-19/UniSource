@@ -9,10 +9,8 @@ import adminV2 from './admin'
 import mainStorageV2 from './mainStorage'
 import releasesV2 from './releases'
 import appV2 from './app'
-import publicV2 from './public'
 import sharesV2 from './shares'
 import shareLinksV2 from './shareLinks'
-import superadminV2 from './superadmin'
 
 type V2Env = { Bindings: CloudflareBindings; Variables: WorkerVariables }
 
@@ -29,10 +27,13 @@ v2.route('/admin', adminV2)
 v2.route('/main', mainStorageV2)
 v2.route('/releases', releasesV2)
 v2.route('/app', appV2)
-v2.route('/public', publicV2)
 v2.route('/shares', sharesV2)
 // shareLinks router handles both /my-files/:fileId/share-links and /share-links/:linkId
 v2.route('/', shareLinksV2)
-v2.route('/superadmin', superadminV2)
+
+// /public and /superadmin are mounted directly in index.ts without auth middleware
+// (public has no auth, superadmin uses CF Access internally)
 
 export default v2
+export { default as publicV2 } from './public'
+export { default as superadminV2 } from './superadmin'

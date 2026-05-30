@@ -5,25 +5,24 @@ import { authMiddleware } from './middleware/auth';
 import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
-import { V2Error, errorResponse, statusToV2Code, statusToLegacyLabel } from './lib/v2/errors';
+import { V2Error, errorResponse, statusToV2Code } from './lib/v2/errors';
 import { v2RequestIdGuard } from './middleware/v2RequestIdGuard';
-import { wantsV2 } from './lib/v2/negotiation';
 import { foreignKeysMiddleware } from './middleware/foreignKeys';
 import { rateLimit } from './middleware/ratelimit';
-import upload from './routes/v1/upload';
-import files from './routes/v1/files';
-import folders from './routes/v1/folders';
-import myFiles from './routes/v1/fileRecords';
-import userFiles from './routes/v1/userFiles';
-import admin from './routes/v1/admin';
-import shareLinkRouter from './routes/v1/shareLinks';
-import sharesRouter from './routes/v1/shares';
-import publicRouter from './routes/v1/public';
-import mainStorage from './routes/v1/mainStorage';
-import releasesRouter from './routes/v1/releases';
-import appRouter from './routes/v1/app';
-import superadminRouter from './routes/v1/superadmin';
-import v2Router from './routes/v2/index';
+import upload from './routes/upload';
+import files from './routes/files';
+import folders from './routes/folders';
+import myFiles from './routes/fileRecords';
+import userFiles from './routes/userFiles';
+import admin from './routes/admin';
+import shareLinkRouter from './routes/shareLinks';
+import sharesRouter from './routes/shares';
+import publicRouter from './routes/public';
+import mainStorage from './routes/mainStorage';
+import releasesRouter from './routes/releases';
+import appRouter from './routes/app';
+import superadminRouter from './routes/superadmin';
+import v2Router, { publicV2, superadminV2 } from './routes/v2/index';
 import { parseAllowedOrigins } from './config/runtime';
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
@@ -45,37 +44,11 @@ app.use('*', async (c, next) => {
 app.use('*', loggerMiddleware);
 // B6: enforce SQLite foreign keys for ON DELETE SET NULL etc.
 app.use('*', foreignKeysMiddleware);
-app.use('*', v2RequestIdGuard);
-
-// V2 response wrapper — transforms legacy error responses to V2 envelopes
-// when V2 is requested (always for /v2/* and /superadmin/*, opt-in via header for shared routes)
-app.use('*', async (c, next) => {
-  await next();
-  if (!wantsV2(c)) return;
-
-  const rawRes = c.res;
-  if (!rawRes || rawRes.ok) return;
-
-  const contentType = rawRes.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) return;
-
-  const body = await rawRes.clone().json().catch(() => null) as { error?: unknown; message?: string } | null;
-
-  // Heuristic: if body.error is already an object (V2 envelope with code/message/request_id),
-  // skip the transformation. Legacy errors have body.error as a string.
-  if (body && typeof body === 'object' && body.error && typeof body.error === 'object') {
-    return;
-  }
-
-  const code = statusToV2Code(rawRes.status);
-  const message: string | undefined =
-    body?.message ?? (typeof body?.error === 'string' ? body.error : undefined);
-
-  c.res = errorResponse(c, new V2Error(code, rawRes.status, message));
-});
 
 // Health check — no auth required
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Math.floor(Date.now() / 1000) }));
+
+// ─── Legacy routes ────────────────────────────────────────────────────────────
 
 // Upload gateway — Dual-Auth (JWT or API key)
 app.use('/upload/*', authMiddleware);
@@ -105,13 +78,6 @@ app.use('/files/*', authMiddleware);
 app.use('/files/*', rateLimit('general'));
 app.use('/files/*', adminPreviewMiddleware);
 app.route('/files', userFiles);
-
-// --- V2 API ---
-app.use('/v2/*', authMiddleware);
-app.use('/v2/*', rateLimit('general'));
-app.use('/v2/*', adminPreviewMiddleware);
-app.route('/v2', v2Router);
-// --- End V2 API ---
 
 // Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
 app.use('/admin/*', authMiddleware);
@@ -160,17 +126,61 @@ app.route('/public', publicRouter);
 // Superadmin panel API — protected by Cloudflare Access JWT (cfAccessMiddleware applied inside)
 app.route('/superadmin', superadminRouter);
 
+// ─── V2 API ───────────────────────────────────────────────────────────────────
+
+// V2 request ID guard — only for V2 paths
+app.use('/v2/*', v2RequestIdGuard);
+
+// Public share access under V2 — no auth (must be before general /v2/* auth middleware)
+app.route('/v2/public', publicV2);
+
+// Superadmin under V2 — CF Access only (handled inside superadmin router)
+app.route('/v2/superadmin', superadminV2);
+
+// All other V2 routes require auth
+app.use('/v2/*', authMiddleware);
+app.use('/v2/*', rateLimit('general'));
+app.use('/v2/*', adminPreviewMiddleware);
+
+// V2 error wrapper — transforms legacy error responses to V2 envelopes for /v2/* paths
+app.use('/v2/*', async (c, next) => {
+  await next();
+
+  const rawRes = c.res;
+  if (!rawRes || rawRes.ok) return;
+
+  const contentType = rawRes.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) return;
+
+  const body = await rawRes.clone().json().catch(() => null) as { error?: unknown; message?: string } | null;
+
+  // Heuristic: if body.error is already an object (V2 envelope with code/message/request_id),
+  // skip the transformation. Legacy errors have body.error as a string.
+  if (body && typeof body === 'object' && body.error && typeof body.error === 'object') {
+    return;
+  }
+
+  const code = statusToV2Code(rawRes.status);
+  const message: string | undefined =
+    body?.message ?? (typeof body?.error === 'string' ? body.error : undefined);
+
+  c.res = errorResponse(c, new V2Error(code, rawRes.status, message));
+});
+
+app.route('/v2', v2Router);
+
+// ─── Error handler ─────────────────────────────────────────────────────────────
+
 app.onError((err, c) => {
+  const isV2Path = c.req.path.startsWith('/v2/');
+
   if (err instanceof V2Error) {
-    if (wantsV2(c)) return errorResponse(c, err);
-
-    const legacyLabel = statusToLegacyLabel(err.status);
-
-    return c.json({ error: legacyLabel, message: err.message }, err.status as never);
+    if (isV2Path) return errorResponse(c, err);
+    return c.json({ error: err.code, message: err.message }, err.status as never);
   }
 
   if (err instanceof HTTPException) {
-    if (wantsV2(c)) {
+    if (isV2Path) {
       const code = statusToV2Code(err.status);
       return errorResponse(c, new V2Error(code, err.status, err.message));
     }
@@ -178,7 +188,7 @@ app.onError((err, c) => {
   }
 
   logError('Unhandled Application Error', err, c as any);
-  if (wantsV2(c)) return errorResponse(c, new V2Error('internal_error', 500, 'Internal server error'));
+  if (isV2Path) return errorResponse(c, new V2Error('internal_error', 500, 'Internal server error'));
   return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
 });
 

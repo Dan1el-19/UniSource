@@ -11,9 +11,9 @@ import {
   trashFolder,
   updateFolder,
   type FolderRecord,
-} from '../db/folders';
-import { trashFilesInFolders } from '../db/fileRecords';
-import { logServiceEvent } from '../db/services';
+} from '../db/v1/folders';
+import { trashFilesInFolders } from '../db/v1/fileRecords';
+import { logServiceEvent } from '../db/v1/services';
 import {
   FILES_DEFAULT_LIMIT,
   FILES_MAX_LIMIT,

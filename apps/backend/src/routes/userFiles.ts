@@ -12,8 +12,8 @@ import {
   trashFileRecord,
   updateFileRecord,
   type FileRecord,
-} from '../db/fileRecords';
-import { logServiceEvent, releaseQuota } from '../db/services';
+} from '../db/v1/fileRecords';
+import { logServiceEvent, releaseQuota } from '../db/v1/services';
 import { deleteObject, generatePresignedGetUrl } from '../services/r2';
 import {
   buildAppwriteFileDownloadUrl,
@@ -21,7 +21,7 @@ import {
   deleteAppwriteFile,
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
-import { deactivateShareLinksForFile } from '../db/shareLinks';
+import { deactivateShareLinksForFile } from '../db/v1/shareLinks';
 import type {
   FileRecordDetailResponse,
   FileDownloadUrlResponse,

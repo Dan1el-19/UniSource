@@ -14,7 +14,7 @@ import {
   updateServiceDetails,
   updateServiceSettings,
   upsertServiceUserSettings,
-} from '../db/services';
+} from '../db/v1/services';
 import {
   getAppwriteUser,
   listAppwriteUsers,

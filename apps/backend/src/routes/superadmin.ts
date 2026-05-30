@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { cfAccessMiddleware } from '../middleware/cfAccess';
-import { getServiceDetails } from '../db/services';
+import { getServiceDetails } from '../db/v1/services';
 import {
   createServiceApiKey,
   listServiceApiKeys,
@@ -17,7 +17,7 @@ import {
   replaceServiceCors,
   VALID_PERMISSIONS,
   type Permission,
-} from '../db/apiKeys';
+} from '../db/v1/apiKeys';
 
 const superadmin = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 

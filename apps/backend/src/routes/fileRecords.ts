@@ -10,9 +10,9 @@ import {
   trashFileRecord,
   updateFileRecord,
   type FileRecord,
-} from '../db/fileRecords';
-import { getFolderForUser } from '../db/folders';
-import { logServiceEvent, releaseQuota } from '../db/services';
+} from '../db/v1/fileRecords';
+import { getFolderForUser } from '../db/v1/folders';
+import { logServiceEvent, releaseQuota } from '../db/v1/services';
 import { deleteObject, generatePresignedGetUrl } from '../services/r2';
 import {
   buildAppwriteFileDownloadUrl,
@@ -20,7 +20,7 @@ import {
   deleteAppwriteFile,
   extractAppwriteFileIdFromStorageKey,
 } from '../services/appwrite';
-import { deactivateShareLinksForFile } from '../db/shareLinks';
+import { deactivateShareLinksForFile } from '../db/v1/shareLinks';
 import {
   FILES_DEFAULT_LIMIT,
   FILES_MAX_LIMIT,
