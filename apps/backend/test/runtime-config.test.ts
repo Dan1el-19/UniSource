@@ -3,8 +3,16 @@ import { parseAllowedOrigins } from '../src/config/runtime';
 import { resolveR2BindingName, resolveR2BucketName } from '../src/services/r2';
 
 describe('runtime configuration', () => {
-  it('does not expose production origins when ALLOWED_ORIGINS is unset', () => {
-    expect(parseAllowedOrigins({} as CloudflareBindings)).toEqual([]);
+  it('preserves the stable CORS fallback when ALLOWED_ORIGINS is unset', () => {
+    expect(parseAllowedOrigins({} as CloudflareBindings)).toEqual([
+      'https://app.example.com',
+      'https://service-b.pages.dev',
+      'https://example.com',
+      'https://www.example.com',
+      'http://localhost:5173',
+      'http://localhost:4321',
+      'http://localhost:8788',
+    ]);
   });
 
   it('parses comma-separated CORS origins from ALLOWED_ORIGINS', () => {

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { v2RequestIdGuard } from '../../middleware/v2RequestIdGuard';
-import { cfAccessMiddleware } from '../../middleware/cfAccess';
+import { cfAccessV2Middleware } from '../../middleware/cfAccess';
 import { getServiceDetails } from '../../db/v1/services';
 import {
   createServiceApiKey,
@@ -30,7 +30,7 @@ const superadmin = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVar
 
 // Protect all /superadmin/* routes — request ID guard before CF Access
 superadmin.use('*', v2RequestIdGuard);
-superadmin.use('*', cfAccessMiddleware as never);
+superadmin.use('*', cfAccessV2Middleware as never);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -98,7 +98,7 @@ Frontend (SvelteKit) ← HTTP → Backend (Hono) ← D1 (SQLite) / R2 / Appwrite
 
 **Auth:** Backend obsługuje JWT z Appwrite ORAZ API key (API key ustawia `userId='system'`). Frontend autoryzuje przez Cloudflare Access JWT (cookie `CF_Authorization` lub header `Cf-Access-Jwt-Assertion`).
 
-**X-Service-ID:** Każdy request musi zawierać nagłówek `X-Service-ID` — middleware `serviceIsolation` wymusza izolację danych między serwisami.
+**X-Service-ID:** Endpointy `/v2/*` wymagają nagłówka `X-Service-ID`. Stable zachowuje kompatybilny fallback `default` z `main`. Middleware wymusza izolację danych między serwisami.
 
 **Soft-delete:** Pliki są domyślnie usuwane miękko (`is_trashed=1`). Hard delete wymaga parametru `?permanent=true`.
 

@@ -43,7 +43,8 @@
 		}
 	],
 	"vars": {
-		"R2_BUCKET_BINDINGS": "{\"primary\":\"PRIMARY_BUCKET\",\"secondary\":\"SECONDARY_BUCKET\"}"
+		"R2_BUCKET_BINDINGS": "{\"primary\":\"PRIMARY_BUCKET\",\"secondary\":\"SECONDARY_BUCKET\"}",
+		"R2_BUCKET_NAMES": "{\"primary\":\"storage-primary-placeholder\",\"secondary\":\"storage-secondary-placeholder\"}"
 	},
 	"ratelimits": [
 		{

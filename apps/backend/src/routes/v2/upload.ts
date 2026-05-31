@@ -58,7 +58,7 @@ upload.post(
 
     requireApiKeyPermission(c, 'upload');
 
-    if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+    if (body.is_main_storage === true && !canWriteMainStorage(c, true)) {
       throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
     }
 
@@ -163,7 +163,7 @@ upload.post(
 
     requireApiKeyPermission(c, 'upload');
 
-    if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+    if (body.is_main_storage === true && !canWriteMainStorage(c, true)) {
       throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
     }
 
@@ -493,7 +493,7 @@ upload.post(
 
     requireApiKeyPermission(c, 'upload');
 
-    if (body.is_main_storage === true && !canWriteMainStorage(c)) {
+    if (body.is_main_storage === true && !canWriteMainStorage(c, true)) {
       throw new V2Error('forbidden', 403, 'Main storage uploads require admin or plus role');
     }
 

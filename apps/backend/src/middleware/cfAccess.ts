@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { timingSafeEqual } from "hono/utils/buffer";
-import { V2Error } from "../lib/v2/errors";
+import { V2Error, type V2ErrorCode } from "../lib/v2/errors";
 
 export interface CfAccessUser {
   email: string;
@@ -130,76 +130,87 @@ async function verifyJwt(
   }
 }
 
-export const cfAccessMiddleware = createMiddleware<{
-  Bindings: CloudflareBindings;
-  Variables: WorkerVariables & { cfAccessUser: CfAccessUser };
-}>(async (c, next) => {
-  const env = c.env as unknown as Record<string, string | undefined>;
+function createCfAccessMiddleware(v2: boolean) {
+  return createMiddleware<{
+    Bindings: CloudflareBindings;
+    Variables: WorkerVariables & { cfAccessUser: CfAccessUser };
+  }>(async (c, next) => {
+    const env = c.env as unknown as Record<string, string | undefined>;
+    const fail = (code: V2ErrorCode, status: number, error: string, message: string) => {
+      if (v2) {
+        throw new V2Error(code, status, message);
+      }
+      return c.json({ error, message }, status as never);
+    };
 
-  // Dev bypass — only when explicitly set
-  if (env.BYPASS_CF_ACCESS === "true") {
-    const devUser = { email: "dev@localhost", sub: "dev" };
-    c.set("cfAccessUser" as never, devUser as never);
-    c.set("userId" as never, devUser.sub as never);
-    c.set("serviceId" as never, "superadmin" as never);
-    c.set("authType" as never, "cf_access_dev" as never);
-    return next();
-  }
-
-  // Service token auth (server-to-server)
-  const clientId = c.req.header("CF-Access-Client-Id");
-  const clientSecret = c.req.header("CF-Access-Client-Secret");
-  const expectedId = env.CF_ACCESS_SERVICE_CLIENT_ID;
-  const expectedSecret = env.CF_ACCESS_SERVICE_CLIENT_SECRET;
-  if (clientId && clientSecret && expectedId && expectedSecret) {
-    const isClientIdMatch = await timingSafeEqual(clientId, expectedId);
-    const isClientSecretMatch = await timingSafeEqual(
-      clientSecret,
-      expectedSecret,
-    );
-    if (isClientIdMatch && isClientSecretMatch) {
-      const serviceUser = { email: "service@internal", sub: "service" };
-      c.set("cfAccessUser" as never, serviceUser as never);
-      c.set("userId" as never, serviceUser.sub as never);
+    // Dev bypass — only when explicitly set
+    if (env.BYPASS_CF_ACCESS === "true") {
+      const devUser = { email: "dev@localhost", sub: "dev" };
+      c.set("cfAccessUser" as never, devUser as never);
+      c.set("userId" as never, devUser.sub as never);
       c.set("serviceId" as never, "superadmin" as never);
-      c.set("authType" as never, "cf_access_service" as never);
+      c.set("authType" as never, "cf_access_dev" as never);
       return next();
     }
-    throw new V2Error("unauthorized", 401, "Invalid service token");
-  }
 
-  const aud = env.CF_ACCESS_AUD;
-  const team = env.CF_ACCESS_TEAM;
+    // Service token auth (server-to-server)
+    const clientId = c.req.header("CF-Access-Client-Id");
+    const clientSecret = c.req.header("CF-Access-Client-Secret");
+    const expectedId = env.CF_ACCESS_SERVICE_CLIENT_ID;
+    const expectedSecret = env.CF_ACCESS_SERVICE_CLIENT_SECRET;
+    if (clientId && clientSecret && expectedId && expectedSecret) {
+      const isClientIdMatch = await timingSafeEqual(clientId, expectedId);
+      const isClientSecretMatch = await timingSafeEqual(
+        clientSecret,
+        expectedSecret,
+      );
+      if (isClientIdMatch && isClientSecretMatch) {
+        const serviceUser = { email: "service@internal", sub: "service" };
+        c.set("cfAccessUser" as never, serviceUser as never);
+        c.set("userId" as never, serviceUser.sub as never);
+        c.set("serviceId" as never, "superadmin" as never);
+        c.set("authType" as never, "cf_access_service" as never);
+        return next();
+      }
+      return fail("unauthorized", 401, "Unauthorized", "Invalid service token");
+    }
 
-  if (!aud || !team) {
-    throw new V2Error("internal_error", 500, "CF Access is not configured");
-  }
+    const aud = env.CF_ACCESS_AUD;
+    const team = env.CF_ACCESS_TEAM;
 
-  // Read JWT from header or cookie
-  const jwtFromHeader = c.req.header("Cf-Access-Jwt-Assertion") ?? null;
-  const cookieHeader = c.req.header("Cookie") ?? "";
-  const jwtFromCookie =
-    cookieHeader
-      .split(";")
-      .map((s) => s.trim())
-      .find((s) => s.startsWith("CF_Authorization="))
-      ?.slice("CF_Authorization=".length) ?? null;
+    if (!aud || !team) {
+      return fail("internal_error", 500, "Misconfigured", "CF Access not configured");
+    }
 
-  const token = jwtFromHeader ?? jwtFromCookie;
+    // Read JWT from header or cookie
+    const jwtFromHeader = c.req.header("Cf-Access-Jwt-Assertion") ?? null;
+    const cookieHeader = c.req.header("Cookie") ?? "";
+    const jwtFromCookie =
+      cookieHeader
+        .split(";")
+        .map((s) => s.trim())
+        .find((s) => s.startsWith("CF_Authorization="))
+        ?.slice("CF_Authorization=".length) ?? null;
 
-  if (!token) {
-    throw new V2Error("unauthorized", 401, "Missing Cloudflare Access token");
-  }
+    const token = jwtFromHeader ?? jwtFromCookie;
 
-  const user = await verifyJwt(token, team, aud);
+    if (!token) {
+      return fail("unauthorized", 401, "Unauthorized", "Missing Cloudflare Access token");
+    }
 
-  if (!user) {
-    throw new V2Error("unauthorized", 401, "Invalid or expired Cloudflare Access token");
-  }
+    const user = await verifyJwt(token, team, aud);
 
-  c.set("cfAccessUser" as never, user as never);
-  c.set("userId" as never, user.sub as never);
-  c.set("serviceId" as never, "superadmin" as never);
-  c.set("authType" as never, "cf_access" as never);
-  return next();
-});
+    if (!user) {
+      return fail("unauthorized", 401, "Unauthorized", "Invalid or expired Cloudflare Access token");
+    }
+
+    c.set("cfAccessUser" as never, user as never);
+    c.set("userId" as never, user.sub as never);
+    c.set("serviceId" as never, "superadmin" as never);
+    c.set("authType" as never, "cf_access" as never);
+    return next();
+  });
+}
+
+export const cfAccessMiddleware = createCfAccessMiddleware(false);
+export const cfAccessV2Middleware = createCfAccessMiddleware(true);

@@ -5,6 +5,7 @@ import { DEFAULT_SERVICE_ID } from '../config/services';
 import { validateApiKeyByHash } from '../db/v1/apiKeys';
 import { consumeRateLimit } from './ratelimit';
 import { V2Error } from '../lib/v2/errors';
+import { isAlwaysV2Path } from '../lib/v2/negotiation';
 
 export type AuthRouteMode = 'user' | 'dual';
 
@@ -116,22 +117,26 @@ export const authMiddleware = createMiddleware<{
   Variables: WorkerVariables;
 }>(async (c, next) => {
   const pathname = new URL(c.req.url).pathname;
+  const isV2Path = isAlwaysV2Path(pathname);
   const { routeMode, jwtToken, apiKeyToken } = resolveAuthDecision(
     pathname,
     c.req.header('Authorization') ?? null,
     c.req.header('X-Appwrite-JWT') ?? null
   );
 
-  // Derive service from header — strictly required
+  // V2 requires explicit service isolation. Stable paths keep the main fallback.
   const rawServiceId = c.req.header('X-Service-ID')?.trim().toLowerCase();
-  if (!rawServiceId) {
+  if (!rawServiceId && isV2Path) {
     throw new V2Error('validation_error', 400, 'X-Service-ID header is required');
   }
-  const serviceId = rawServiceId;
+  const serviceId = rawServiceId ?? DEFAULT_SERVICE_ID;
 
   const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
-    throw new V2Error('validation_error', 400, `Unknown service: ${serviceId}`);
+    if (isV2Path) {
+      throw new V2Error('validation_error', 400, `Unknown service: ${serviceId}`);
+    }
+    return c.json({ error: 'Bad Request', message: `Unknown service: ${serviceId}` }, 400);
   }
   c.set('service', service);
 
@@ -148,7 +153,10 @@ export const authMiddleware = createMiddleware<{
       if (serviceId !== DEFAULT_SERVICE_ID) {
         const access = await checkUserServiceAccess(c.env.APP_DB, serviceId, authenticatedUser.userId);
         if (!access) {
-          throw new V2Error('forbidden', 403, 'Access to this service is not permitted');
+          if (isV2Path) {
+            throw new V2Error('forbidden', 403, 'Access to this service is not permitted');
+          }
+          return c.json({ error: 'Forbidden', message: 'Access to this service is not permitted' }, 403);
         }
         // Per-service role overrides Appwrite labels for non-default services.
         if (access.role === 'admin' || access.role === 'plus' || access.role === 'user') {
@@ -174,9 +182,18 @@ export const authMiddleware = createMiddleware<{
     if (routeMode === 'user') {
       const limit = await consumeRateLimit(c, 'auth-fail');
       if (!limit.allowed) {
-        throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
+        if (isV2Path) {
+          throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
+        }
+        return c.json(
+          { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
+          429
+        );
       }
-      throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
+      if (isV2Path) {
+        throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
+      }
+      return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
     }
   }
 
@@ -204,8 +221,17 @@ export const authMiddleware = createMiddleware<{
   // success traffic — only failures count.
   const limit = await consumeRateLimit(c, 'auth-fail');
   if (!limit.allowed) {
-    throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
+    if (isV2Path) {
+      throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
+    }
+    return c.json(
+      { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
+      429
+    );
   }
 
-  throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
+  if (isV2Path) {
+    throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
+  }
+  return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
 });

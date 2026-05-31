@@ -21,6 +21,7 @@ function buildRoleApp(allowedRoles: string[], userId: string, authType: 'appwrit
   });
   app.use('*', requireRoleMiddleware(allowedRoles));
   app.get('/protected', (c) => c.json({ ok: true }));
+  app.get('/v2/protected', (c) => c.json({ ok: true }));
   app.onError((err, c) => {
     if (err instanceof V2Error) return errorResponse(c, err);
     throw err;
@@ -42,9 +43,15 @@ describe('requireRoleMiddleware', () => {
     expect(res.status).toBe(200);
   });
 
-  it('blocks API keys without admin permission', async () => {
+  it('allows legacy API-key callers without the newer V2 permission check', async () => {
     const app = buildRoleApp(['plus', 'admin'], 'system', 'apikey');
     const res = await app.fetch(new Request('http://localhost/protected'), env);
+    expect(res.status).toBe(200);
+  });
+
+  it('blocks V2 API keys without admin permission', async () => {
+    const app = buildRoleApp(['plus', 'admin'], 'system', 'apikey');
+    const res = await app.fetch(new Request('http://localhost/v2/protected'), env);
     expect(res.status).toBe(403);
   });
 

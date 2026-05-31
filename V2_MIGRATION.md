@@ -1,6 +1,6 @@
 # V2 Migration Status
 
-> Stan na **2026-05-29**. Wszystko na branchu `beta`. Sekcje 2 (upload), 3 (releases) i 4 (superadmin) ukończone.
+> Stan na **2026-05-31**. Split stable/V2 jest przygotowany na branchu `feat/v2-split`.
 
 Refaktor UniSource do "standardu V2" obejmuje **dwie warstwy w zakresie**: backend (routes → V2 standard) i SDK (`UnisourceV2Client`). Frontend i integratorzy są **poza zakresem** — `UnisourceClient` (legacy) zostaje stable, bez zmian. Ten dokument trzyma jedno spójne źródło prawdy o tym, co jest zrobione, a co nie.
 
@@ -18,13 +18,9 @@ Frontend (`apps/frontend` — admin panel UniSource) oraz integratorzy zewnętrz
 
 ## Contract Status
 
-Backend V2 is available for all public resources on branch `beta`, but shared in-place routes preserve legacy response shapes unless the request opts into V2 with `X-Unisource-API-Version: 2` or `Accept: application/vnd.unisource.v2+json`.
+Backend V2 is available exclusively under `/v2/*`. Stable paths preserve the legacy response shapes from `main`; `X-Unisource-API-Version` and `Accept` headers do not change their behavior.
 
-Always-V2 routes:
-- `/v2/*`
-- `/superadmin/*`
-
-Shared opt-in V2 routes:
+Stable routes:
 - `/upload/*`
 - `/admin/*`
 - `/folders/*`
@@ -34,10 +30,11 @@ Shared opt-in V2 routes:
 - `/releases/*`
 - `/app/*`
 - `/public/*`
+- `/superadmin/*`
 - `/shares/*`
 - `/share-links/*`
 
-Legacy `UnisourceClient` remains default-compatible with shared routes. `UnisourceV2Client` sends the V2 opt-in header automatically.
+Dedicated V2 routes use the same resource families below `/v2/*`, including `/v2/superadmin/*`. Legacy `UnisourceClient` remains compatible with stable routes. `UnisourceV2Client` calls `/v2/*` directly.
 
 ---
 
