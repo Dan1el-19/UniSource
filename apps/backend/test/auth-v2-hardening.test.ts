@@ -25,9 +25,7 @@ describe('auth hardening', () => {
 
   it('rejects authenticated routes without X-Service-ID', async () => {
     const res = await workerExports.default.fetch(
-      new Request('https://api.test/my-files', {
-        headers: { 'X-Unisource-API-Version': '2' },
-      }),
+      new Request('https://api.test/v2/my-files'),
     )
 
     expect(res.status).toBe(400)
@@ -47,11 +45,10 @@ describe('auth hardening', () => {
     ).bind('key-test-3', 'auth-test-key', 'default', apiKeyPlain.slice(0, 16), apiKeyHash, JSON.stringify(['files:read']), Date.now()).run()
 
     const res = await workerExports.default.fetch(
-      new Request('https://api.test/admin/service', {
+      new Request('https://api.test/v2/admin/service', {
         headers: {
           Authorization: `Bearer ${apiKeyPlain}`,
           'X-Service-ID': 'default',
-          'X-Unisource-API-Version': '2',
         },
       }),
     )
@@ -69,13 +66,12 @@ describe('auth hardening', () => {
       `INSERT INTO api_keys (id, name, service_id, key_prefix, key_hash, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).bind('key-nonadmin', 'non-admin-key', 'default', apiKeyPlain.slice(0, 16), apiKeyHash, JSON.stringify(['files:read']), Date.now()).run()
 
-    for (const path of ['/admin/service', '/main/999', '/releases/999']) {
+    for (const path of ['/v2/admin/service', '/v2/main/999', '/v2/releases/999']) {
       const res = await workerExports.default.fetch(
         new Request(`https://api.test${path}`, {
           headers: {
             Authorization: `Bearer ${apiKeyPlain}`,
             'X-Service-ID': 'default',
-            'X-Unisource-API-Version': '2',
           },
         }),
       )
@@ -100,7 +96,6 @@ describe('auth hardening', () => {
           Authorization: `Bearer ${apiKeyPlain}`,
           'X-Service-ID': 'default',
           'X-Target-User-ID': 'user-a',
-          'X-Unisource-API-Version': '2',
         },
       }),
     )
@@ -122,7 +117,6 @@ describe('auth hardening', () => {
           Authorization: `Bearer ${apiKeyPlain}`,
           'X-Service-ID': 'default',
           'X-Target-User-ID': 'user-a',
-          'X-Unisource-API-Version': '2',
         },
       }),
     )

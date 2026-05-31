@@ -66,7 +66,7 @@ const TEST_SERVICE: ServiceRecord = {
 }
 
 async function loadUploadRouter() {
-  const mod = await import('../../src/routes/v1/upload')
+  const mod = await import('../../src/routes/v2/upload')
   return mod.default
 }
 
@@ -87,7 +87,7 @@ async function buildApp() {
     if (err instanceof V2Error) return errorResponse(c, err)
     throw err
   })
-  app.route('/upload', upload)
+  app.route('/v2/upload', upload)
   return app
 }
 

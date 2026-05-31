@@ -73,7 +73,7 @@ async function createPublicDownloadUrl(
 ): Promise<string> {
   const token = await createSignedToken(getPublicDownloadSecret(c.env), { slug, exp: expiresAt });
   const downloadUrl = new URL(c.req.url);
-  downloadUrl.pathname = `/public/${encodeURIComponent(slug)}/download`;
+  downloadUrl.pathname = `/v2/public/${encodeURIComponent(slug)}/download`;
   downloadUrl.search = '';
   downloadUrl.searchParams.set('token', token);
   return downloadUrl.toString();

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
-import folders from '../src/routes/v1/folders';
+import folders from '../src/routes/folders';
 
 type FolderRow = {
   id: string;

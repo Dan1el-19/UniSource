@@ -30,11 +30,22 @@ vi.mock('../src/services/appwrite', async (importOriginal) => {
 import { getFileRecord } from '../src/db/v1/fileRecords';
 import { getShareLinkBySlug, incrementDownloadCount } from '../src/db/v1/shareLinks';
 import { generatePresignedGetUrl } from '../src/services/r2';
-import publicRouter from '../src/routes/v1/public';
+import publicRouter from '../src/routes/public';
+import publicV2Router from '../src/routes/v2/public';
 
 function buildPublicApp() {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 	app.route('/public', publicRouter);
+	return app;
+}
+
+function buildPublicV2App() {
+	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+	app.use('*', async (c, next) => {
+		c.set('requestId', 'req-test');
+		await next();
+	});
+	app.route('/v2/public', publicV2Router);
 	return app;
 }
 
@@ -105,5 +116,21 @@ describe('GET /public/:slug/download', () => {
 			'report.pdf'
 		);
 		expect(incrementDownloadCount).toHaveBeenCalledWith(expect.anything(), 'link-1');
+	});
+
+	it('returns V2 public download URLs under /v2/public', async () => {
+		const app = buildPublicV2App();
+		const infoResponse = await app.fetch(new Request('http://localhost/v2/public/shared-file'), env);
+		const body = (await infoResponse.json()) as { item: { download_url: string } };
+
+		const downloadUrl = new URL(body.item.download_url);
+		expect(downloadUrl.pathname).toBe('/v2/public/shared-file/download');
+
+		const downloadResponse = await app.fetch(new Request(body.item.download_url), env);
+
+		expect(downloadResponse.status).toBe(302);
+		expect(downloadResponse.headers.get('Location')).toBe(
+			'https://storage.example/report.pdf?signature=abc'
+		);
 	});
 });

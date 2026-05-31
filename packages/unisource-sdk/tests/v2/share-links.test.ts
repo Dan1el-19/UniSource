@@ -23,12 +23,12 @@ describe('UnisourceV2Client.shareLinks.create', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls POST /my-files/:fileId/share-links', async () => {
+  it('calls POST /v2/my-files/:fileId/share-links', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.create('f1', {})
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files/f1/share-links',
+      'https://api.example.com/v2/my-files/f1/share-links',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -38,7 +38,7 @@ describe('UnisourceV2Client.shareLinks.create', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.create('file:with space', {})
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files/file%3Awith%20space/share-links',
+      'https://api.example.com/v2/my-files/file%3Awith%20space/share-links',
       expect.anything()
     )
   })
@@ -120,12 +120,12 @@ describe('UnisourceV2Client.shareLinks.listForFile', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /my-files/:fileId/share-links', async () => {
+  it('calls GET /v2/my-files/:fileId/share-links', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.listForFile('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files/f1/share-links',
+      'https://api.example.com/v2/my-files/f1/share-links',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -135,7 +135,7 @@ describe('UnisourceV2Client.shareLinks.listForFile', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.listForFile('file:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files/file%3Awith%20space/share-links',
+      'https://api.example.com/v2/my-files/file%3Awith%20space/share-links',
       expect.anything()
     )
   })
@@ -192,12 +192,12 @@ describe('UnisourceV2Client.shareLinks.update', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls PATCH /share-links/:linkId', async () => {
+  it('calls PATCH /v2/share-links/:linkId', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.update('sl1', { name: 'New Name' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/share-links/sl1',
+      'https://api.example.com/v2/share-links/sl1',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -207,7 +207,7 @@ describe('UnisourceV2Client.shareLinks.update', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.update('id:with space', { name: 'x' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/share-links/id%3Awith%20space',
+      'https://api.example.com/v2/share-links/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -296,12 +296,12 @@ describe('UnisourceV2Client.shareLinks.delete', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls DELETE /share-links/:linkId', async () => {
+  it('calls DELETE /v2/share-links/:linkId', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.delete('sl1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/share-links/sl1',
+      'https://api.example.com/v2/share-links/sl1',
       expect.objectContaining({ method: 'DELETE' })
     )
   })
@@ -311,7 +311,7 @@ describe('UnisourceV2Client.shareLinks.delete', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.shareLinks.delete('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/share-links/id%3Awith%20space',
+      'https://api.example.com/v2/share-links/id%3Awith%20space',
       expect.anything()
     )
   })

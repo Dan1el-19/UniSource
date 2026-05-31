@@ -24,12 +24,12 @@ describe('UnisourceV2Client.app.latestRelease', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /app/releases/latest without channel', async () => {
+  it('calls GET /v2/app/releases/latest without channel', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.app.latestRelease()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/app/releases/latest',
+      'https://api.example.com/v2/app/releases/latest',
       expect.objectContaining({ method: 'GET' })
     )
   })

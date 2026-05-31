@@ -52,7 +52,7 @@ describe('default-backend worker', () => {
       })
     )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects files routes — returns 401 without credentials', async () => {
@@ -62,7 +62,7 @@ describe('default-backend worker', () => {
       })
     )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects folders routes — returns 401 without credentials', async () => {
@@ -72,7 +72,7 @@ describe('default-backend worker', () => {
       })
     )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects my-files routes — returns 401 without credentials', async () => {
@@ -82,7 +82,7 @@ describe('default-backend worker', () => {
       })
     )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects admin routes — returns 401 without credentials', async () => {
@@ -98,7 +98,7 @@ describe('default-backend worker', () => {
         })
       )
       expect(response.status, `expected 401 for ${url}`).toBe(401)
-      expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+      expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
     }
   }, TEST_TIMEOUT_MS)
 
@@ -114,12 +114,12 @@ describe('default-backend worker', () => {
       })
     )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
-  it('superadmin routes respond with V2 X-Request-Id', async () => {
+  it('superadmin routes do not include X-Request-Id on legacy paths', async () => {
     const response = await workerExports.default.fetch(new Request('http://localhost/superadmin/services'))
     expect(response.ok).toBe(true)
-    expect(response.headers.get('X-Request-Id')).toBeTruthy()
+    expect(response.headers.get('X-Request-Id')).toBeNull()
   }, TEST_TIMEOUT_MS)
 })

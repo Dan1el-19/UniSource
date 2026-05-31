@@ -23,12 +23,12 @@ describe('UnisourceV2Client.userFiles.get', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /files/:id', async () => {
+  it('calls GET /v2/files/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.get('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/f1',
+      'https://api.example.com/v2/files/f1',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -38,7 +38,7 @@ describe('UnisourceV2Client.userFiles.get', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.get('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/id%3Awith%20space',
+      'https://api.example.com/v2/files/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -95,12 +95,12 @@ describe('UnisourceV2Client.userFiles.update', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls PATCH /files/:id', async () => {
+  it('calls PATCH /v2/files/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.update('f1', { filename: 'new.txt' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/f1',
+      'https://api.example.com/v2/files/f1',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -110,7 +110,7 @@ describe('UnisourceV2Client.userFiles.update', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.update('id:with space', { filename: 'x.txt' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/id%3Awith%20space',
+      'https://api.example.com/v2/files/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -183,12 +183,12 @@ describe('UnisourceV2Client.userFiles.delete', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls DELETE /files/:id', async () => {
+  it('calls DELETE /v2/files/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.delete('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/f1',
+      'https://api.example.com/v2/files/f1',
       expect.objectContaining({ method: 'DELETE' })
     )
   })
@@ -198,7 +198,7 @@ describe('UnisourceV2Client.userFiles.delete', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.delete('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/id%3Awith%20space',
+      'https://api.example.com/v2/files/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -279,12 +279,12 @@ describe('UnisourceV2Client.userFiles.restore', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls POST /files/:id/restore', async () => {
+  it('calls POST /v2/files/:id/restore', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.restore('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/f1/restore',
+      'https://api.example.com/v2/files/f1/restore',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -294,7 +294,7 @@ describe('UnisourceV2Client.userFiles.restore', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.restore('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/id%3Awith%20space/restore',
+      'https://api.example.com/v2/files/id%3Awith%20space/restore',
       expect.anything()
     )
   })
@@ -358,12 +358,12 @@ describe('UnisourceV2Client.userFiles.downloadUrl', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /files/:id/download-url', async () => {
+  it('calls GET /v2/files/:id/download-url', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.downloadUrl('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/f1/download-url',
+      'https://api.example.com/v2/files/f1/download-url',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -373,7 +373,7 @@ describe('UnisourceV2Client.userFiles.downloadUrl', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.userFiles.downloadUrl('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/files/id%3Awith%20space/download-url',
+      'https://api.example.com/v2/files/id%3Awith%20space/download-url',
       expect.anything()
     )
   })

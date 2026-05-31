@@ -95,8 +95,10 @@ vi.mock('../src/services/appwrite', async (importOriginal) => {
 });
 
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
-import myFilesRoute from '../src/routes/v1/fileRecords';
-import foldersRoute from '../src/routes/v1/folders';
+import myFilesRoute from '../src/routes/fileRecords';
+import foldersRoute from '../src/routes/folders';
+import myFilesV2Route from '../src/routes/v2/myFiles';
+import foldersV2Route from '../src/routes/v2/folders';
 
 function mockD1(): D1Database {
   return {
@@ -145,6 +147,23 @@ function buildFoldersApp() {
   return app;
 }
 
+function buildV2App() {
+  const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+  app.use('*', async (c, next) => {
+    c.set('requestId', 'x');
+    c.set('userId', 'user-test');
+    c.set('serviceId', 'default');
+    c.set('authType', 'appwrite');
+    c.set('isAdmin', false);
+    c.set('serviceRole', 'user');
+    await next();
+  });
+  app.onError(v2ErrorHandler);
+  app.route('/v2/my-files', myFilesV2Route);
+  app.route('/v2/folders', foldersV2Route);
+  return app;
+}
+
 describe('shared route V2 response contract', () => {
   it('returns legacy list shape by default for /my-files', async () => {
     const app = buildMyFilesApp();
@@ -162,14 +181,11 @@ describe('shared route V2 response contract', () => {
     expect(body).not.toHaveProperty('page');
   });
 
-  it('returns V2 list shape when V2 header is present for /my-files', async () => {
-    const app = buildMyFilesApp();
+  it('returns V2 list shape for /v2/my-files', async () => {
+    const app = buildV2App();
     const res = await app.fetch(
-      new Request('http://localhost/my-files?limit=10', {
-        headers: {
-          'X-Service-ID': 'default',
-          'X-Unisource-API-Version': '2',
-        },
+      new Request('http://localhost/v2/my-files?limit=10', {
+        headers: { 'X-Service-ID': 'default' },
       }),
       testEnv,
     );
@@ -193,14 +209,11 @@ describe('shared route V2 response contract', () => {
     expect(body).not.toHaveProperty('item');
   });
 
-  it('returns V2 single-resource shape when V2 header is present for /folders/:id', async () => {
-    const app = buildFoldersApp();
+  it('returns V2 single-resource shape for /v2/folders/:id', async () => {
+    const app = buildV2App();
     const res = await app.fetch(
-      new Request('http://localhost/folders/folder-1', {
-        headers: {
-          'X-Service-ID': 'default',
-          'X-Unisource-API-Version': '2',
-        },
+      new Request('http://localhost/v2/folders/folder-1', {
+        headers: { 'X-Service-ID': 'default' },
       }),
       testEnv,
     );

@@ -42,7 +42,7 @@ vi.mock('../src/middleware/requireRole', () => ({
 import { listMainStorageFileRecords, getFileRecord, trashFileRecord, deleteFileRecordPermanently, updateFileRecord, restoreFileRecord } from '../src/db/v1/fileRecords';
 import { releaseMainStorageQuota } from '../src/db/v1/services';
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
-import mainStorageRouter from '../src/routes/v1/mainStorage';
+import mainStorageRouter from '../src/routes/mainStorage';
 
 function buildMainApp(userId = 'u1', serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

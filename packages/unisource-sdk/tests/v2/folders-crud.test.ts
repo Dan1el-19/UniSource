@@ -30,12 +30,12 @@ describe('UnisourceV2Client.folders.create', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls POST /folders (NOT /v2/folders)', async () => {
+  it('calls POST /v2/folders', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.create({ name: 'Documents' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders',
+      'https://api.example.com/v2/folders',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -108,12 +108,12 @@ describe('UnisourceV2Client.folders.get', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /folders/:id', async () => {
+  it('calls GET /v2/folders/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.get('fld-1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/fld-1',
+      'https://api.example.com/v2/folders/fld-1',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -123,7 +123,7 @@ describe('UnisourceV2Client.folders.get', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.get('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/id%3Awith%20space',
+      'https://api.example.com/v2/folders/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -182,12 +182,12 @@ describe('UnisourceV2Client.folders.update', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls PATCH /folders/:id', async () => {
+  it('calls PATCH /v2/folders/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.update('fld-1', { name: 'Renamed' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/fld-1',
+      'https://api.example.com/v2/folders/fld-1',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -197,7 +197,7 @@ describe('UnisourceV2Client.folders.update', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.update('id:with space', { name: 'X' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/id%3Awith%20space',
+      'https://api.example.com/v2/folders/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -265,12 +265,12 @@ describe('UnisourceV2Client.folders.delete', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls DELETE /folders/:id', async () => {
+  it('calls DELETE /v2/folders/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.delete('fld-1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/fld-1',
+      'https://api.example.com/v2/folders/fld-1',
       expect.objectContaining({ method: 'DELETE' })
     )
   })
@@ -280,7 +280,7 @@ describe('UnisourceV2Client.folders.delete', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.delete('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/id%3Awith%20space',
+      'https://api.example.com/v2/folders/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -362,12 +362,12 @@ describe('UnisourceV2Client.folders.restore', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls POST /folders/:id/restore', async () => {
+  it('calls POST /v2/folders/:id/restore', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.restore('fld-1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/fld-1/restore',
+      'https://api.example.com/v2/folders/fld-1/restore',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -377,7 +377,7 @@ describe('UnisourceV2Client.folders.restore', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.folders.restore('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/folders/id%3Awith%20space/restore',
+      'https://api.example.com/v2/folders/id%3Awith%20space/restore',
       expect.anything()
     )
   })

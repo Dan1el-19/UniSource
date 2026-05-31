@@ -53,7 +53,7 @@ import {
   getReleaseMultipartContext,
 } from '../src/db/v1/releases';
 import { deleteObject, generatePresignedPutUrl, headObject, createMultipartUpload, signUploadPart, listUploadedParts, completeMultipartUpload, abortMultipartUpload } from '../src/services/r2';
-import releasesRouter from '../src/routes/v1/releases';
+import releasesRouter from '../src/routes/v2/releases';
 
 function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

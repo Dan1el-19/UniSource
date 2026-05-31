@@ -11,7 +11,7 @@ vi.mock('../src/db/v1/services', async (importOriginal) => {
 });
 
 import { reconcileQuota } from '../src/db/v1/services';
-import admin from '../src/routes/v1/admin';
+import admin from '../src/routes/admin';
 
 function buildAdminApp(db: D1Database) {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();

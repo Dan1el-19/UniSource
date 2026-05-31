@@ -80,12 +80,12 @@ function mockError(status: number, code: string, message: string, requestId = 'r
 describe('UnisourceV2Client.admin.getService', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls GET /admin/service', async () => {
+  it('calls GET /v2/admin/service', async () => {
     vi.stubGlobal('fetch', mockOk({ service: validService }))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.getService()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/service',
+      'https://api.example.com/v2/admin/service',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -129,12 +129,12 @@ describe('UnisourceV2Client.admin.getService', () => {
 describe('UnisourceV2Client.admin.updateService', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls PATCH /admin/service', async () => {
+  it('calls PATCH /v2/admin/service', async () => {
     vi.stubGlobal('fetch', mockOk({ service: validService }))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateService({ max_storage_bytes: 2_000_000_000, max_file_size_bytes: 200_000_000 })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/service',
+      'https://api.example.com/v2/admin/service',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -184,12 +184,12 @@ describe('UnisourceV2Client.admin.updateService', () => {
 describe('UnisourceV2Client.admin.updateServiceSettings', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls PATCH /admin/service/settings', async () => {
+  it('calls PATCH /v2/admin/service/settings', async () => {
     vi.stubGlobal('fetch', mockOk({ service: validService }))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateServiceSettings({ recommended_upload_destination: 'r2' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/service/settings',
+      'https://api.example.com/v2/admin/service/settings',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -239,12 +239,12 @@ describe('UnisourceV2Client.admin.updateServiceSettings', () => {
 describe('UnisourceV2Client.admin.getServiceUsage', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls GET /admin/service/usage', async () => {
+  it('calls GET /v2/admin/service/usage', async () => {
     vi.stubGlobal('fetch', mockOk(validUsage))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.getServiceUsage()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/service/usage',
+      'https://api.example.com/v2/admin/service/usage',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -290,12 +290,12 @@ describe('UnisourceV2Client.admin.listAuditLog', () => {
     return { items, next_cursor: null, limit: 25 }
   }
 
-  it('calls GET /admin/audit-log without query', async () => {
+  it('calls GET /v2/admin/audit-log without query', async () => {
     vi.stubGlobal('fetch', mockOk(okBody()))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.listAuditLog()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/audit-log',
+      'https://api.example.com/v2/admin/audit-log',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -353,12 +353,12 @@ describe('UnisourceV2Client.admin.listUsers', () => {
     return { items, total: items.length, offset: 0, limit: 25 }
   }
 
-  it('calls GET /admin/users without query', async () => {
+  it('calls GET /v2/admin/users without query', async () => {
     vi.stubGlobal('fetch', mockOk(okBody()))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.listUsers()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users',
+      'https://api.example.com/v2/admin/users',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -403,12 +403,12 @@ describe('UnisourceV2Client.admin.listUsers', () => {
 describe('UnisourceV2Client.admin.updateUser', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls PATCH /admin/users/:userId', async () => {
+  it('calls PATCH /v2/admin/users/:userId', async () => {
     vi.stubGlobal('fetch', mockOk({ user: validUser }))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateUser('user-1', { name: 'New' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user-1',
+      'https://api.example.com/v2/admin/users/user-1',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -418,7 +418,7 @@ describe('UnisourceV2Client.admin.updateUser', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateUser('user:with space', { name: 'x' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user%3Awith%20space',
+      'https://api.example.com/v2/admin/users/user%3Awith%20space',
       expect.anything()
     )
   })
@@ -490,12 +490,12 @@ describe('UnisourceV2Client.admin.updateUser', () => {
 describe('UnisourceV2Client.admin.resetUserPassword', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls POST /admin/users/:userId/password', async () => {
+  it('calls POST /v2/admin/users/:userId/password', async () => {
     vi.stubGlobal('fetch', mockOk({ success: true, user_id: 'user-1' }))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.resetUserPassword('user-1', { password: 'newSecret123' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user-1/password',
+      'https://api.example.com/v2/admin/users/user-1/password',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -505,7 +505,7 @@ describe('UnisourceV2Client.admin.resetUserPassword', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.resetUserPassword('user:with space', { password: 'newSecret123' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user%3Awith%20space/password',
+      'https://api.example.com/v2/admin/users/user%3Awith%20space/password',
       expect.anything()
     )
   })
@@ -555,12 +555,12 @@ describe('UnisourceV2Client.admin.resetUserPassword', () => {
 describe('UnisourceV2Client.admin.updateUserRole', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls PATCH /admin/users/:userId/role', async () => {
+  it('calls PATCH /v2/admin/users/:userId/role', async () => {
     vi.stubGlobal('fetch', mockOk({ user: validUser }))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateUserRole('user-1', { role: 'admin' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user-1/role',
+      'https://api.example.com/v2/admin/users/user-1/role',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -570,7 +570,7 @@ describe('UnisourceV2Client.admin.updateUserRole', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateUserRole('user:with space', { role: 'plus' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user%3Awith%20space/role',
+      'https://api.example.com/v2/admin/users/user%3Awith%20space/role',
       expect.anything()
     )
   })
@@ -612,12 +612,12 @@ describe('UnisourceV2Client.admin.updateUserRole', () => {
 describe('UnisourceV2Client.admin.updateUserStorageLimit', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls PATCH /admin/users/:userId/storage-limit', async () => {
+  it('calls PATCH /v2/admin/users/:userId/storage-limit', async () => {
     vi.stubGlobal('fetch', mockOk({ user: validUser }))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateUserStorageLimit('user-1', { limit_bytes: 9999 })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user-1/storage-limit',
+      'https://api.example.com/v2/admin/users/user-1/storage-limit',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -627,7 +627,7 @@ describe('UnisourceV2Client.admin.updateUserStorageLimit', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.updateUserStorageLimit('user:with space', { limit_bytes: 9999 })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/users/user%3Awith%20space/storage-limit',
+      'https://api.example.com/v2/admin/users/user%3Awith%20space/storage-limit',
       expect.anything()
     )
   })
@@ -677,12 +677,12 @@ describe('UnisourceV2Client.admin.updateUserStorageLimit', () => {
 describe('UnisourceV2Client.admin.reconcileQuota', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls POST /admin/quota/reconcile without query', async () => {
+  it('calls POST /v2/admin/quota/reconcile without query', async () => {
     vi.stubGlobal('fetch', mockOk(validReconcile))
     const client = new UnisourceV2Client(mockConfig)
     await client.admin.reconcileQuota()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/admin/quota/reconcile',
+      'https://api.example.com/v2/admin/quota/reconcile',
       expect.objectContaining({ method: 'POST' })
     )
   })

@@ -23,12 +23,12 @@ describe('UnisourceV2Client.mainStorage.list', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /main', async () => {
+  it('calls GET /v2/main', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.list()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main',
+      'https://api.example.com/v2/main',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -104,12 +104,12 @@ describe('UnisourceV2Client.mainStorage.get', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /main/:id', async () => {
+  it('calls GET /v2/main/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.get('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/f1',
+      'https://api.example.com/v2/main/f1',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -119,7 +119,7 @@ describe('UnisourceV2Client.mainStorage.get', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.get('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/id%3Awith%20space',
+      'https://api.example.com/v2/main/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -177,12 +177,12 @@ describe('UnisourceV2Client.mainStorage.update', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls PATCH /main/:id', async () => {
+  it('calls PATCH /v2/main/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.update('f1', { filename: 'new.txt' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/f1',
+      'https://api.example.com/v2/main/f1',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -192,7 +192,7 @@ describe('UnisourceV2Client.mainStorage.update', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.update('id:with space', { filename: 'x.txt' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/id%3Awith%20space',
+      'https://api.example.com/v2/main/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -265,12 +265,12 @@ describe('UnisourceV2Client.mainStorage.delete', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls DELETE /main/:id', async () => {
+  it('calls DELETE /v2/main/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.delete('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/f1',
+      'https://api.example.com/v2/main/f1',
       expect.objectContaining({ method: 'DELETE' })
     )
   })
@@ -280,7 +280,7 @@ describe('UnisourceV2Client.mainStorage.delete', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.delete('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/id%3Awith%20space',
+      'https://api.example.com/v2/main/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -361,12 +361,12 @@ describe('UnisourceV2Client.mainStorage.restore', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls POST /main/:id/restore', async () => {
+  it('calls POST /v2/main/:id/restore', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.restore('f1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/f1/restore',
+      'https://api.example.com/v2/main/f1/restore',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -376,7 +376,7 @@ describe('UnisourceV2Client.mainStorage.restore', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.mainStorage.restore('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/main/id%3Awith%20space/restore',
+      'https://api.example.com/v2/main/id%3Awith%20space/restore',
       expect.anything()
     )
   })

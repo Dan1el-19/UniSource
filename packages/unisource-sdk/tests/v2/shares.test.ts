@@ -23,12 +23,12 @@ describe('UnisourceV2Client.shares.list', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /shares', async () => {
+  it('calls GET /v2/shares', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shares.list()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/shares',
+      'https://api.example.com/v2/shares',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -85,12 +85,12 @@ describe('UnisourceV2Client.shares.create', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls POST /shares', async () => {
+  it('calls POST /v2/shares', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shares.create({ file_id: 'f1' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/shares',
+      'https://api.example.com/v2/shares',
       expect.objectContaining({ method: 'POST' })
     )
   })
@@ -180,12 +180,12 @@ describe('UnisourceV2Client.shares.get', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /shares/:id', async () => {
+  it('calls GET /v2/shares/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shares.get('sl1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/shares/sl1',
+      'https://api.example.com/v2/shares/sl1',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -195,7 +195,7 @@ describe('UnisourceV2Client.shares.get', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.shares.get('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/shares/id%3Awith%20space',
+      'https://api.example.com/v2/shares/id%3Awith%20space',
       expect.anything()
     )
   })
@@ -252,12 +252,12 @@ describe('UnisourceV2Client.shares.delete', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls DELETE /shares/:id', async () => {
+  it('calls DELETE /v2/shares/:id', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.shares.delete('sl1')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/shares/sl1',
+      'https://api.example.com/v2/shares/sl1',
       expect.objectContaining({ method: 'DELETE' })
     )
   })
@@ -267,7 +267,7 @@ describe('UnisourceV2Client.shares.delete', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.shares.delete('id:with space')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/shares/id%3Awith%20space',
+      'https://api.example.com/v2/shares/id%3Awith%20space',
       expect.anything()
     )
   })

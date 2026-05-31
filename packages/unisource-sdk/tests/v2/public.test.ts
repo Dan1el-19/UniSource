@@ -11,7 +11,7 @@ const validUnlockedResponse = {
   size: 1024,
   mime_type: 'application/pdf',
   requires_password: false,
-  download_url: 'https://api.example.com/public/abc/download?token=xyz',
+  download_url: 'https://api.example.com/v2/public/abc/download?token=xyz',
   url_expires_at: 9999999999,
   link_name: 'My Share',
   link_expires_at: null,
@@ -32,7 +32,7 @@ function mockOk(body: unknown) {
 describe('UnisourceV2Client.public.getShareLink', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls GET /public/:slug', async () => {
+  it('calls GET /v2/public/:slug', async () => {
     vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
     const client = new UnisourceV2Client({
       baseUrl: 'https://api.example.com',
@@ -41,7 +41,7 @@ describe('UnisourceV2Client.public.getShareLink', () => {
     })
     await client.public.getShareLink('abc')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/public/abc',
+      'https://api.example.com/v2/public/abc',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -55,7 +55,7 @@ describe('UnisourceV2Client.public.getShareLink', () => {
     })
     await client.public.getShareLink('my slug/with?special=chars')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/public/my%20slug%2Fwith%3Fspecial%3Dchars',
+      'https://api.example.com/v2/public/my%20slug%2Fwith%3Fspecial%3Dchars',
       expect.anything()
     )
   })
@@ -99,7 +99,7 @@ describe('UnisourceV2Client.public.getShareLink', () => {
     expect(result.requires_password).toBe(false)
     if (result.requires_password === false) {
       expect(result.file_id).toBe('f1')
-      expect(result.download_url).toContain('/public/abc/download')
+      expect(result.download_url).toContain('/v2/public/abc/download')
       expect(result.url_expires_at).toBe(9999999999)
     }
   })
@@ -157,7 +157,7 @@ describe('UnisourceV2Client.public.getShareLink', () => {
 describe('UnisourceV2Client.public.unlockShareLink', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('calls POST /public/:slug/unlock with password body', async () => {
+  it('calls POST /v2/public/:slug/unlock with password body', async () => {
     vi.stubGlobal('fetch', mockOk(validUnlockedResponse))
     const client = new UnisourceV2Client({
       baseUrl: 'https://api.example.com',
@@ -166,7 +166,7 @@ describe('UnisourceV2Client.public.unlockShareLink', () => {
     })
     await client.public.unlockShareLink('abc', { password: 'p@ss' })
     const call = vi.mocked(fetch).mock.calls[0]!
-    expect(call[0]).toBe('https://api.example.com/public/abc/unlock')
+    expect(call[0]).toBe('https://api.example.com/v2/public/abc/unlock')
     expect((call[1] as RequestInit).method).toBe('POST')
     expect((call[1] as RequestInit).body).toBe(JSON.stringify({ password: 'p@ss' }))
   })
@@ -180,7 +180,7 @@ describe('UnisourceV2Client.public.unlockShareLink', () => {
     })
     await client.public.unlockShareLink('my slug/x', { password: 'pw' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/public/my%20slug%2Fx/unlock',
+      'https://api.example.com/v2/public/my%20slug%2Fx/unlock',
       expect.anything()
     )
   })
@@ -275,14 +275,14 @@ describe('UnisourceV2Client.public.unlockShareLink', () => {
 describe('UnisourceV2Client.public.buildDownloadUrl', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('returns URL with /public/:slug/download path and token query param', () => {
+  it('returns URL with /v2/public/:slug/download path and token query param', () => {
     const client = new UnisourceV2Client({
       baseUrl: 'https://api.example.com',
       serviceId: 'svc',
       silentBeta: true,
     })
     const url = client.public.buildDownloadUrl('abc', 'tok123')
-    expect(url).toBe('https://api.example.com/public/abc/download?token=tok123')
+    expect(url).toBe('https://api.example.com/v2/public/abc/download?token=tok123')
   })
 
   it('does NOT call fetch (pure URL builder)', () => {
@@ -305,7 +305,7 @@ describe('UnisourceV2Client.public.buildDownloadUrl', () => {
     })
     const url = client.public.buildDownloadUrl('my slug/with?special=chars', 'tok')
     expect(url).toBe(
-      'https://api.example.com/public/my%20slug%2Fwith%3Fspecial%3Dchars/download?token=tok'
+      'https://api.example.com/v2/public/my%20slug%2Fwith%3Fspecial%3Dchars/download?token=tok'
     )
   })
 
@@ -342,7 +342,7 @@ describe('UnisourceV2Client.public.buildDownloadUrl', () => {
     const url = client.public.buildDownloadUrl('slug', 'tok')
     const parsed = new URL(url)
     expect(parsed.host).toBe('api.example.com')
-    expect(parsed.pathname).toBe('/public/slug/download')
+    expect(parsed.pathname).toBe('/v2/public/slug/download')
   })
 })
 

@@ -68,7 +68,7 @@ const TEST_SERVICE: ServiceRecord = {
 }
 
 async function loadReleasesRouter() {
-  const mod = await import('../../src/routes/v1/releases')
+  const mod = await import('../../src/routes/v2/releases')
   return mod.default
 }
 
@@ -88,7 +88,7 @@ async function buildApp() {
     if (err instanceof V2Error) return errorResponse(c, err)
     throw err
   })
-  app.route('/releases', releases)
+  app.route('/v2/releases', releases)
   return app
 }
 

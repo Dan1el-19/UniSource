@@ -50,13 +50,10 @@ describe('V2 negotiation and tracing', () => {
     expect(body).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
-  it('returns V2 auth error shape on shared routes when V2 header is present', async () => {
+  it('returns V2 auth error shape on V2 paths', async () => {
     const res = await workerExports.default.fetch(
-      new Request('https://api.test/my-files', {
-        headers: {
-          'X-Service-ID': 'default',
-          'X-Unisource-API-Version': '2',
-        },
+      new Request('https://api.test/v2/my-files', {
+        headers: { 'X-Service-ID': 'default' },
       }),
     )
 

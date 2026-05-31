@@ -12,7 +12,7 @@ function fakeRequest(): { call: ReturnType<typeof vi.fn>; request: V2Request } {
 }
 
 describe('upload resource', () => {
-  it('r2Init posts to /upload/r2/init', async () => {
+  it('r2Init posts to /v2/upload/r2/init', async () => {
     const { call, request } = fakeRequest()
     const resource = createUploadResource(request)
     await resource
@@ -20,7 +20,7 @@ describe('upload resource', () => {
       .catch(() => {})
     expect(call).toHaveBeenCalledWith(
       'POST',
-      '/upload/r2/init',
+      '/v2/upload/r2/init',
       expect.objectContaining({
         body: expect.objectContaining({
           filename: 'a.bin',
@@ -31,29 +31,29 @@ describe('upload resource', () => {
     )
   })
 
-  it('appwriteInit posts to /upload/appwrite/init', async () => {
+  it('appwriteInit posts to /v2/upload/appwrite/init', async () => {
     const { call, request } = fakeRequest()
     const resource = createUploadResource(request)
     await resource
       .appwriteInit({ filename: 'a.bin', size: 1024, mime_type: 'application/octet-stream' })
       .catch(() => {})
-    expect(call).toHaveBeenCalledWith('POST', '/upload/appwrite/init', expect.any(Object))
+    expect(call).toHaveBeenCalledWith('POST', '/v2/upload/appwrite/init', expect.any(Object))
   })
 
-  it('complete posts to /upload/complete with upload_id in body', async () => {
+  it('complete posts to /v2/upload/complete with upload_id in body', async () => {
     const { call, request } = fakeRequest()
     const resource = createUploadResource(request)
     await resource.complete('upload-1').catch(() => {})
     expect(call).toHaveBeenCalledWith(
       'POST',
-      '/upload/complete',
+      '/v2/upload/complete',
       expect.objectContaining({
         body: expect.objectContaining({ upload_id: 'upload-1' }),
       })
     )
   })
 
-  it('multipartCreate posts to /upload/r2/multipart/create', async () => {
+  it('multipartCreate posts to /v2/upload/r2/multipart/create', async () => {
     const { call, request } = fakeRequest()
     const resource = createUploadResource(request)
     await resource
@@ -63,7 +63,7 @@ describe('upload resource', () => {
         mime_type: 'application/octet-stream',
       })
       .catch(() => {})
-    expect(call).toHaveBeenCalledWith('POST', '/upload/r2/multipart/create', expect.any(Object))
+    expect(call).toHaveBeenCalledWith('POST', '/v2/upload/r2/multipart/create', expect.any(Object))
   })
 
   it('multipartSignPart issues GET with upload_id + part_number in query', async () => {
@@ -72,7 +72,7 @@ describe('upload resource', () => {
     await resource.multipartSignPart('upload-1', 5).catch(() => {})
     expect(call).toHaveBeenCalledWith(
       'GET',
-      '/upload/r2/multipart/sign-part',
+      '/v2/upload/r2/multipart/sign-part',
       expect.objectContaining({
         query: { upload_id: 'upload-1', part_number: 5 },
       })
@@ -85,14 +85,14 @@ describe('upload resource', () => {
     await resource.multipartListParts('upload-1').catch(() => {})
     expect(call).toHaveBeenCalledWith(
       'GET',
-      '/upload/r2/multipart/list-parts',
+      '/v2/upload/r2/multipart/list-parts',
       expect.objectContaining({
         query: { upload_id: 'upload-1' },
       })
     )
   })
 
-  it('multipartComplete posts to /upload/r2/multipart/complete with parts', async () => {
+  it('multipartComplete posts to /v2/upload/r2/multipart/complete with parts', async () => {
     const { call, request } = fakeRequest()
     const resource = createUploadResource(request)
     await resource
@@ -100,7 +100,7 @@ describe('upload resource', () => {
       .catch(() => {})
     expect(call).toHaveBeenCalledWith(
       'POST',
-      '/upload/r2/multipart/complete',
+      '/v2/upload/r2/multipart/complete',
       expect.objectContaining({
         body: { upload_id: 'upload-1', parts: [{ PartNumber: 1, ETag: 'etag1' }] },
       })
@@ -113,7 +113,7 @@ describe('upload resource', () => {
     await resource.multipartAbort('upload-1').catch(() => {})
     expect(call).toHaveBeenCalledWith(
       'DELETE',
-      '/upload/r2/multipart/abort',
+      '/v2/upload/r2/multipart/abort',
       expect.objectContaining({
         body: { upload_id: 'upload-1' },
       })

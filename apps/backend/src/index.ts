@@ -5,7 +5,7 @@ import { authMiddleware } from './middleware/auth';
 import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
-import { V2Error, errorResponse, statusToV2Code } from './lib/v2/errors';
+import { V2Error, errorResponse, statusToLegacyLabel, statusToV2Code } from './lib/v2/errors';
 import { v2RequestIdGuard } from './middleware/v2RequestIdGuard';
 import { foreignKeysMiddleware } from './middleware/foreignKeys';
 import { rateLimit } from './middleware/ratelimit';
@@ -142,6 +142,11 @@ app.use('/v2/*', authMiddleware);
 app.use('/v2/*', rateLimit('general'));
 app.use('/v2/*', adminPreviewMiddleware);
 
+// V2 admin-protected routes
+app.use('/v2/admin/*', requireAdminMiddleware);
+app.use('/v2/main/*', requireAdminMiddleware);
+app.use('/v2/releases/*', requireAdminMiddleware);
+
 // V2 error wrapper — transforms legacy error responses to V2 envelopes for /v2/* paths
 app.use('/v2/*', async (c, next) => {
   await next();
@@ -176,7 +181,7 @@ app.onError((err, c) => {
 
   if (err instanceof V2Error) {
     if (isV2Path) return errorResponse(c, err);
-    return c.json({ error: err.code, message: err.message }, err.status as never);
+    return c.json({ error: statusToLegacyLabel(err.status), message: err.message }, err.status as never);
   }
 
   if (err instanceof HTTPException) {

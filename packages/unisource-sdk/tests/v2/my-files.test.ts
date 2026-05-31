@@ -33,12 +33,12 @@ describe('UnisourceV2Client.myFiles.list', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /my-files', async () => {
+  it('calls GET /v2/my-files', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.myFiles.list()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files',
+      'https://api.example.com/v2/my-files',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -121,12 +121,12 @@ describe('UnisourceV2Client.myFiles.listTrash', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls GET /my-files/trash', async () => {
+  it('calls GET /v2/my-files/trash', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.myFiles.listTrash()
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files/trash',
+      'https://api.example.com/v2/my-files/trash',
       expect.objectContaining({ method: 'GET' })
     )
   })
@@ -204,12 +204,12 @@ describe('UnisourceV2Client.myFiles.move', () => {
     return vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) })
   }
 
-  it('calls PATCH /my-files/:id/move', async () => {
+  it('calls PATCH /v2/my-files/:id/move', async () => {
     vi.stubGlobal('fetch', mockOk())
     const client = new UnisourceV2Client(mockConfig)
     await client.myFiles.move('file-1', { folder_id: 'fld-2' })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files/file-1/move',
+      'https://api.example.com/v2/my-files/file-1/move',
       expect.objectContaining({ method: 'PATCH' })
     )
   })
@@ -219,7 +219,7 @@ describe('UnisourceV2Client.myFiles.move', () => {
     const client = new UnisourceV2Client(mockConfig)
     await client.myFiles.move('id:with space', { folder_id: null })
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'https://api.example.com/my-files/id%3Awith%20space/move',
+      'https://api.example.com/v2/my-files/id%3Awith%20space/move',
       expect.anything()
     )
   })

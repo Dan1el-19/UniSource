@@ -62,8 +62,8 @@ import { createUpload, getUpload, failUpload, completeUpload, completeUploadAndC
 import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/v1/services';
 import { v2ErrorHandler } from '../src/middleware/v2Errors';
 import { createMainStorageFileRecord } from '../src/db/v1/fileRecords';
-import upload from '../src/routes/v1/upload';
-import publicRouter from '../src/routes/v1/public';
+import upload from '../src/routes/v2/upload';
+import publicRouter from '../src/routes/public';
 
 // ---------------------------------------------------------------------------
 // Helpers

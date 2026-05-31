@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { applyD1Migrations, env } from 'cloudflare:test';
 import type { D1Migration } from '@cloudflare/vitest-pool-workers';
-import superadmin from '../src/routes/v1/superadmin';
+import superadmin from '../src/routes/v2/superadmin';
 import { V2Error, errorResponse } from '../src/lib/v2/errors';
 import { createServiceApiKey, createAccountApiKey } from '../src/db/v1/apiKeys';
 
