@@ -266,3 +266,27 @@ export {
   unlockPublicFile,
 } from './client';
 export type { UnisourceClientConfig } from './client';
+
+// ─── Legacy V2 Draft API ─────────────────────────────────────────────────────
+// Preserved at the stable root for backwards compatibility. New consumers
+// should use the dedicated @unisource/sdk/v2 subpath.
+export {
+  fileRecordsListV2QuerySchema,
+  bulkFileIdsSchema,
+  bulkFileMoveRequestSchema,
+  bulkOperationResponseSchema,
+  folderListV2QuerySchema,
+  bulkFolderIdsSchema,
+  bulkFolderMoveRequestSchema,
+  folderBreadcrumbsResponseSchema,
+} from '../v2/legacy-draft';
+export type {
+  FileRecordsListV2Query,
+  BulkFileIds,
+  BulkFileMoveRequest,
+  BulkOperationResponse,
+  FolderListV2Query,
+  BulkFolderIds,
+  BulkFolderMoveRequest,
+  FolderBreadcrumbsResponse,
+} from '../v2/legacy-draft';

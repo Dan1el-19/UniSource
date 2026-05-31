@@ -92,11 +92,11 @@ export function createFoldersResource(request: V2Request) {
     ): Promise<V2BulkResponse> =>
       bulk({ action: 'move', ids: args.ids, parent_id: args.parent_id }, signal, options),
 
-    // ─── CRUD methods (mounted on the legacy /folders router) ─────────────────
+    // ─── CRUD methods ─────────────────────────────────────────────────────────
 
     /**
      * Create a new folder.
-     * POST /folders → { item }
+     * POST /v2/folders → { item }
      */
     create: (
       body: V2FolderCreateRequest,
@@ -112,7 +112,7 @@ export function createFoldersResource(request: V2Request) {
 
     /**
      * Fetch a single folder by id.
-     * GET /folders/:id → { item }
+     * GET /v2/folders/:id → { item }
      */
     get: (
       id: string,
@@ -127,7 +127,7 @@ export function createFoldersResource(request: V2Request) {
 
     /**
      * Update a folder (rename / change color).
-     * PATCH /folders/:id → { item }
+     * PATCH /v2/folders/:id → { item }
      */
     update: (
       id: string,
@@ -144,7 +144,7 @@ export function createFoldersResource(request: V2Request) {
 
     /**
      * Soft-delete (trash) a folder, or permanently delete the entire subtree.
-     * DELETE /folders/:id (?permanent=true)
+     * DELETE /v2/folders/:id (?permanent=true)
      * - Soft: { success, id, permanent: false }
      * - Permanent: { success, id, permanent: true, folders_deleted }
      */
@@ -162,7 +162,7 @@ export function createFoldersResource(request: V2Request) {
 
     /**
      * Restore a folder from trash.
-     * POST /folders/:id/restore → { success, id }
+     * POST /v2/folders/:id/restore → { success, id }
      */
     restore: (
       id: string,

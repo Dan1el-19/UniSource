@@ -19,12 +19,20 @@ import {
 } from '../src';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import * as sdk from '../src';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe('unisource-sdk schemas', () => {
+  it('preserves the stable root exports from main', () => {
+    const root = sdk as Record<string, unknown>;
+    expect(root.fileRecordsListV2QuerySchema).toBeDefined();
+    expect(root.bulkOperationResponseSchema).toBeDefined();
+    expect(root.folderBreadcrumbsResponseSchema).toBeDefined();
+  });
+
   it('exposes importable built package entrypoint', async () => {
     const distEntry = resolve(process.cwd(), 'dist/index.mjs');
     expect(existsSync(distEntry)).toBe(true);
