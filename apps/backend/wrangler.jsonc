@@ -53,7 +53,8 @@
 		"APPWRITE_BUCKET_ID": "test-bucket-id",
 		"APPWRITE_API_KEY": "test-appwrite-api-key",
 		"CURSOR_HMAC_SECRET": "dGVzdC1zZWNyZXQtZm9yLWN1cnNvci1zaWduaW5nLWZvci12aXRlc3Q=",
-		"ALLOWED_ORIGINS": "http://localhost:5173"
+		"ALLOWED_ORIGINS": "http://localhost:5173",
+			"BYPASS_CF_ACCESS": "true"
 	},
 	"ratelimits": [
 		{
