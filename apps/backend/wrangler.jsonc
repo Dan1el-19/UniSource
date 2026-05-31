@@ -44,7 +44,16 @@
 	],
 	"vars": {
 		"R2_BUCKET_BINDINGS": "{\"primary\":\"PRIMARY_BUCKET\",\"secondary\":\"SECONDARY_BUCKET\"}",
-		"R2_BUCKET_NAMES": "{\"primary\":\"storage-primary-placeholder\",\"secondary\":\"storage-secondary-placeholder\"}"
+		"R2_BUCKET_NAMES": "{\"primary\":\"storage-primary-placeholder\",\"secondary\":\"storage-secondary-placeholder\"}",
+		"R2_ACCESS_KEY_ID": "test-access-key-id",
+		"R2_SECRET_ACCESS_KEY": "test-secret-access-key-test-secret-access-key",
+		"R2_ACCOUNT_ID": "test-account-id",
+		"APPWRITE_ENDPOINT": "https://appwrite.test/v1",
+		"APPWRITE_PROJECT_ID": "test-project-id",
+		"APPWRITE_BUCKET_ID": "test-bucket-id",
+		"APPWRITE_API_KEY": "test-appwrite-api-key",
+		"CURSOR_HMAC_SECRET": "dGVzdC1zZWNyZXQtZm9yLWN1cnNvci1zaWduaW5nLWZvci12aXRlc3Q=",
+		"ALLOWED_ORIGINS": "http://localhost:5173"
 	},
 	"ratelimits": [
 		{
