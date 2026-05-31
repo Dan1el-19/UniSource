@@ -203,7 +203,7 @@ Subagentów nie używamy — zmiany są mocno powiązane (transport widzi errors
    - `pnpm --filter @unisource/sdk build`
    - `pnpm --filter @unisource/sdk test` (auth/error parsing/bulk schema)
    - `pnpm --filter backend test` (contract test V2_ERROR_CODES)
-   
+
    Jeśli któryś nie jest zielony — zatrzymać się, naprawić, dopiero potem ruszyć dalej. **NIE rozpoczynać** zadania 10 z czerwonym testem.
 10. **Backend `/v2/files/bulk`** — rewrite `apps/backend/src/routes/v2/files.ts`:
     - usunięcie `apps/backend/src/routes/v2/files.legacy.ts` (cała logika wciela się do `files.ts`)
@@ -223,7 +223,7 @@ Subagentów nie używamy — zmiany są mocno powiązane (transport widzi errors
     - `pnpm --filter @unisource/sdk build`
     - `pnpm --filter @unisource/sdk test`
     - `pnpm --filter backend test`
-    
+
     Wszystkie zielone.
 15. **Commit i push do `beta`** — stosowne commity z konwencją CLAUDE.md (`feat(sdk):`, `feat(backend):`, `refactor(backend):`, `test(backend):`).
 
@@ -389,7 +389,7 @@ Wymagania krytyczne:
    - `client.mainStorage.*` (prefix `/main` jest dual)
    - `client.app.*` (prefix `/app` jest dual)
    - `client.public.*` (no-auth path)
-   
+
    Do rozwiązania w późniejszej iteracji backendu (poza sekcją 1).
 
 2. **`/admin/users` używa offset pagination, nie cursor.** Backend zależy od Appwrite SDK, który ma offset/limit. Niespójne z resztą V2 (audit-log używa cursor). Do rozwiązania jak/jeśli kiedyś zmieni się backend Appwrite.

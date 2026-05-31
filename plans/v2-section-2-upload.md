@@ -2871,8 +2871,3 @@ Przed zgłoszeniem definicji końca, executor uruchamia `superpowers:verificatio
 - [ ] Wszystkie commity mają poprawny prefix (`feat(sdk):`, `feat(backend):`, `refactor(backend):`, `chore(...)`, `docs(root):`, `test(backend):`).
 
 Po zielonym checkliście — wywołać `superpowers:finishing-a-development-branch` skill (zaproponować userowi opcje merge / PR / cleanup; **NIE merge'ować sam do `main`**, V2 zostaje na `beta` zgodnie z `[[project-branch-model]]`).
-
-
-
-
-

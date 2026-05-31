@@ -3486,17 +3486,17 @@ Pełna lista:
      { file_id, filename, size, mime_type, requires_password: false, download_url, url_expires_at, link_name, link_expires_at }
    Response (when password required):
      { filename, size, mime_type, requires_password: true, link_name }
-   
+
    KRYTYCZNE: musi używać auth: 'none' w request options. Endpoint jest anonymous.
 
 2. unlockShareLink(slug, { password }) → POST /public/:slug/unlock
    Response: { file_id, filename, size, mime_type, requires_password: false, download_url, url_expires_at, link_name, link_expires_at }
-   
+
    KRYTYCZNE: auth: 'none'.
 
 3. buildDownloadUrl(slug, token) → URL builder, BEZ HTTP call
    Returns: string — `${baseUrl}/public/${encodeURIComponent(slug)}/download?token=${encodeURIComponent(token)}`
-   
+
    KRYTYCZNE: NIE wywołuje fetch. To pure URL constructor.
 
 Wzorce do naśladowania:

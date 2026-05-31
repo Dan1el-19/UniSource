@@ -27,7 +27,7 @@ pnpm --filter @unisource/sdk ...    # komenda tylko dla SDK
 └── AGENTS.md
 ```
 
-**Branch `main`** — stabilna linia (API v1, stabilne wersje SDK).  
+**Branch `main`** — stabilna linia (API v1, stabilne wersje SDK).
 **Branch `beta`** — rozwojowa linia API v2, SDK publikowane pod tagiem npm `beta`.
 
 ---
