@@ -19,7 +19,7 @@ declare global {
   }
 }
 
-describe('app-backend worker', () => {
+describe('default-backend worker', () => {
   beforeAll(async () => {
     await applyD1Migrations(env.APP_DB, env.TEST_MIGRATIONS)
   }, TEST_TIMEOUT_MS)
@@ -46,27 +46,43 @@ describe('app-backend worker', () => {
   }, TEST_TIMEOUT_MS)
 
   it('protects upload routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/upload/r2/init'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/upload/r2/init', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects files routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/files'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/files', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects folders routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/folders'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/folders', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects my-files routes — returns 401 without credentials', async () => {
-    const response = await workerExports.default.fetch(new Request('http://localhost/my-files'))
+    const response = await workerExports.default.fetch(
+      new Request('http://localhost/my-files', {
+        headers: { 'X-Service-ID': 'default' },
+      })
+    )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
   }, TEST_TIMEOUT_MS)
 
   it('protects admin routes — returns 401 without credentials', async () => {
@@ -76,9 +92,13 @@ describe('app-backend worker', () => {
       'http://localhost/admin/audit-log',
     ]
     for (const url of adminRoutes) {
-      const response = await workerExports.default.fetch(new Request(url))
+      const response = await workerExports.default.fetch(
+        new Request(url, {
+          headers: { 'X-Service-ID': 'default' },
+        })
+      )
       expect(response.status, `expected 401 for ${url}`).toBe(401)
-      expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+      expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
     }
   }, TEST_TIMEOUT_MS)
 
@@ -86,11 +106,20 @@ describe('app-backend worker', () => {
     const response = await workerExports.default.fetch(
       new Request('http://localhost/my-files/some-file-id', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-ID': 'default',
+        },
         body: JSON.stringify({ filename: 'new-name.pdf' }),
       })
     )
     expect(response.status).toBe(401)
-    expect(await response.json()).toMatchObject({ error: 'Unauthorized' })
+    expect(await response.json()).toMatchObject({ error: 'Unauthorized', message: 'Missing or invalid credentials' })
+  }, TEST_TIMEOUT_MS)
+
+  it('superadmin routes do not include X-Request-Id on legacy paths', async () => {
+    const response = await workerExports.default.fetch(new Request('http://localhost/superadmin/services'))
+    expect(response.ok).toBe(true)
+    expect(response.headers.get('X-Request-Id')).toBeNull()
   }, TEST_TIMEOUT_MS)
 })

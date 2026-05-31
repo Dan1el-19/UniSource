@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { V2Error, errorResponse } from '../src/lib/v2/errors';
 
-vi.mock('../src/db/releases', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/db/releases')>();
+vi.mock('../src/db/v1/releases', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/db/v1/releases')>();
   return {
     ...actual,
     createRelease: vi.fn(),
@@ -14,6 +15,8 @@ vi.mock('../src/db/releases', async (importOriginal) => {
     deleteRelease: vi.fn(),
     getLatestRelease: vi.fn(),
     upsertReleaseSync: vi.fn(),
+    createMultipartRelease: vi.fn(),
+    getReleaseMultipartContext: vi.fn(),
   };
 });
 
@@ -28,6 +31,11 @@ vi.mock('../src/services/r2', async (importOriginal) => {
     }),
     headObject: vi.fn().mockResolvedValue({ size: 4096 }),
     deleteObject: vi.fn(),
+    createMultipartUpload: vi.fn().mockResolvedValue({ upload_id: 'r2-upload-id' }),
+    signUploadPart: vi.fn().mockResolvedValue({ url: 'https://r2.example.com/part-1', expires_at: 9999999999 }),
+    listUploadedParts: vi.fn().mockResolvedValue([{ PartNumber: 1, ETag: 'etag-1', Size: 1024 }]),
+    completeMultipartUpload: vi.fn().mockResolvedValue({ etag: 'complete-etag' }),
+    abortMultipartUpload: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -41,9 +49,11 @@ import {
   updateRelease,
   deleteRelease,
   upsertReleaseSync,
-} from '../src/db/releases';
-import { deleteObject, generatePresignedPutUrl, headObject } from '../src/services/r2';
-import releasesRouter from '../src/routes/releases';
+  createMultipartRelease,
+  getReleaseMultipartContext,
+} from '../src/db/v1/releases';
+import { deleteObject, generatePresignedPutUrl, headObject, createMultipartUpload, signUploadPart, listUploadedParts, completeMultipartUpload, abortMultipartUpload } from '../src/services/r2';
+import releasesRouter from '../src/routes/v2/releases';
 
 function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'default') {
   const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
@@ -51,10 +61,12 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'defaul
     c.set('userId', userId as WorkerVariables['userId']);
     c.set('authType', 'apikey' as WorkerVariables['authType']);
     c.set('isAdmin', isAdmin as WorkerVariables['isAdmin']);
+    c.set('serviceId', serviceId as WorkerVariables['serviceId']);
+    c.set('requestId', 'req-test');
     c.set('service', {
       id: serviceId,
       name: serviceId,
-      default_bucket: serviceId === 'service-b' ? 'service-b' : 'unisource',
+      default_bucket: serviceId === 'service-b' ? 'service-b' : 'primary',
       max_storage_bytes: 1000000000,
       current_used_bytes: 0,
       main_used_bytes: 0,
@@ -64,6 +76,10 @@ function buildReleasesApp(userId = 'system', isAdmin = true, serviceId = 'defaul
       created_at: 0,
     } as WorkerVariables['service']);
     await next();
+  });
+  app.onError((err, c) => {
+    if (err instanceof V2Error) return errorResponse(c, err);
+    throw err;
   });
   app.route('/releases', releasesRouter);
   return app;
@@ -75,7 +91,7 @@ const relEnv = {
   R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'sec',
   SERVICE_API_KEY: 'test-api-key',
-  SECONDARY_SERVICE_API_KEY: 'blok-key',
+  SECONDARY_SERVICE_API_KEY: 'service-b-key',
 } as unknown as CloudflareBindings;
 
 const completedRelease = {
@@ -125,8 +141,9 @@ describe('GET /releases', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases'), relEnv);
     expect(res.status).toBe(200);
-    const body = await res.json() as { items: unknown[] };
+    const body = await res.json() as { items: unknown[]; page: { limit: number; next_cursor: string | null } };
     expect(body.items).toEqual([]);
+    expect(body.page).toEqual({ limit: 25, next_cursor: null });
   });
 });
 
@@ -142,24 +159,24 @@ describe('POST /releases/upload/init', () => {
       relEnv
     );
     expect(res.status).toBe(201);
-    const body = await res.json() as { presigned_url: string; release_id: string; r2_key: string };
-    expect(body.presigned_url).toBe('https://r2.example.com/put');
-    expect(body.r2_key).toBe('releases/default/app.zip');
+    const body = await res.json() as { item: { presigned_url: string; release_id: string; r2_key: string; expires_at: number } };
+    expect(body.item.presigned_url).toBe('https://r2.example.com/put');
+    expect(body.item.r2_key).toBe('releases/default/app.zip');
     expect(createRelease).toHaveBeenCalledWith(
       relEnv.APP_DB,
       expect.objectContaining({
-        id: body.release_id,
+        id: body.item.release_id,
         service_id: 'default',
         name: 'v1.0.0',
-        r2_key: body.r2_key,
+        r2_key: body.item.r2_key,
         tags: [],
         force_update: false,
       })
     );
     expect(generatePresignedPutUrl).toHaveBeenCalledWith(
       relEnv,
-      'unisource',
-      body.r2_key,
+      'primary',
+      body.item.r2_key,
       'application/octet-stream',
       3600
     );
@@ -177,8 +194,8 @@ describe('POST /releases/upload/init', () => {
     );
 
     expect(res.status).toBe(201);
-    const body = await res.json() as { r2_key: string };
-    expect(body.r2_key).toBe('releases/app.zip');
+    const body = await res.json() as { item: { r2_key: string } };
+    expect(body.item.r2_key).toBe('releases/app.zip');
     expect(generatePresignedPutUrl).toHaveBeenCalledWith(
       relEnv,
       'service-b',
@@ -199,6 +216,9 @@ describe('POST /releases/upload/init', () => {
       relEnv
     );
     expect(res.status).toBe(400);
+    const body = await res.json() as { error: { code: string; request_id: string } };
+    expect(body.error.code).toBe('validation_error');
+    expect(body.error.request_id).toBe('req-test');
   });
 });
 
@@ -215,6 +235,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('returns success when release is already completed', async () => {
@@ -229,6 +251,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item).toEqual({ id: 'rel-1', status: 'completed' });
     expect(headObject).not.toHaveBeenCalled();
   });
 
@@ -247,6 +271,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(409);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('conflict');
     expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
   });
 
@@ -265,6 +291,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(409);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('conflict');
     expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
     expect(completeRelease).not.toHaveBeenCalled();
     expect(updateRelease).not.toHaveBeenCalled();
@@ -286,8 +314,8 @@ describe('POST /releases/upload/complete', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { success: boolean };
-    expect(body.success).toBe(true);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item).toEqual({ id: 'rel-1', status: 'completed' });
     expect(updateRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default', { size: 4096 });
   });
 });
@@ -305,6 +333,8 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('marks a release failed', async () => {
@@ -320,6 +350,8 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item).toEqual({ id: 'rel-1', status: 'failed' });
     expect(failRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1');
   });
 
@@ -335,8 +367,8 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { status: string };
-    expect(body.status).toBe('failed');
+    const body = await res.json() as { item: { status: string } };
+    expect(body.item.status).toBe('failed');
     expect(failRelease).not.toHaveBeenCalled();
   });
 
@@ -352,9 +384,123 @@ describe('POST /releases/upload/fail', () => {
       relEnv
     );
     expect(res.status).toBe(409);
-    const body = await res.json() as { message: string };
-    expect(body.message).toBe('Release is already in state: completed');
+    const body = await res.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toBe('Release is already in state: completed');
     expect(failRelease).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /releases/upload/multipart/create', () => {
+  it('returns 201 with upload_id and r2_upload_id', async () => {
+    vi.mocked(createMultipartUpload).mockResolvedValue({ upload_id: 'r2-upload-id' });
+    vi.mocked(createMultipartRelease).mockResolvedValue({ ...completedRelease, upload_status: 'pending' });
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'v1.0.0', filename: 'app.zip' }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json() as { item: { upload_id: string; r2_upload_id: string } };
+    expect(body.item.r2_upload_id).toBe('r2-upload-id');
+  });
+});
+
+describe('GET /releases/upload/multipart/sign-part', () => {
+  it('returns 200 with presigned part URL', async () => {
+    vi.mocked(signUploadPart).mockResolvedValue({ url: 'https://r2.example.com/part-1', expires_at: 9999999999 });
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/sign-part?upload_id=rel-1&part_number=1'),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { item: { url: string } };
+    expect(body.item.url).toBe('https://r2.example.com/part-1');
+  });
+});
+
+describe('GET /releases/upload/multipart/list-parts', () => {
+  it('returns 200 with V2 page envelope', async () => {
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/list-parts?upload_id=rel-1'),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { items: unknown[]; page: { limit: number; next_cursor: string | null } };
+    expect(body.page).toEqual({ limit: 1000, next_cursor: null });
+  });
+});
+
+describe('POST /releases/upload/multipart/complete', () => {
+  it('returns 200 with completed status', async () => {
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    vi.mocked(completeMultipartUpload).mockResolvedValue({ etag: 'complete-etag' });
+    vi.mocked(completeRelease).mockResolvedValue(true);
+    vi.mocked(updateRelease).mockResolvedValue(completedRelease);
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'rel-1', parts: [{ PartNumber: 1, ETag: 'etag-1' }] }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item.status).toBe('completed');
+  });
+});
+
+describe('DELETE /releases/upload/multipart/abort', () => {
+  it('returns 200 with failed status', async () => {
+    vi.mocked(abortMultipartUpload).mockResolvedValue(undefined);
+    vi.mocked(getReleaseMultipartContext).mockResolvedValue({
+      release_id: 'rel-1',
+      service_id: 'default',
+      r2_key: 'releases/default/v1.0.0.zip',
+      r2_upload_id: 'r2-up-1',
+      upload_status: 'pending',
+    });
+    vi.mocked(failRelease).mockResolvedValue(true);
+    const app = buildReleasesApp();
+    const res = await app.fetch(
+      new Request('http://localhost/releases/upload/multipart/abort', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: 'rel-1' }),
+      }),
+      relEnv
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string; status: string } };
+    expect(body.item.status).toBe('failed');
   });
 });
 
@@ -364,6 +510,8 @@ describe('GET /releases/latest', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/latest'), relEnv);
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('returns 200 with the latest release', async () => {
@@ -371,8 +519,8 @@ describe('GET /releases/latest', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/latest'), relEnv);
     expect(res.status).toBe(200);
-    const body = await res.json() as { id: string };
-    expect(body.id).toBe('rel-1');
+    const body = await res.json() as { item: { id: string } };
+    expect(body.item.id).toBe('rel-1');
   });
 });
 
@@ -382,6 +530,8 @@ describe('GET /releases/:id', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/nonexistent'), relEnv);
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('returns 200 for existing release', async () => {
@@ -389,8 +539,8 @@ describe('GET /releases/:id', () => {
     const app = buildReleasesApp();
     const res = await app.fetch(new Request('http://localhost/releases/rel-1'), relEnv);
     expect(res.status).toBe(200);
-    const body = await res.json() as { id: string };
-    expect(body.id).toBe('rel-1');
+    const body = await res.json() as { item: { id: string } };
+    expect(body.item.id).toBe('rel-1');
   });
 });
 
@@ -403,6 +553,8 @@ describe('DELETE /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 
   it('deletes R2 object for completed releases before deleting DB record', async () => {
@@ -414,7 +566,9 @@ describe('DELETE /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    expect(deleteObject).toHaveBeenCalledWith(relEnv, 'unisource', completedRelease.r2_key);
+    const body = await res.json() as { item: { id: string; deleted: true } };
+    expect(body.item).toEqual({ id: 'rel-1', deleted: true });
+    expect(deleteObject).toHaveBeenCalledWith(relEnv, 'primary', completedRelease.r2_key);
     expect(deleteRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default');
   });
 });
@@ -432,6 +586,8 @@ describe('PATCH /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(200);
+    const body = await res.json() as { item: { id: string } };
+    expect(body.item.id).toBe('rel-1');
     expect(updateRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-1', 'default', {
       notes: 'patched',
       force_update: true,
@@ -450,6 +606,8 @@ describe('PATCH /releases/:id', () => {
       relEnv
     );
     expect(res.status).toBe(404);
+    const body = await res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
   });
 });
 
@@ -478,8 +636,9 @@ describe('POST /releases/sync', () => {
       relEnv
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { synced: number };
-    expect(body.synced).toBe(1);
+    const body = await res.json() as { processed: string[]; failed: unknown[] };
+    expect(body.processed).toEqual(['rel-sync']);
+    expect(body.failed).toEqual([]);
     expect(upsertReleaseSync).toHaveBeenCalledWith(
       relEnv.APP_DB,
       expect.objectContaining({
@@ -493,7 +652,7 @@ describe('POST /releases/sync', () => {
     expect(completeRelease).toHaveBeenCalledWith(relEnv.APP_DB, 'rel-sync');
   });
 
-  it('returns 400 and does not create release when manifest r2_key is outside service releases prefix', async () => {
+  it('returns 200 with per-item failure when manifest r2_key is outside service releases prefix', async () => {
     const app = buildReleasesApp();
     const res = await app.fetch(
       new Request('http://localhost/releases/sync', {
@@ -512,9 +671,14 @@ describe('POST /releases/sync', () => {
       }),
       relEnv
     );
-    expect(res.status).toBe(400);
-    const body = await res.json() as { message: string };
-    expect(body.message).toBe('r2_key must start with releases/default/');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { processed: string[]; failed: Array<{ id: string; code: string; message: string }> };
+    expect(body.processed).toEqual([]);
+    expect(body.failed[0]).toEqual({
+      id: 'rel-sync',
+      code: 'validation_error',
+      message: 'r2_key must start with releases/default/',
+    });
     expect(upsertReleaseSync).not.toHaveBeenCalled();
     expect(completeRelease).not.toHaveBeenCalled();
   });
@@ -541,6 +705,8 @@ describe('POST /releases/sync', () => {
     );
 
     expect(res.status).toBe(200);
+    const body = await res.json() as { processed: string[]; failed: unknown[] };
+    expect(body.processed).toEqual(['rel-sync']);
     expect(upsertReleaseSync).toHaveBeenCalledWith(
       relEnv.APP_DB,
       expect.objectContaining({
@@ -556,6 +722,12 @@ import { requireAdminMiddleware } from '../src/middleware/admin';
 describe('releases routes — admin enforcement', () => {
   it('returns 403 for non-admin JWT user', async () => {
     const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
+    app.onError((err, c) => {
+      if (err instanceof V2Error) {
+        return errorResponse(c, err);
+      }
+      return c.text('Internal Server Error', 500);
+    });
     app.use('*', async (c, next) => {
       c.set('userId', 'user-123' as WorkerVariables['userId']);
       c.set('authType', 'jwt' as WorkerVariables['authType']);
@@ -563,7 +735,7 @@ describe('releases routes — admin enforcement', () => {
       c.set('service', {
         id: 'default',
         name: 'default',
-        default_bucket: 'unisource',
+        default_bucket: 'primary',
         max_storage_bytes: 1000000000,
         current_used_bytes: 0,
         main_used_bytes: 0,

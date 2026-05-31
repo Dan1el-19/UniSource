@@ -69,6 +69,8 @@ playwright-report/
 # Cloudflare Wrangler / Workers
 .wrangler/
 wrangler.toml
+wrangler.generated.jsonc
+**/wrangler.generated.jsonc
 
 # Misc
 *.log
@@ -77,6 +79,11 @@ wrangler.toml
 npm-debug.log*
 
 .claude/
+.commandcode/
+
+# Plans and notes
+plans/
+docs/superpowers/plans/
 
 # Git worktrees
 .worktrees/

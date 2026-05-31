@@ -38,11 +38,26 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Switch SDK dependency to npm
-        run: pnpm -w run sdk:deps:npm
+      - name: Require stable SDK on deploy
+        run: node scripts/require-sdk-stable-on-deploy.mjs
+
+      - name: Switch SDK dependency to npm exact
+        run: pnpm -w run sdk:deps:npm-exact
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile --config.link-workspace-packages=false
+
+      - name: Generate Wrangler config
+        run: pnpm --filter backend generate:wrangler
+        env:
+          WORKER_NAME: ${{ secrets.BACKEND_WORKER_NAME }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_NAME: ${{ secrets.BACKEND_D1_DATABASE_NAME }}
+          D1_DATABASE_ID: ${{ secrets.BACKEND_D1_DATABASE_ID }}
+          PRIMARY_R2_BUCKET_NAME: ${{ secrets.PRIMARY_R2_BUCKET_NAME }}
+          SECONDARY_R2_BUCKET_NAME: ${{ secrets.SECONDARY_R2_BUCKET_NAME }}
+          BACKEND_ROUTE_PATTERN: ${{ secrets.BACKEND_ROUTE_PATTERN }}
+          BACKEND_ROUTE_ZONE_NAME: ${{ secrets.BACKEND_ROUTE_ZONE_NAME }}
 
       - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v4
@@ -50,7 +65,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           packageManager: pnpm
           workingDirectory: apps/backend
-          command: d1 migrations apply app-db --remote
+          command: d1 migrations apply ${{ secrets.BACKEND_D1_DATABASE_NAME }} --remote --config wrangler.generated.jsonc
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v4
@@ -58,4 +73,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           packageManager: pnpm
           workingDirectory: apps/backend
-          command: deploy --minify
+          command: deploy --minify --config wrangler.generated.jsonc

@@ -19,12 +19,20 @@ import {
 } from '../src';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import * as sdk from '../src';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe('unisource-sdk schemas', () => {
+  it('preserves the stable root exports from main', () => {
+    const root = sdk as Record<string, unknown>;
+    expect(root.fileRecordsListV2QuerySchema).toBeDefined();
+    expect(root.bulkOperationResponseSchema).toBeDefined();
+    expect(root.folderBreadcrumbsResponseSchema).toBeDefined();
+  });
+
   it('exposes importable built package entrypoint', async () => {
     const distEntry = resolve(process.cwd(), 'dist/index.mjs');
     expect(existsSync(distEntry)).toBe(true);
@@ -40,7 +48,7 @@ describe('unisource-sdk schemas', () => {
       filename: 'raport.pdf',
       size: 1024,
       mime_type: 'application/pdf',
-      bucket: 'unisource',
+      bucket: 'primary',
     });
 
     expect(parsed.success).toBe(true);
@@ -60,7 +68,7 @@ describe('unisource-sdk schemas', () => {
     const parsed = uploadAppwriteInitResponseSchema.safeParse({
       upload_id: 'uuid-upload',
       destination: 'appwrite',
-      appwrite_endpoint: 'https://eu-central-1.appwrite.example.com/v1',
+      appwrite_endpoint: 'https://appwrite.example.com/v1',
       appwrite_project_id: 'project-id',
       appwrite_bucket_id: 'bucket-id',
       file_id: 'file-id',

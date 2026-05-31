@@ -13,8 +13,8 @@ import {
   listReleases,
   updateRelease,
   upsertReleaseSync,
-} from '../db/releases';
-import type { ServiceRecord } from '../db/services';
+} from '../db/v1/releases';
+import type { ServiceRecord } from '../db/v1/services';
 import { buildReleaseStorageKey, getReleaseStoragePrefix } from '../services/storageKeys';
 import {
   abortMultipartUpload,

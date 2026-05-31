@@ -46,11 +46,15 @@ function isSdkFileRequiringChangeset(path) {
 export function evaluateSdkChangesetRequirement(changedFiles) {
   const normalizedFiles = changedFiles.map(normalizePath);
   const hasChangeset = normalizedFiles.some(isChangesetFile);
+  const hasVersionArtifacts = [...SDK_RELEASE_ARTIFACTS].every((path) =>
+    normalizedFiles.includes(path),
+  );
   const sdkFilesRequiringChangeset = normalizedFiles.filter(isSdkFileRequiringChangeset);
 
   return {
-    ok: sdkFilesRequiringChangeset.length === 0 || hasChangeset,
+    ok: sdkFilesRequiringChangeset.length === 0 || hasChangeset || hasVersionArtifacts,
     hasChangeset,
+    hasVersionArtifacts,
     sdkFilesRequiringChangeset,
   };
 }

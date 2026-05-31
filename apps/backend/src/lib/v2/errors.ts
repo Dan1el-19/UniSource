@@ -1,0 +1,61 @@
+import type { Context } from 'hono'
+import type { V2ErrorCode } from './error-codes'
+
+export type { V2ErrorCode }
+
+export class V2Error extends Error {
+  constructor(
+    public readonly code: V2ErrorCode,
+    public readonly status: number,
+    message?: string,
+    public readonly details?: unknown
+  ) {
+    super(message ?? code)
+    this.name = 'V2Error'
+  }
+}
+
+export interface V2ErrorBody {
+  error: {
+    code: V2ErrorCode
+    message: string
+    details?: unknown
+    request_id: string
+  }
+}
+
+export function statusToV2Code(status: number): V2ErrorCode {
+  switch (status) {
+    case 401: return 'unauthorized'
+    case 403: return 'forbidden'
+    case 404: return 'not_found'
+    case 429: return 'rate_limited'
+    default: return 'internal_error'
+  }
+}
+
+export function statusToLegacyLabel(status: number): string {
+  switch (status) {
+    case 401: return 'Unauthorized'
+    case 403: return 'Forbidden'
+    case 404: return 'Not Found'
+    case 429: return 'Too Many Requests'
+    default: return status >= 500 ? 'Internal Server Error' : 'Bad Request'
+  }
+}
+
+export function errorResponse(c: Context, error: V2Error): Response {
+  const body: V2ErrorBody = {
+    error: {
+      code: error.code,
+      message: error.message,
+      request_id: c.var.requestId ?? 'unknown',
+    },
+  }
+
+  if (error.details !== undefined) {
+    body.error.details = error.details
+  }
+
+  return c.json(body, error.status as any)
+}

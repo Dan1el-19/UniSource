@@ -1,7 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "unisource",
-	"account_id": "00000000000000000000000000000000",
+	"name": "app-backend",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-05-11",
 	"compatibility_flags": ["nodejs_compat"],
@@ -25,9 +24,6 @@
 		"cwd": "../..",
 		"watch_dir": ["src", "../../packages/unisource-sdk/src"]
 	},
-	"routes": [
-		{ "pattern": "api.example.com", "zone_name": "example.com", "custom_domain": true }
-	],
 	"d1_databases": [
 		{
 			"binding": "APP_DB",
@@ -39,13 +35,17 @@
 	"r2_buckets": [
 		{
 			"binding": "PRIMARY_BUCKET",
-			"bucket_name": "unisource"
+			"bucket_name": "storage-primary-placeholder"
 		},
 		{
 			"binding": "SECONDARY_BUCKET",
-			"bucket_name": "service-b"
+			"bucket_name": "storage-secondary-placeholder"
 		}
 	],
+	"vars": {
+		"R2_BUCKET_BINDINGS": "{\"primary\":\"PRIMARY_BUCKET\",\"secondary\":\"SECONDARY_BUCKET\"}",
+		"R2_BUCKET_NAMES": "{\"primary\":\"storage-primary-placeholder\",\"secondary\":\"storage-secondary-placeholder\"}"
+	},
 	"ratelimits": [
 		{
 			"name": "RL_GENERAL",

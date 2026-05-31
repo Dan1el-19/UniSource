@@ -8,23 +8,6 @@ on:
       - 'packages/unisource-sdk/**'
       - '.changeset/**'
   workflow_dispatch:
-    inputs:
-      channel:
-        description: 'Release channel'
-        required: true
-        type: choice
-        options:
-          - stable
-          - beta
-      bump:
-        description: 'Type of beta bump'
-        required: false
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-          - next
 
 concurrency:
   group: release-sdk
@@ -39,12 +22,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  stable:
-    if: >-
-      (github.event_name == 'push' && github.ref_name == 'main') ||
-      (github.event_name == 'workflow_dispatch' && github.ref_name == 'main' && inputs.channel == 'stable')
+  release:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
-    name: Release stable
+    name: Release
 
     steps:
       - name: Checkout
@@ -75,6 +56,9 @@ jobs:
       - name: Verify SDK
         run: pnpm --filter @unisource/sdk typecheck && pnpm --filter @unisource/sdk test
 
+      - name: Require stable SDK version
+        run: node scripts/require-sdk-stable-on-deploy.mjs
+
       - name: Publish or open Version PR
         uses: changesets/action@v1
         with:
@@ -84,79 +68,3 @@ jobs:
           title: "chore(sdk): version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-
-  beta:
-    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'main' && inputs.channel == 'beta'
-    runs-on: ubuntu-latest
-    name: Release beta
-
-    steps:
-      - name: Validate beta bump
-        run: |
-          if [ -z "${{ inputs.bump }}" ]; then
-            echo "Choose a beta bump: patch, minor, major or next."
-            exit 1
-          fi
-
-      - name: Checkout beta
-        uses: actions/checkout@v6
-        with:
-          ref: beta
-          fetch-depth: 0
-          token: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.5
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-          registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify SDK
-        run: pnpm --filter @unisource/sdk typecheck && pnpm --filter @unisource/sdk test
-
-      - name: Ensure npm trusted publisher metadata
-        run: |
-          node - <<'NODE'
-          const { readFileSync, writeFileSync } = require('node:fs');
-          const path = 'packages/unisource-sdk/package.json';
-          const pkg = JSON.parse(readFileSync(path, 'utf8'));
-          pkg.repository = {
-            type: 'git',
-            url: 'https://github.com/Repository Maintainer/UniSource.git',
-            directory: 'packages/unisource-sdk',
-          };
-          writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
-          NODE
-
-      - name: Bump prerelease version
-        id: bump
-        run: |
-          NEW_VERSION=$(node scripts/bump-sdk-prerelease.mjs ${{ inputs.bump }})
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build SDK
-        run: pnpm --filter @unisource/sdk build
-
-      - name: Publish to npm beta
-        run: |
-          cd packages/unisource-sdk
-          npm publish --tag beta --access public
-
-      - name: Commit beta version bump and tag
-        env:
-          GH_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/unisource-sdk/package.json
-          git commit -m "chore(sdk): release beta ${{ steps.bump.outputs.version }}"
-          git tag "sdk-v${{ steps.bump.outputs.version }}"
-          git push origin HEAD:beta --tags

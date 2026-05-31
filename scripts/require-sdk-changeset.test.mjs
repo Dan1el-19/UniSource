@@ -23,6 +23,25 @@ test('allows SDK source changes when a changeset is included', () => {
   assert.equal(result.ok, true);
 });
 
+test('allows versioned SDK source changes when release artifacts are present', () => {
+  const result = evaluateSdkChangesetRequirement([
+    'packages/unisource-sdk/src/index.ts',
+    'packages/unisource-sdk/package.json',
+    'packages/unisource-sdk/CHANGELOG.md',
+  ]);
+
+  assert.equal(result.ok, true);
+});
+
+test('does not treat a lone SDK package manifest as a versioned release', () => {
+  const result = evaluateSdkChangesetRequirement([
+    'packages/unisource-sdk/src/index.ts',
+    'packages/unisource-sdk/package.json',
+  ]);
+
+  assert.equal(result.ok, false);
+});
+
 test('allows changesets version artifacts without a changeset', () => {
   const result = evaluateSdkChangesetRequirement([
     'packages/unisource-sdk/package.json',

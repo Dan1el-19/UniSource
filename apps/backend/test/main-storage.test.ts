@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createMainStorageFileRecord, listMainStorageFileRecords } from '../src/db/fileRecords';
-import { reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/services';
+import { createMainStorageFileRecord, listMainStorageFileRecords } from '../src/db/v1/fileRecords';
+import { reserveMainStorageQuota, releaseMainStorageQuota } from '../src/db/v1/services';
 
 function mockDbWithRecords(records: unknown[]): D1Database {
   return {
@@ -31,7 +31,7 @@ describe('listMainStorageFileRecords', () => {
       mime_type: 'application/pdf',
       storage_destination: 'r2',
       storage_key: 'main/shared.pdf',
-      bucket: 'unisource',
+      bucket: 'primary',
       folder_id: null,
       is_trashed: 0,
       trashed_at: null,

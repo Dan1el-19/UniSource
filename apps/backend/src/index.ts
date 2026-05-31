@@ -1,9 +1,12 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { HTTPException } from 'hono/http-exception';
 import { authMiddleware } from './middleware/auth';
 import { requireAdminMiddleware } from './middleware/admin';
 import { adminPreviewMiddleware } from './middleware/adminPreview';
 import { loggerMiddleware, logError } from './middleware/logger';
+import { V2Error, errorResponse, statusToLegacyLabel, statusToV2Code } from './lib/v2/errors';
+import { v2RequestIdGuard } from './middleware/v2RequestIdGuard';
 import { foreignKeysMiddleware } from './middleware/foreignKeys';
 import { rateLimit } from './middleware/ratelimit';
 import upload from './routes/upload';
@@ -19,32 +22,8 @@ import mainStorage from './routes/mainStorage';
 import releasesRouter from './routes/releases';
 import appRouter from './routes/app';
 import superadminRouter from './routes/superadmin';
-import filesV2 from './routes/v2/files';
-import foldersV2 from './routes/v2/folders';
-
-/**
- * Default CORS allowlist used when ALLOWED_ORIGINS env var is empty.
- * Keeps the production deployment usable for first-party frontends without
- * configuration, while denying arbitrary origins.
- */
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://app.example.com',
-  'https://service-b.pages.dev',
-  'https://example.com',
-  'https://www.example.com',
-  'http://localhost:5173',
-  'http://localhost:4321',
-  'http://localhost:8788'
-];
-
-function parseAllowedOrigins(env: CloudflareBindings): string[] {
-  const raw = (env as unknown as { ALLOWED_ORIGINS?: string }).ALLOWED_ORIGINS;
-  if (!raw) return DEFAULT_ALLOWED_ORIGINS;
-  return raw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-}
+import v2Router, { publicV2, superadminV2 } from './routes/v2/index';
+import { parseAllowedOrigins } from './config/runtime';
 
 const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
 
@@ -55,7 +34,7 @@ app.use('*', async (c, next) => {
       if (!origin) return null;
       return allowed.includes(origin) ? origin : null;
     },
-    allowHeaders: ['Authorization', 'Content-Type', 'X-Service-ID', 'X-Appwrite-JWT', 'X-Target-User-ID'],
+    allowHeaders: ['Authorization', 'Content-Type', 'X-Service-ID', 'X-Appwrite-JWT', 'X-Target-User-ID', 'X-Unisource-API-Version'],
     allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     maxAge: 600
@@ -68,6 +47,8 @@ app.use('*', foreignKeysMiddleware);
 
 // Health check — no auth required
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: Math.floor(Date.now() / 1000) }));
+
+// ─── Legacy routes ────────────────────────────────────────────────────────────
 
 // Upload gateway — Dual-Auth (JWT or API key)
 app.use('/upload/*', authMiddleware);
@@ -97,20 +78,6 @@ app.use('/files/*', authMiddleware);
 app.use('/files/*', rateLimit('general'));
 app.use('/files/*', adminPreviewMiddleware);
 app.route('/files', userFiles);
-
-// --- V2 API ---
-// V2 files route
-app.use('/v2/files/*', authMiddleware);
-app.use('/v2/files/*', rateLimit('general'));
-app.use('/v2/files/*', adminPreviewMiddleware);
-app.route('/v2/files', filesV2);
-
-// V2 folders route
-app.use('/v2/folders/*', authMiddleware);
-app.use('/v2/folders/*', rateLimit('general'));
-app.use('/v2/folders/*', adminPreviewMiddleware);
-app.route('/v2/folders', foldersV2);
-// --- End V2 API ---
 
 // Admin service info and audit log — Dual-Auth (API key server-to-server or JWT)
 app.use('/admin/*', authMiddleware);
@@ -159,8 +126,74 @@ app.route('/public', publicRouter);
 // Superadmin panel API — protected by Cloudflare Access JWT (cfAccessMiddleware applied inside)
 app.route('/superadmin', superadminRouter);
 
+// ─── V2 API ───────────────────────────────────────────────────────────────────
+
+// V2 request ID guard — only for V2 paths
+app.use('/v2/*', v2RequestIdGuard);
+
+// Public share access under V2 — no auth (must be before general /v2/* auth middleware)
+app.route('/v2/public', publicV2);
+
+// Superadmin under V2 — CF Access only (handled inside superadmin router)
+app.route('/v2/superadmin', superadminV2);
+
+// All other V2 routes require auth
+app.use('/v2/*', authMiddleware);
+app.use('/v2/*', rateLimit('general'));
+app.use('/v2/*', adminPreviewMiddleware);
+
+// V2 admin-protected routes
+app.use('/v2/admin/*', requireAdminMiddleware);
+app.use('/v2/main/*', requireAdminMiddleware);
+app.use('/v2/releases/*', requireAdminMiddleware);
+
+// V2 error wrapper — transforms legacy error responses to V2 envelopes for /v2/* paths
+app.use('/v2/*', async (c, next) => {
+  await next();
+
+  const rawRes = c.res;
+  if (!rawRes || rawRes.ok) return;
+
+  const contentType = rawRes.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) return;
+
+  const body = await rawRes.clone().json().catch(() => null) as { error?: unknown; message?: string } | null;
+
+  // Heuristic: if body.error is already an object (V2 envelope with code/message/request_id),
+  // skip the transformation. Legacy errors have body.error as a string.
+  if (body && typeof body === 'object' && body.error && typeof body.error === 'object') {
+    return;
+  }
+
+  const code = statusToV2Code(rawRes.status);
+  const message: string | undefined =
+    body?.message ?? (typeof body?.error === 'string' ? body.error : undefined);
+
+  c.res = errorResponse(c, new V2Error(code, rawRes.status, message));
+});
+
+app.route('/v2', v2Router);
+
+// ─── Error handler ─────────────────────────────────────────────────────────────
+
 app.onError((err, c) => {
+  const isV2Path = c.req.path.startsWith('/v2/');
+
+  if (err instanceof V2Error) {
+    if (isV2Path) return errorResponse(c, err);
+    return c.json({ error: statusToLegacyLabel(err.status), message: err.message }, err.status as never);
+  }
+
+  if (err instanceof HTTPException) {
+    if (isV2Path) {
+      const code = statusToV2Code(err.status);
+      return errorResponse(c, new V2Error(code, err.status, err.message));
+    }
+    return err.getResponse();
+  }
+
   logError('Unhandled Application Error', err, c as any);
+  if (isV2Path) return errorResponse(c, new V2Error('internal_error', 500, 'Internal server error'));
   return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred' }, 500);
 });
 

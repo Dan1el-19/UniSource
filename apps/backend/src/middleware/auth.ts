@@ -1,9 +1,11 @@
 import { createMiddleware } from 'hono/factory';
 import { Client, Account } from 'node-appwrite';
-import { checkUserServiceAccess, getServiceDetails, type ServiceRecord } from '../db/services';
+import { checkUserServiceAccess, getServiceDetails, type ServiceRecord } from '../db/v1/services';
 import { DEFAULT_SERVICE_ID } from '../config/services';
-import { validateApiKeyByHash } from '../db/apiKeys';
+import { validateApiKeyByHash } from '../db/v1/apiKeys';
 import { consumeRateLimit } from './ratelimit';
+import { V2Error } from '../lib/v2/errors';
+import { isAlwaysV2Path } from '../lib/v2/negotiation';
 
 export type AuthRouteMode = 'user' | 'dual';
 
@@ -19,7 +21,8 @@ function getAuthRouteMode(pathname: string): AuthRouteMode {
     pathname.startsWith('/admin') ||
     pathname.startsWith('/main') ||
     pathname.startsWith('/releases') ||
-    pathname.startsWith('/app')
+    pathname.startsWith('/app') ||
+    pathname.startsWith('/v2')
   ) {
     return 'dual';
   }
@@ -114,18 +117,25 @@ export const authMiddleware = createMiddleware<{
   Variables: WorkerVariables;
 }>(async (c, next) => {
   const pathname = new URL(c.req.url).pathname;
+  const isV2Path = isAlwaysV2Path(pathname);
   const { routeMode, jwtToken, apiKeyToken } = resolveAuthDecision(
     pathname,
     c.req.header('Authorization') ?? null,
     c.req.header('X-Appwrite-JWT') ?? null
   );
 
-  // Derive service from header — treat as hint, ALWAYS verify access below
+  // V2 requires explicit service isolation. Stable paths keep the main fallback.
   const rawServiceId = c.req.header('X-Service-ID')?.trim().toLowerCase();
+  if (!rawServiceId && isV2Path) {
+    throw new V2Error('validation_error', 400, 'X-Service-ID header is required');
+  }
   const serviceId = rawServiceId ?? DEFAULT_SERVICE_ID;
 
   const service = await getServiceDetails(c.env.APP_DB, serviceId);
   if (!service) {
+    if (isV2Path) {
+      throw new V2Error('validation_error', 400, `Unknown service: ${serviceId}`);
+    }
     return c.json({ error: 'Bad Request', message: `Unknown service: ${serviceId}` }, 400);
   }
   c.set('service', service);
@@ -135,7 +145,7 @@ export const authMiddleware = createMiddleware<{
 
     if (authenticatedUser) {
       // Non-default services require explicit service_users membership
-      // This prevents a example.com account from accessing example data
+      // This prevents a app.example.com account from accessing service-b data
       let serviceRole: 'user' | 'plus' | 'admin' = authenticatedUser.labels.includes('admin')
         ? 'admin'
         : 'user';
@@ -143,6 +153,9 @@ export const authMiddleware = createMiddleware<{
       if (serviceId !== DEFAULT_SERVICE_ID) {
         const access = await checkUserServiceAccess(c.env.APP_DB, serviceId, authenticatedUser.userId);
         if (!access) {
+          if (isV2Path) {
+            throw new V2Error('forbidden', 403, 'Access to this service is not permitted');
+          }
           return c.json({ error: 'Forbidden', message: 'Access to this service is not permitted' }, 403);
         }
         // Per-service role overrides Appwrite labels for non-default services.
@@ -169,10 +182,16 @@ export const authMiddleware = createMiddleware<{
     if (routeMode === 'user') {
       const limit = await consumeRateLimit(c, 'auth-fail');
       if (!limit.allowed) {
+        if (isV2Path) {
+          throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
+        }
         return c.json(
           { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
           429
         );
+      }
+      if (isV2Path) {
+        throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
       }
       return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
     }
@@ -189,6 +208,8 @@ export const authMiddleware = createMiddleware<{
       c.set('authType', 'apikey');
       c.set('isAdmin', d1Key.permissions.includes('admin'));
       c.set('serviceRole', 'system');
+      c.set('apiKeyId', d1Key.id);
+      c.set('apiKeyPermissions', d1Key.permissions);
       return next();
     }
   }
@@ -200,11 +221,17 @@ export const authMiddleware = createMiddleware<{
   // success traffic — only failures count.
   const limit = await consumeRateLimit(c, 'auth-fail');
   if (!limit.allowed) {
+    if (isV2Path) {
+      throw new V2Error('rate_limited', 429, 'Too many failed auth attempts. Please try again later.');
+    }
     return c.json(
       { error: 'Too Many Requests', message: 'Too many failed auth attempts. Please try again later.' },
       429
     );
   }
 
+  if (isV2Path) {
+    throw new V2Error('unauthorized', 401, 'Missing or invalid credentials');
+  }
   return c.json({ error: 'Unauthorized', message: 'Missing or invalid credentials' }, 401);
 });

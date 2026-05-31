@@ -6,7 +6,7 @@ import {
 	getUpload,
 	listUploads,
 	type UploadRecord,
-} from '../db/files';
+} from '../db/v1/files';
 import {
 	buildAppwriteFileDownloadUrl,
 	createAppwriteFileToken,

@@ -1,88 +1,179 @@
 # @unisource/sdk
 
-Główne, współdzielone biblioteki oraz klient HTTP (SDK) wykorzystywane zarówno przez aplikację `frontend`, jak i `backend` (w ramach repozytorium UniSource).
+Publiczny pakiet TypeScript dla UniSource. Zawiera kontrakty API, schematy Zod oraz klienty HTTP używane przez frontend, backend i integracje zewnętrzne.
 
-## Zawartość pakietu
+## Instalacja
 
-SDK zapewnia pojedyncze źródło prawdy dla kontraktów API i upraszcza komunikację z backendem. Zawiera m.in.:
+```bash
+pnpm add @unisource/sdk
+```
 
-- **Zod Schemas & TypeScript Types**: Pełne definicje typów dla wszystkich encji w systemie: Pliki, Foldery, Udostępnienia (Share Links), Upload (w tym Multipart), Magazyn (Main Storage), Usługi (Services), Role Użytkowników oraz Audyty (Audit Logs).
-- **UnisourceClient**: Silnie typowany klient HTTP służący do bezpiecznej komunikacji z API z uwzględnieniem identyfikacji usługi (`X-Service-ID`) oraz autoryzacji (JWT/API Key).
-- **Publiczne Helpery**: Samodzielne metody do obsługi udostępnionych, publicznych linków (bez wymagania logowania) takie jak `getPublicFileInfo()` czy `unlockPublicFile()`.
-- **Obsługa Błędów**: Precyzyjne klasy błędów `UnisourceError` oraz `UnisourceNetworkError`.
+Wersja stabilna jest publikowana pod tagiem `latest`:
 
-## Użycie (Usage)
+```bash
+pnpm add @unisource/sdk@latest
+```
 
-Przykład konfiguracji i pobrania listy plików przypisanych do użytkownika przy wykorzystaniu instancji klienta:
+Wersje testowe API v2 są publikowane pod tagiem `beta`:
+
+```bash
+pnpm add @unisource/sdk@beta
+```
+
+Aktualne tagi npm:
+
+- `latest` - stabilne API v1
+- `beta` - API v2 w fazie beta, z możliwymi zmianami breaking przed stabilizacją
+
+## Co zawiera pakiet
+
+- Typy TypeScript i schematy Zod dla plików, folderów, uploadów, share linków, storage, usług, użytkowników i audytów.
+- `UnisourceClient` dla stabilnego API v1.
+- `UnisourceV2Client` oraz kontrakty v2 dostępne z `@unisource/sdk/v2`.
+- Helpery publicznych linków: `getPublicFileInfo()` i `unlockPublicFile()`.
+- Klasy błędów dla v1 oraz v2.
+
+## Stabilne API v1
 
 ```ts
 import { UnisourceClient } from '@unisource/sdk';
 
-// 1. Konfiguracja klienta
 const client = new UnisourceClient({
   baseUrl: 'https://api.example.com',
   serviceId: 'default',
-  getToken: async () => 'twoj-token-jwt-lub-api-key', // Zwróć null dla zapytań publicznych
+  getToken: async () => 'jwt-or-api-key',
 });
 
-// 2. Zapytanie API (np. lista plików z paginacją)
-const files = await client.myFiles.list({ folder_id: null, limit: 25 });
+const files = await client.myFiles.list({
+  folder_id: null,
+  limit: 25,
+});
 ```
 
-### Obsługa udostępnień publicznych
-Zapytania o zasoby publiczne nie wymagają pełnej inicjalizacji klienta i posiadają dedykowane, lekkie metody:
+### Publiczne linki
 
 ```ts
 import { getPublicFileInfo, unlockPublicFile } from '@unisource/sdk';
 
-// Pobranie metadanych udostępnionego pliku na podstawie slug'a
-const info = await getPublicFileInfo('https://api.example.com', 'moj-unikalny-slug');
+const info = await getPublicFileInfo('https://api.example.com', 'share-slug');
 
-// Odblokowanie dostępu do pliku chronionego hasłem
-const unlocked = await unlockPublicFile('https://api.example.com', 'moj-unikalny-slug', 'tajne-haslo123');
+const unlocked = await unlockPublicFile(
+  'https://api.example.com',
+  'share-slug',
+  'password'
+);
 ```
 
-## Rozwój lokalny (Development)
+## API v2 beta
 
-W ramach monorepo (narzędzie pnpm):
+API v2 jest dostępne w wersjach `@unisource/sdk@beta`. Importuj je z osobnego entrypointu:
+
+```ts
+import { UnisourceV2Client } from '@unisource/sdk/v2';
+
+const client = new UnisourceV2Client({
+  baseUrl: 'https://api.example.com',
+  serviceId: 'default',
+  getToken: async () => 'jwt-or-api-key',
+  silentBeta: true,
+});
+
+const files = await client.files.list({
+  folder_id: null,
+  trash: 'active',
+  sort_by: 'updated_at',
+  sort_dir: 'desc',
+  limit: 50,
+});
+
+const folders = await client.folders.list({
+  parent_id: undefined,
+  trash: 'active',
+  sort_by: 'name',
+  sort_dir: 'asc',
+});
+```
+
+### Typy i schematy v2
+
+```ts
+import {
+  UnisourceV2Error,
+  v2FileSchema,
+  v2FolderSchema,
+  v2ListResponseSchema,
+  type V2File,
+  type V2Folder,
+  type V2ListResponse,
+} from '@unisource/sdk/v2';
+```
+
+V2 używa odpowiedzi stronicowanych w formacie:
+
+```ts
+interface V2ListResponse<T> {
+  items: T[];
+  page: {
+    limit: number;
+    next_cursor: string | null;
+  };
+}
+```
+
+### V2 paths
+
+`UnisourceV2Client` calls dedicated `/v2/*` endpoints. Direct HTTP consumers select the V2 contract through the `/v2` URL prefix; headers do not change stable endpoint behavior.
+
+For API-key access to user-scoped V2 storage endpoints, pass `X-Target-User-ID` through the SDK method option when the method supports acting on a target user. API keys require `files:read` for list/read operations and `files:delete` for destructive bulk operations.
+
+## Błędy
+
+```ts
+import { UnisourceError, UnisourceNetworkError } from '@unisource/sdk';
+import { UnisourceV2Error } from '@unisource/sdk/v2';
+
+try {
+  await client.myFiles.list();
+} catch (error) {
+  if (error instanceof UnisourceError) {
+    console.error(error.status, error.message);
+  }
+
+  if (error instanceof UnisourceNetworkError) {
+    console.error('Network error', error.cause);
+  }
+}
+```
+
+## Rozwój lokalny
+
+Repozytorium używa pnpm workspaces.
 
 ```bash
-# Instalacja wszystkich zależności (w roocie)
 pnpm install
-
-# Kompilacja SDK
-pnpm --filter @unisource/sdk build
-
-# Sprawdzanie typów
 pnpm --filter @unisource/sdk typecheck
-
-# Uruchomienie testów
 pnpm --filter @unisource/sdk test
-```
-
-Pakiet może być linkowany lokalnie w ramach workspace, wystarczy w innym projekcie monorepo dodać zależność:
-`"@unisource/sdk": "workspace:*"`
-
-## Wydawanie nowej wersji (Release Workflow)
-
-Pakiet `@unisource/sdk` jest pakietem publicznym na rejestrze NPM i korzysta z narzędzia [Changesets](https://github.com/changesets/changesets) do zarządzania wersjami.
-
-Aby opublikować nową wersję, wykonaj poniższe kroki z głównego katalogu (root) monorepo:
-
-```bash
-# 1. Dodaj plik z opisem zmian (wybierz paczkę, typ bumpa i napisz komentarz)
-pnpm changeset
-
-# 2. Zatwierdź nową wersję na podstawie plików changeset (aktualizacja package.json oraz CHANGELOG.md)
-pnpm changeset version
-
-# 3. Zbuduj SDK by upewnić się, że kod wynikowy jest poprawny
 pnpm --filter @unisource/sdk build
-
-# 4. Sprawdź przed publikacją
-pnpm --filter @unisource/sdk publish --dry-run --access public --no-git-checks
-
-# 5. Opublikuj na rejestr NPM
-pnpm changeset publish
 ```
-Pamiętaj o dodaniu nowo powstałych tagów i commitów do głównego repozytorium po opublikowaniu paczki.
+
+W aplikacjach z tego samego monorepo używaj zależności workspace:
+
+```json
+{
+  "dependencies": {
+    "@unisource/sdk": "workspace:*"
+  }
+}
+```
+
+## Release
+
+Stable release jest publikowany przez Changesets i workflow `Release SDK` z brancha `main`.
+
+Beta release jest uruchamiany ręcznie z tego samego workflowu:
+
+- branch workflowu: `main`
+- `channel`: `beta`
+- `bump`: `patch`, `minor`, `major` albo `next`
+
+Pierwsza beta dla nowej linii wersji wymaga `patch`, `minor` albo `major`. Kolejne bety tej samej linii publikuj przez `next`.

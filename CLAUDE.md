@@ -25,7 +25,7 @@ Frontend (SvelteKit) ← HTTP → Backend (Hono) ← D1 (SQLite) / R2 / Appwrite
 **Key points:**
 - Upload flow: `init()` (get presigned URL) → upload to R2 → `complete()` (create D1 record)
 - Auth: JWT from Appwrite OR API key (sets `userId='system'`)
-- Every request needs `X-Service-ID` header (enforces service isolation)
+- `/v2/*` requests need `X-Service-ID`; stable routes keep the `default` fallback from `main`
 - Files soft-delete by default (`is_trashed=1`); hard delete needs `?permanent=true`
 - When changing backend routes, update SDK types in `@unisource/sdk`
 

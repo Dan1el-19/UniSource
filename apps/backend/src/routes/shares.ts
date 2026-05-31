@@ -14,8 +14,8 @@ import {
   getShareLinkById,
   listShareLinksForUser,
   type ShareLink,
-} from '../db/shareLinks';
-import { getFileRecordForUser } from '../db/fileRecords';
+} from '../db/v1/shareLinks';
+import { getFileRecordForUser } from '../db/v1/fileRecords';
 import { hashPassword } from '../utils/password';
 import { generateSlug, isValidSlug } from '../utils/slug';
 import type { ShareLinkCreateResponse, ShareLinkListResponse } from '@unisource/sdk';

@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { getShareLinkBySlug, incrementDownloadCount } from '../db/shareLinks';
-import { getFileRecord } from '../db/fileRecords';
-import { logServiceEvent } from '../db/services';
+import { getShareLinkBySlug, incrementDownloadCount } from '../db/v1/shareLinks';
+import { getFileRecord } from '../db/v1/fileRecords';
+import { logServiceEvent } from '../db/v1/services';
 import { verifyPassword } from '../utils/password';
 import { generatePresignedGetUrl } from '../services/r2';
 import {

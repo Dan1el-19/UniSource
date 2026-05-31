@@ -5,4 +5,4 @@ ALTER TABLE services ADD COLUMN object_key_prefix TEXT NOT NULL DEFAULT '';
 
 -- Seed existing services with the prefixes that previously lived in the SERVICES map
 UPDATE services SET object_key_prefix = 'default' WHERE id = 'default';
--- service-b and com-example-db keep '' (their previous behaviour)
+-- Additional services keep an empty prefix unless configured at runtime.

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { getLatestReleaseByTag } from '../db/releases';
+import { getLatestReleaseByTag } from '../db/v1/releases';
 import { generatePresignedGetUrl } from '../services/r2';
 
 type HonoEnv = { Bindings: CloudflareBindings; Variables: WorkerVariables };

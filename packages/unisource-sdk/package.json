@@ -2,7 +2,7 @@
   "name": "@unisource/sdk",
   "private": false,
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Wspolne kontrakty danych dla backendu i frontendu UniSource.",
   "license": "Apache-2.0",
   "repository": {
@@ -19,12 +19,16 @@
       "import": "./dist/index.mjs",
       "default": "./dist/index.mjs"
     },
+    "./v2": {
+      "types": "./dist/v2/index.d.mts",
+      "import": "./dist/v2/index.mjs",
+      "default": "./dist/v2/index.mjs"
+    },
     "./package.json": "./package.json"
   },
   "types": "./dist/index.d.mts",
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsdown",
@@ -34,13 +38,13 @@
     "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260328.1",
-    "tsdown": "^0.21.7",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "@types/node": "^25.9.1",
+    "@typescript/native-preview": "7.0.0-dev.20260524.1",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
   },
   "dependencies": {
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   }
 }

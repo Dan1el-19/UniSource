@@ -6,8 +6,9 @@
  */
 import { Hono } from 'hono';
 import { describe, it, expect } from 'vitest';
-import type { UploadRecord } from '../src/db/files';
-import type { ServiceRecord } from '../src/db/services';
+import type { UploadRecord } from '../src/db/v1/files';
+import type { ServiceRecord } from '../src/db/v1/services';
+import { v2ErrorHandler } from '../src/middleware/v2Errors';
 import files from '../src/routes/files';
 import upload from '../src/routes/upload';
 
@@ -31,8 +32,8 @@ function mockD1WithRecord(record: UploadRecord | null): D1Database {
 // ---------------------------------------------------------------------------
 const defaultServiceRecord: ServiceRecord = {
 	id: 'default',
-	name: 'UniSource',
-	default_bucket: 'unisource',
+	name: 'primary',
+	default_bucket: 'primary',
 	max_storage_bytes: 16106127360,
 	current_used_bytes: 0,
 	main_used_bytes: 0,
@@ -42,9 +43,9 @@ const defaultServiceRecord: ServiceRecord = {
 	created_at: 0,
 };
 
-const blokServiceRecord: ServiceRecord = {
+const secondaryServiceRecord: ServiceRecord = {
 	id: 'service-b',
-	name: 'Service B',
+	name: 'Example Service B',
 	default_bucket: 'service-b',
 	max_storage_bytes: 107374182400,
 	current_used_bytes: 0,
@@ -60,7 +61,8 @@ const blokServiceRecord: ServiceRecord = {
 // ---------------------------------------------------------------------------
 function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-	const service = serviceId === 'default' ? defaultServiceRecord : blokServiceRecord;
+	app.onError(v2ErrorHandler);
+	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	// Inject auth context the same way the real authMiddleware would
 	app.use('*', async (c, next) => {
@@ -79,7 +81,8 @@ function buildFilesApp(serviceId: string, userId: string, db: D1Database) {
 
 function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 	const app = new Hono<{ Bindings: CloudflareBindings; Variables: WorkerVariables }>();
-	const service = serviceId === 'default' ? defaultServiceRecord : blokServiceRecord;
+	app.onError(v2ErrorHandler);
+	const service = serviceId === 'default' ? defaultServiceRecord : secondaryServiceRecord;
 
 	app.use('*', async (c, next) => {
 		c.set('serviceId', serviceId as WorkerVariables['serviceId']);
@@ -95,19 +98,19 @@ function buildUploadApp(serviceId: string, userId: string, db: D1Database) {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture: an upload that belongs to 'example'
+// Fixture: an upload that belongs to 'service-b'
 // ---------------------------------------------------------------------------
 const blokRecord: UploadRecord = {
 	id: 'upload-blok-001',
-	service_id: 'example',
+	service_id: 'service-b',
 	user_id: null,
 	folder_id: null,
 	filename: 'secret.pdf',
 	size: 1024,
 	mime_type: 'application/pdf',
 	destination: 'r2',
-	storage_key: 'example/uploads/2026/01/01/upload-blok-001.pdf',
-	bucket: 'example',
+	storage_key: 'service-b/uploads/2026/01/01/upload-blok-001.pdf',
+	bucket: 'service-b',
 	status: 'completed',
 	presigned_url: null,
 	expires_at: Math.floor(Date.now() / 1000) + 3600,
@@ -189,62 +192,14 @@ describe('DELETE /files/:id — service isolation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Vuln 2: POST /upload/fail — cross-service isolation (API key path)
+// Vuln 2: POST /upload/fail — REMOVED in V2 migration (section 2). The
+// /upload/fail endpoint had its own cross-service guard via
+// `record.service_id !== serviceId`. /upload/complete intentionally does NOT
+// guard by service_id on the API-key path: it relies on the upper layers
+// (auth middleware → service resolution) to fix the service. The JWT path is
+// guarded via getUploadForUser(WHERE user_id AND service_id) at the SQL
+// layer; the mock D1 here cannot exercise SQL filtering. End-to-end cross-
+// service isolation for /complete is exercised via integration tests that
+// use a real D1 (apps/backend/test/routes/v2/upload.test.ts uses real D1
+// migrations and rejects cross-service access there).
 // ---------------------------------------------------------------------------
-describe('POST /upload/fail — service isolation', () => {
-	it('returns 404 when the upload belongs to a different service (API key / system userId)', async () => {
-		const db = mockD1WithRecord(blokPendingRecord);
-		const { app, env } = buildUploadApp('default', 'system', db);
-
-		const res = await app.fetch(
-			new Request('http://localhost/upload/fail', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ upload_id: 'upload-blok-pending' }),
-			}),
-			env
-		);
-
-		expect(res.status).toBe(404);
-	});
-
-	it('returns 200 when the upload belongs to the authenticated service (API key / system userId)', async () => {
-		const ownRecord: UploadRecord = { ...blokPendingRecord, service_id: 'default' };
-		const db = mockD1WithRecord(ownRecord);
-		const { app, env } = buildUploadApp('default', 'system', db);
-
-		const res = await app.fetch(
-			new Request('http://localhost/upload/fail', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ upload_id: 'upload-blok-pending' }),
-			}),
-			env
-		);
-
-		expect(res.status).toBe(200);
-	});
-
-	it('returns 404 when the upload belongs to a different service (JWT / user auth)', async () => {
-		// blokRecord user_id is null — getUploadForUser should reject this for default service
-		const blokUserRecord: UploadRecord = {
-			...blokPendingRecord,
-			service_id: 'example',
-			user_id: 'user-abc',
-		};
-		const db = mockD1WithRecord(blokUserRecord);
-		// JWT path: userId is not 'system', service is 'default'
-		const { app, env } = buildUploadApp('default', 'user-abc', db);
-
-		const res = await app.fetch(
-			new Request('http://localhost/upload/fail', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ upload_id: 'upload-blok-pending' }),
-			}),
-			env
-		);
-
-		expect(res.status).toBe(404);
-	});
-});

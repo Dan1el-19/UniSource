@@ -9,7 +9,7 @@ import {
   deleteRelease,
   getLatestRelease,
   upsertReleaseSync,
-} from '../src/db/releases';
+} from '../src/db/v1/releases';
 
 function mockDbReturning(record: unknown, changes = 1): D1Database {
   return {
@@ -85,6 +85,16 @@ describe('listReleases', () => {
     expect(result.items).toHaveLength(1);
     expect(result.next_cursor).toBeNull();
   });
+
+  it('throws Invalid cursor for malformed cursor', async () => {
+    const db = mockDbReturning([baseRelease])
+    await expect(listReleases(db, 'default', { limit: 25, cursor: 'not-a-valid-cursor' })).rejects.toThrow('Invalid cursor')
+  })
+
+  it('throws Invalid cursor for non-numeric cursor timestamp', async () => {
+    const db = mockDbReturning([baseRelease])
+    await expect(listReleases(db, 'default', { limit: 25, cursor: 'abc:rel-1' })).rejects.toThrow('Invalid cursor')
+  })
 });
 
 describe('upsertReleaseSync', () => {

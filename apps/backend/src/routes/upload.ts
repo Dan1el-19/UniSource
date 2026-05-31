@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload, completeUploadAndCreateFile } from '../db/files';
-import { createFileRecord, createMainStorageFileRecord } from '../db/fileRecords';
-import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../db/services';
+import { createUpload, getUpload, getUploadForUser, completeUpload, failUpload, completeUploadAndCreateFile } from '../db/v1/files';
+import { createFileRecord, createMainStorageFileRecord } from '../db/v1/fileRecords';
+import { reserveQuota, releaseQuota, logServiceEvent, reserveMainStorageQuota, releaseMainStorageQuota } from '../db/v1/services';
 import { rateLimit } from '../middleware/ratelimit';
 import {
   generatePresignedPutUrl,

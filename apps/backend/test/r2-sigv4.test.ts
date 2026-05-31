@@ -9,18 +9,19 @@ const env = {
   R2_ACCOUNT_ID: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   R2_ACCESS_KEY_ID: 'AKIATESTKEY',
   R2_SECRET_ACCESS_KEY: 'testsecret/testsecret/testsecret/testsecre',
+  R2_BUCKET_NAMES: JSON.stringify({ primary: 'storage-a' }),
 } as unknown as CloudflareBindings;
 
 describe('r2ObjectUrl', () => {
   it('builds path-style URL for bucket+key', () => {
-    expect(r2ObjectUrl(env, 'unisource', 'releases/v1.0.0.zip')).toBe(
-      'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com/unisource/releases/v1.0.0.zip'
+    expect(r2ObjectUrl(env, 'primary', 'releases/v1.0.0.zip')).toBe(
+      'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com/storage-a/releases/v1.0.0.zip'
     );
   });
 
   it('encodes special characters in key segments but preserves /', () => {
-    expect(r2ObjectUrl(env, 'unisource', 'my folder/file (1).pdf')).toBe(
-      'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com/unisource/my%20folder/file%20(1).pdf'
+    expect(r2ObjectUrl(env, 'primary', 'my folder/file (1).pdf')).toBe(
+      'https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com/storage-a/my%20folder/file%20(1).pdf'
     );
   });
 });
@@ -28,11 +29,11 @@ describe('r2ObjectUrl', () => {
 describe('presign GET', () => {
   it('produces SigV4 query-style URL with X-Amz-* params', async () => {
     const client = createR2SigningClient(env);
-    const base = r2ObjectUrl(env, 'unisource', 'file.bin');
+    const base = r2ObjectUrl(env, 'primary', 'file.bin');
     const signed = await presign(client, base, 'GET', 900);
     const u = new URL(signed);
     expect(u.host).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com');
-    expect(u.pathname).toBe('/unisource/file.bin');
+    expect(u.pathname).toBe('/storage-a/file.bin');
     expect(u.searchParams.get('X-Amz-Algorithm')).toBe('AWS4-HMAC-SHA256');
     expect(u.searchParams.get('X-Amz-Expires')).toBe('900');
     expect(u.searchParams.get('X-Amz-SignedHeaders')).toBe('host');
@@ -44,7 +45,7 @@ describe('presign GET', () => {
 describe('presign PUT (single-shot upload)', () => {
   it('produces signed URL with custom expiresIn', async () => {
     const client = createR2SigningClient(env);
-    const base = r2ObjectUrl(env, 'unisource', 'upload.bin');
+    const base = r2ObjectUrl(env, 'primary', 'upload.bin');
     const signed = await presign(client, base, 'PUT', 3600);
     const u = new URL(signed);
     expect(u.searchParams.get('X-Amz-Expires')).toBe('3600');
@@ -55,7 +56,7 @@ describe('presign PUT (single-shot upload)', () => {
 describe('presign PUT for UploadPart', () => {
   it('preserves uploadId+partNumber and adds SigV4 query params', async () => {
     const client = createR2SigningClient(env);
-    const base = r2ObjectUrl(env, 'unisource', 'big.bin');
+    const base = r2ObjectUrl(env, 'primary', 'big.bin');
     const url = `${base}?uploadId=ABC123&partNumber=7`;
     const signed = await presign(client, url, 'PUT', 900);
     const u = new URL(signed);
@@ -68,7 +69,7 @@ describe('presign PUT for UploadPart', () => {
 
   it('signs only host (does NOT sign Content-Type)', async () => {
     const client = createR2SigningClient(env);
-    const base = r2ObjectUrl(env, 'unisource', 'big.bin');
+    const base = r2ObjectUrl(env, 'primary', 'big.bin');
     const signed = await presign(client, `${base}?uploadId=X&partNumber=1`, 'PUT', 900);
     const u = new URL(signed);
     expect(u.searchParams.get('X-Amz-SignedHeaders')).toBe('host');

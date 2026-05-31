@@ -1,234 +1,213 @@
-# Monorepo — kontekst dla agenta AI
-
-## Struktura repo
-
-```
-monorepo/
-├── apps/
-│   ├── frontend/          # Astro + Svelte Islands — private, deploy na hosting
-│   └── backend/           # Hono API — private, deploy na serwer
-├── packages/
-│   └── unisource-sdk/     # @unisource/sdk — PUBLIC, publishowany na npm
-├── package.json           # pnpm workspace root (no version, private: true)
-└── AGENTS.md              # ten plik
-```
+# AGENTS.md — kontekst dla agenta AI
 
 ## Package manager
 
-**pnpm workspaces** — zawsze używaj `pnpm`, nigdy `npm` ani `yarn` w tym repo.
+**Zawsze `pnpm`** — nigdy `npm` ani `yarn`. Wymagany Node.js `>=22.12.0`, pnpm `11.1.2`.
 
 ```bash
-pnpm install                      # instalacja wszystkich zależności
-pnpm --filter frontend ...        # komenda tylko dla frontendu
-pnpm --filter backend ...         # komenda tylko dla backendu
-pnpm --filter @unisource/sdk ...  # komenda tylko dla SDK
+pnpm install                        # instalacja wszystkich zależności
+pnpm --filter frontend ...          # komenda tylko dla frontendu
+pnpm --filter backend ...           # komenda tylko dla backendu
+pnpm --filter @unisource/sdk ...    # komenda tylko dla SDK
 ```
+
+`pnpm-workspace.yaml` definiuje `'apps/*'` i `'packages/unisource-sdk'` jako pakiety workspace. W `allowBuilds` są `esbuild`, `sharp`, `workerd` — to wymagane dla Cloudflare Workers.
 
 ---
 
-## Zasady wersjonowania
+## Struktura
 
-### Każdy pakiet żyje własnym życiem
-
-Wersje są **całkowicie niezależne** — zmiana wersji w jednym pakiecie nie wpływa na inne.
-
-| Pakiet | Ścieżka | `private` | Publishowany | Wersjonowanie |
-|--------|---------|-----------|--------------|---------------|
-| `frontend` | `apps/frontend` | `true` | NIE | SemVer + git tagi (trigger CI/CD) |
-| `backend` | `apps/backend` | `true` | NIE | SemVer + git tagi (trigger CI/CD) |
-| `@unisource/sdk` | `packages/unisource-sdk` | `false` | TAK, na npm | Semantic Versioning, obowiązkowe |
-
-### Jak bumpować wersję SDK
-
-```bash
-cd <root-monorepo>
-
-# 1. Dodaj changeset opisujący zmiany w @unisource/sdk
-pnpm changeset
-
-# 2. Podejrzyj plan release (opcjonalnie)
-pnpm changeset status --verbose
-
-# 3. Zbumpuj wersję i changelog na bazie changesetów
-pnpm changeset version
+```
+├── apps/
+│   ├── frontend/          # SvelteKit 2 + Svelte 5 (adapter: Cloudflare Workers)
+│   └── backend/           # Hono API na Cloudflare Workers
+├── packages/
+│   └── unisource-sdk/     # @unisource/sdk — PUBLIC, publishowany na npm
+├── scripts/               # skrypty pomocnicze (changesets, wersje, deploy)
+└── AGENTS.md
 ```
 
-`pnpm changeset version` nie publikuje paczki i nie tworzy tagów automatycznie.
+**Branch `main`** — stabilna linia (API v1, stabilne wersje SDK).
+**Branch `beta`** — rozwojowa linia API v2, SDK publikowane pod tagiem npm `beta`.
 
-### Jak wersjonować frontend/backend
+---
 
-`apps/frontend` i `apps/backend` są prywatne, więc nie są publikowane do npm.
-Wersje tych aplikacji utrzymujemy przez SemVer + tagi git używane jako triggery CI/CD.
+## Komendy developerskie
+
+### Uruchamianie lokalnie
 
 ```bash
-# backend
-git tag backend@1.2.0
-git push origin backend@1.2.0
-
-# frontend
-git tag frontend@2.0.0
-git push origin frontend@2.0.0
+pnpm run frontend       # frontend dev → localhost:5173
+pnpm run backend        # backend dev (wrangler) → localhost:8787
+pnpm --filter @unisource/sdk dev   # watch mode SDK
 ```
+
+### Testowanie i sprawdzanie typów
+
+```bash
+pnpm --filter frontend typecheck
+pnpm --filter frontend e2e           # Playwright (jeśli skonfigurowany)
+
+pnpm --filter backend typecheck      # tsc --noEmit dla src i test (ale PRZED tym buduje SDK!)
+pnpm --filter backend check          # typecheck + vitest run (jedna komenda, też buduje SDK przed)
+pnpm --filter backend test           # vitest run (buduje SDK przed przez pretest hook)
+
+pnpm --filter @unisource/sdk typecheck
+pnpm --filter @unisource/sdk test    # build SDK + vitest
+```
+
+**Ważne:** Backend ma hooki `pretypecheck`, `pretest`, `precheck` → `pnpm --filter @unisource/sdk build`. Nie musisz ręcznie budować SDK przed testowaniem backendu.
+
+### Budowanie
+
+```bash
+pnpm --filter frontend build
+pnpm --filter backend build          # wrangler deploy --dry-run --minify
+pnpm --filter @unisource/sdk build   # tsdown
+```
+
+### Generowanie konfiguracji Wranglera (CI/deploy)
+
+```bash
+pnpm --filter backend generate:wrangler
+pnpm --filter frontend generate:wrangler
+```
+
+Używa `scripts/generate-wrangler-config.mjs` i zmiennych środowiskowych (`WORKER_NAME`, `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_NAME` itd.).
+
+---
+
+## Konfiguracja środowiska lokalnego
+
+```bash
+cp apps/backend/.dev.vars.example apps/backend/.dev.vars
+cp apps/frontend/.env.example apps/frontend/.env
+```
+
+Frontend ma też `BYPASS_CF_ACCESS=true` jako dev bypass dla Cloudflare Access (patrz `hooks.server.ts`).
+
+---
+
+## Architektura i kluczowe koncepty
+
+```
+Frontend (SvelteKit) ← HTTP → Backend (Hono) ← D1 (SQLite) / R2 / Appwrite
+```
+
+**Upload flow:** `init()` → backend zwraca presigned URL → upload do R2 → `complete()` → backend tworzy rekord w D1.
+
+**Auth:** Backend obsługuje JWT z Appwrite ORAZ API key (API key ustawia `userId='system'`). Frontend autoryzuje przez Cloudflare Access JWT (cookie `CF_Authorization` lub header `Cf-Access-Jwt-Assertion`).
+
+**X-Service-ID:** Endpointy `/v2/*` wymagają nagłówka `X-Service-ID`. Stable zachowuje kompatybilny fallback `default` z `main`. Middleware wymusza izolację danych między serwisami.
+
+**Soft-delete:** Pliki są domyślnie usuwane miękko (`is_trashed=1`). Hard delete wymaga parametru `?permanent=true`.
+
+**Rate limiting:** Zdefiniowany w `wrangler.jsonc` (limity: general 1000/min, upload init 30/min, public read 300/min, auth fail 10/min, share password 5/min).
+
+**SDK subpath eksporty:**
+- `@unisource/sdk` — API v1 (stable)
+- `@unisource/sdk/v2` — API v2 (beta, tylko na branchu `beta`)
+
+**Backend testy:** Używają `@cloudflare/vitest-pool-workers` z Miniflare. D1 migrations są wczytywane z `src/db/migrations/`. Testy nie mogą być równoległe (`fileParallelism: false`).
+
+---
+
+## Zależności SDK w aplikacjach
+
+Domyślnie aplikacje używają lokalnego SDK przez workspace:
+
+```json
+{ "dependencies": { "@unisource/sdk": "workspace:*" } }
+```
+
+Skrypty do przełączania źródła:
+
+```bash
+pnpm run sdk:deps:workspace    # workspace:* (lokalny link)
+pnpm run sdk:deps:npm          # ^wersja z packages/unisource-sdk/package.json
+pnpm run sdk:deps:npm-exact    # dokładna wersja (pinowana)
+```
+
+Skrypt `set-app-sdk-source.mjs` odmawia ustawienia prerelease w trybach `npm` i `npm-exact` — backend deploy wymaga stabilnego SDK.
+
+---
+
+## Wersjonowanie i release
+
+Każdy pakiet ma **niezależną wersję** — nie synchronizuj ich.
+
+| Pakiet | Publikowany | Wersjonowanie |
+|--------|-------------|---------------|
+| `frontend` | NIE | SemVer + git tag `frontend@x.y.z` (trigger CI/CD) |
+| `backend` | NIE | SemVer + git tag `backend@x.y.z` (trigger CI/CD) |
+| `@unisource/sdk` | TAK, na npm | Changesets (NIGDY nie edytuj `version` ręcznie) |
+
+### SDK stable (z main)
+
+```bash
+pnpm run changeset                   # utwórz changeset
+pnpm run changeset:status            # podejrzyj plan release
+pnpm run changeset:version           # zbumpuj wersję + CHANGELOG
+pnpm --filter @unisource/sdk build
+pnpm --filter @unisource/sdk publish --dry-run --access public --no-git-checks
+pnpm run changeset:publish           # publish przez changesets
+```
+
+### SDK beta (z brancha beta)
+
+Nie używaj changesets dla beta. Uruchom workflow `sdk-beta-release.yml` przez `workflow_dispatch` z odpowiednim bumpem (`patch`, `minor`, `major`, albo `next`). Workflow automatycznie bumpuje wersję, publikuje z tagiem `beta` na npm i wypycha commit + tag.
+
+### Frontend/backend deploy
+
+```bash
+git tag backend@1.2.0 && git push origin backend@1.2.0
+git tag frontend@2.0.0 && git push origin frontend@2.0.0
+```
+
+Tagi triggerują workflow deployu. Backend deploy dodatkowo aplikuje D1 migrations przed deployem.
 
 ### Git tagi — format
 
-Tagi zawsze w formacie `<pakiet>@<wersja>`:
-- `@unisource/sdk@0.1.1`
-- `backend@1.2.0`
-- `frontend@2.0.0`
+`<pakiet>@<wersja>`: `@unisource/sdk@1.1.0`, `backend@1.2.0`, `frontend@2.0.0`
 
 ---
 
-## Konwencja commitów (Conventional Commits)
+## Konwencja commitów
 
-Conventional Commits ze scope'em są rekomendowane dla czytelności historii git,
-ale nie są wymagane przez narzędzia release ani pipeline.
-
-Pipeline CI/CD na GitHub Actions uruchamia się na podstawie zmienionych ścieżek (`paths:`),
-nie na podstawie treści commit message.
-
-W praktyce scope pomaga zrozumieć, co zmieniasz:
+Conventional Commits ze scope'em — rekomendowane, nie wymuszane przez tooling. CI/CD triggeruje się przez `paths:`, nie przez commit message.
 
 ```
-<type>(<scope>): <opis>
-
-feat(sdk): dodaj metodę getInvoice()
-fix(backend): popraw walidację tokenu auth
-feat(frontend): nowa strona kontaktowa
-chore(sdk): update zależności
-docs(backend): dodaj JSDoc do endpointów
-refactor(frontend): wydziel komponent Header
-test(sdk): testy jednostkowe dla parseResponse
+feat(sdk): ...
+fix(backend): ...
+refactor(frontend): ...
+chore(root): ...
 ```
 
-### Dozwolone typy
+Dodaj `!` dla breaking changes: `feat(sdk)!: ...`
 
-| Typ | Kiedy |
-|-----|-------|
-| `feat` | nowa funkcjonalność |
-| `fix` | naprawa buga |
-| `docs` | tylko dokumentacja |
-| `refactor` | refaktoryzacja bez zmiany zachowania |
-| `test` | dodanie/zmiana testów |
-| `chore` | update deps, konfiguracja, tooling |
-| `perf` | optymalizacja wydajności |
-| `ci` | zmiany w CI/CD |
-
-### Dozwolone scope'y
-
-| Scope | Lokalizacja |
-|-------|-------------|
-| `frontend` | `apps/frontend` |
-| `backend` | `apps/backend` |
-| `sdk` | `packages/unisource-sdk` |
-| `root` | pliki w root repo (package.json, pnpm-workspace.yaml itp.) |
-
-### Breaking changes
-
-Jeśli commit wprowadza breaking change, dodaj `!` po scope'ie i opisz w stopce:
-
-```
-feat(sdk)!: zmień sygnaturę metody connect()
-
-BREAKING CHANGE: parametr `url` jest teraz obiektem { host, port } zamiast stringa
-```
+Można użyć `npx cz` / `pnpm dlx commitizen` do interaktywnego tworzenia commitów.
 
 ---
 
-## Publishowanie @unisource/sdk na npm
+## Skrypty pomocnicze w `scripts/`
 
-```bash
-cd <root-monorepo>
+| Skrypt | Cel |
+|--------|-----|
+| `require-sdk-changeset.mjs` | CI: sprawdza czy zmiany w SDK mają changeset |
+| `require-sdk-stable-on-deploy.mjs` | CI: blokuje deploy backendu z beta SDK |
+| `set-app-sdk-source.mjs` | Przełącza source SDK w apps między workspace/npm/npm-exact |
+| `bump-sdk-prerelease.mjs` | CI beta: bumpuje prerelease wersję SDK |
+| `generate-wrangler-config.mjs` | Generuje `wrangler.generated.jsonc` z template'u i zmiennych env |
 
-# 1. Upewnij się że jesteś zalogowany
-pnpm whoami
-
-# 2. Dodaj changeset dla zmian SDK
-pnpm changeset
-
-# 3. Zbumpuj wersję i changelog
-pnpm changeset version
-
-# 4. Zbuilduj paczkę SDK
-pnpm --filter @unisource/sdk build
-
-# 5. Sprawdź co trafi na npm (dry run)
-pnpm --filter @unisource/sdk publish --dry-run --access public --no-git-checks
-
-# 6. Opublikuj paczkę przez changesets
-pnpm changeset publish
-
-# 7. Wypchnij commity i ewentualne tagi do GitHub
-git push origin main --follow-tags
-```
-
-### Przed każdym publishem sprawdź
-
-- [ ] changeset dla SDK istnieje i jest poprawny
-- [ ] `CHANGELOG.md` w `packages/unisource-sdk` został zaktualizowany przez `pnpm changeset version`
-- [ ] Wersja w `packages/unisource-sdk/package.json` jest zbumpowana
-- [ ] Build przechodzi bez błędów
-- [ ] Eksportowane typy TypeScript są poprawne
+Każdy skrypt (poza `generate-wrangler-config`) ma odpowiadający plik `.test.mjs`.
 
 ---
 
-## CHANGELOG.md
+## Zasady
 
-Każdy pakiet może mieć własny `CHANGELOG.md`, ale dla SDK changelog aktualizuje
-`pnpm changeset version`. Ręcznie dopracowuj wpisy tylko gdy to konieczne.
-
-Format:
-
-```markdown
-# Changelog
-
-## [0.2.0] - 2024-04-19
-
-### Added
-- Metoda `getInvoice(id)` zwracająca szczegóły faktury
-- Obsługa błędów 429 (rate limiting)
-
-### Fixed
-- Niepoprawny typ zwracany przez `listClients()`
-
-## [0.1.0] - 2024-03-01
-
-### Added
-- Inicjalny release
-```
-
----
-
-## Zależności między pakietami
-
-`frontend` i `backend` mogą importować `@unisource/sdk` jako workspace dependency:
-
-```json
-// apps/frontend/package.json lub apps/backend/package.json
-{
-  "dependencies": {
-    "@unisource/sdk": "workspace:*"
-  }
-}
-```
-
-pnpm automatycznie linkuje lokalną wersję podczas developmentu.
-
----
-
-## Czego agent NIE powinien robić
-
-- ❌ Nie synchronizuj wersji między pakietami — każdy żyje własnym życiem
-- ❌ Nie używaj `npm` ani `yarn` — tylko `pnpm`
-- ❌ Nie pushuj tagów bez zbuildowania i przetestowania paczki
-- ❌ Nie publikuj na npm bez dry-run najpierw
-- ❌ Nie modyfikuj `version` w `package.json` ręcznie — używaj `pnpm changeset version`
-
-## Co agent POWINIEN robić
-
-- ✅ Zawsze pytaj który pakiet jest zmieniany gdy jest niejednoznaczność
-- ✅ Jeśli używasz Conventional Commits, stosuj czytelny scope (`feat(sdk):`, `fix(backend):` itp.)
-- ✅ Przy zmianach w `@unisource/sdk` sprawdź czy `apps/frontend` i `apps/backend` nie wymagają aktualizacji
-- ✅ Przy breaking change w SDK zaproponuj bump major version i zaktualizuj konsumentów
-- ✅ Przypominaj o aktualizacji CHANGELOG przed publishem SDK
-- ✅ Przy publishowaniu używaj flagi `--access public` (scoped paczki są domyślnie private na npm)
+- Nie modyfikuj `version` w `package.json` ręcznie — używaj `pnpm changeset version`
+- Nie publikuj na npm bez dry-run
+- Przy zmianach w `@unisource/sdk` sprawdź, czy `apps/frontend` i `apps/backend` nie wymagają aktualizacji
+- Przy zmianach kontraktów v2 aktualizuj jednocześnie: backend, SDK, testy, frontend
+- Przy publishowaniu SDK zawsze używaj `--access public`
+- Design tokens → zobacz `DESIGN.md`

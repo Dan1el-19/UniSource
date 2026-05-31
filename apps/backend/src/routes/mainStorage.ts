@@ -9,9 +9,9 @@ import {
   restoreFileRecord,
   deleteFileRecordPermanently,
   type FileRecord,
-} from '../db/fileRecords';
-import { releaseMainStorageQuota } from '../db/services';
-import { deactivateShareLinksForFile } from '../db/shareLinks';
+} from '../db/v1/fileRecords';
+import { releaseMainStorageQuota } from '../db/v1/services';
+import { deactivateShareLinksForFile } from '../db/v1/shareLinks';
 import {
   deleteAppwriteFile,
   extractAppwriteFileIdFromStorageKey,

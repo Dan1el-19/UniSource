@@ -55,7 +55,7 @@ jobs:
         run: pnpm --filter @unisource/sdk build
 
       - name: Check backend
-        run: pnpm --filter app-backend check
+        run: pnpm --filter backend check
 
       - name: Release backend
         env:
